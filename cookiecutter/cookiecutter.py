@@ -28,9 +28,10 @@ from ..common.useractions import Actions
 from .cookiecutter_fsm import CookieCutter_FSM
 from .cookiecutter_ui import CookieCutter_UI
 from .cookiecutter_utils import CookieCutter_Utils
+from .cookiecutter_blender import CookieCutter_Blender
 
 
-class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Utils):
+class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Utils, CookieCutter_Blender):
     '''
     CookieCutter is used to create advanced operators very quickly!
 
@@ -151,7 +152,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Uti
 
     def actions_init(self):
         self.actions = Actions(self.context, self.default_keymap)
-        self._timer = self.context.window_manager.event_timer_add(1.0 / 120, self.context.window)
+        self._timer = self.context.window_manager.event_timer_add(1.0 / 120, window=self.context.window)
 
     def actions_update(self):
         self.actions.update(self.context, self.event, self._timer, print_actions=False)

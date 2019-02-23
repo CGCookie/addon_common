@@ -23,14 +23,14 @@ import bpy
 import blf
 
 from .debug import dprint
-
+from .blender import get_preferences
 
 # https://docs.blender.org/api/current/blf.html
 
 class FontManager:
     _cache = {}
     _last_fontid = 0
-    _prefs = bpy.context.user_preferences
+    _prefs = get_preferences()
 
     @staticmethod
     def get_dpi():

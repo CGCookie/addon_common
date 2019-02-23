@@ -54,14 +54,18 @@ class Shader():
 
         bufLen = bgl.Buffer(bgl.GL_BYTE, 4)
         bufLog = bgl.Buffer(bgl.GL_BYTE, 2000)
+        bufStatus = bgl.Buffer(bgl.GL_INT, 1)
 
         bgl.glCompileShader(shader)
 
-        # XXX: this test is a hack to determine whether the shader was compiled successfully
-        # TODO: rewrite to use a more correct test (glIsShader?)
+        # get shader compilation log and status (successfully compiled?)
+        bgl.glGetShaderiv(shader, bgl.GL_COMPILE_STATUS, bufStatus)
         bgl.glGetShaderInfoLog(shader, 2000, bufLen, bufLog)
         log = ''.join(chr(v) for v in bufLog.to_list() if v)
-        assert not log and 'was successfully compiled' not in log, 'ERROR WHILE COMPILING SHADER %s: %s' % (name,log)
+        if bufStatus[0] == 0:
+            print('ERROR WHILE COMPILING SHADER %s' % name)
+            print('\n'.join(['    %s'%l for l in log.splitlines()]))
+            assert False
         return log
 
     @staticmethod
@@ -294,10 +298,10 @@ class Shader():
             if DEBUG_PRINT:
                 print('enabling shader <==================')
                 if self.checkErrors:
-                    self.drawing.glCheckError('something broke before enabling shader program (%s, %d)' % (self.name,self.shaderProg))
+                    self.drawing.glCheckError('using program (%d) pre' % self.shaderProg)
             bgl.glUseProgram(self.shaderProg)
             if self.checkErrors:
-                self.drawing.glCheckError('something broke after enabling shader program (%s,%d)' % (self.name,self.shaderProg))
+                self.drawing.glCheckError('using program (%d) post' % self.shaderProg)
 
             # special uniforms
             # - uMVPMatrix works around deprecated gl_ModelViewProjectionMatrix
@@ -315,14 +319,14 @@ class Shader():
         if DEBUG_PRINT:
             print('disabling shader <=================')
         if self.checkErrors:
-            self.drawing.glCheckError('something broke before disabling shader program (%s,%d)' % (self.name, self.shaderProg))
+            self.drawing.glCheckError('disable program (%d) pre' % self.shaderProg)
         try:
             if self.funcEnd: self.funcEnd(self)
         except Exception as e:
             print('Error with shader: ' + str(e))
         bgl.glUseProgram(0)
         if self.checkErrors:
-            self.drawing.glCheckError('something broke after disabling shader program (%s,%d)' % (self.name, self.shaderProg))
+            self.drawing.glCheckError('disable program (%d) post' % self.shaderProg)
 
 
 

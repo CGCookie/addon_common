@@ -25,7 +25,7 @@ import bpy
 
 from .maths import Point2D
 from .debug import dprint
-
+from .decorators import blender_version_wrapper
 
 
 def kmi_details(kmi):
@@ -154,12 +154,21 @@ class Actions:
             else: self.keymap[k] = {self.keymap[k]}
         self.keymap['navigate'] = set()         # filled in below
         self.keymap['window actions'] = set()   # filled in by load_keymap
-        self.keymap['save action'] = set()     # filled in by load_keymap
+        self.keymap['save action'] = set()      # filled in by load_keymap
 
         self.keymap['navigate'] |= Actions.trackpad_actions
         self.keymap['navigate'] |= Actions.ndof_actions
-        self.load_keymap('Blender')
-        self.load_keymap('Blender User')
+
+        # wat? https://twitter.com/gfxcoder/status/1097241832461946880
+        @blender_version_wrapper('<=', '2.79')
+        def load_keymaps():
+            self.load_keymap('Blender')
+            self.load_keymap('Blender User')
+        @blender_version_wrapper('>=', '2.80')
+        def load_keymaps():
+            self.load_keymap('blender')
+            self.load_keymap('blender user')
+        load_keymaps()
 
         self.context = context
         self.space = context.space_data

@@ -20,6 +20,58 @@ Created by Jonathan Denning, Jonathan Williamson
 '''
 
 import bpy
+from .decorators import blender_version_wrapper
+
+@blender_version_wrapper("<=", "2.79")
+def get_preferences(ctx=None):
+    return (ctx if ctx else bpy.context).user_preferences
+@blender_version_wrapper(">=", "2.80")
+def get_preferences(ctx=None):
+    return (ctx if ctx else bpy.context).preferences
+
+
+
+#############################################################
+# TODO: generalize these functions to be add_object, etc.
+
+@blender_version_wrapper('<=','2.79')
+def set_object_layers(o):
+    o.layers = list(bpy.context.scene.layers)
+@blender_version_wrapper('>=','2.80')
+def set_object_layers(o):
+    print('unhandled: set_object_layers')
+    pass
+
+@blender_version_wrapper('<=','2.79')
+def set_object_selection(o, sel):
+    o.select = sel
+@blender_version_wrapper('>=','2.80')
+def set_object_selection(o, sel):
+    o.select_set('SELECT' if sel else 'DESELECT')
+
+@blender_version_wrapper('<=','2.79')
+def link_object(o):
+    bpy.context.scene.objects.link(o)
+@blender_version_wrapper('>=','2.80')
+def link_object(o):
+    print('unhandled: link_object')
+    pass
+
+@blender_version_wrapper('<=','2.79')
+def set_active_object(o):
+    bpy.context.scene.objects.active = o
+@blender_version_wrapper('>=','2.80')
+def set_active_object(o):
+    print('unhandled: set_active_object')
+    pass
+
+@blender_version_wrapper('<=','2.79')
+def get_active_object():
+    return bpy.context.scene.objects.active
+@blender_version_wrapper('>=','2.80')
+def get_active_object():
+    return bpy.context.active_object
+
 
 
 def show_blender_popup(message, title="Message", icon="INFO", wrap=80):
@@ -63,6 +115,14 @@ def show_blender_popup(message, title="Message", icon="INFO", wrap=80):
 def show_error_message(message, title="Error", wrap=80):
     show_blender_popup(message, title, "ERROR", wrap)
 
+def create_and_show_blender_text(text, name='A Report', hide_header=True, goto_top=True):
+    # create a new textblock for reporting
+    bpy.ops.text.new()                  # create new text block, which is appended to list
+    bpy.data.texts[-1].name = name      # set name, but if another object exists with the
+    name = bpy.data.texts[-1].name      # same name, blender will append .001 (or similar)
+    bpy.data.texts[name].text = text    # set text of text block
+    show_blender_text(name, hide_header=hide_header, goto_top=goto_top)
+
 def show_blender_text(textblock_name, hide_header=True, goto_top=True):
     if textblock_name not in bpy.data.texts:
         # no textblock to show
@@ -88,6 +148,9 @@ def show_blender_text(textblock_name, hide_header=True, goto_top=True):
                 # hide header
                 bpy.ops.screen.header({'window':win, 'region':area.regions[2], 'area':area})
 
-def bversion():
-    bversion = '%03d.%03d.%03d' % (bpy.app.version[0],bpy.app.version[1],bpy.app.version[2])
-    return bversion
+def bversion(short=True):
+    major,minor,rev = bpy.app.version
+    bver_long = '%03d.%03d.%03d' % (major,minor,rev)
+    bver_short = '%d.%02d' % (major, minor)
+    return bver_short if short else bver_long
+

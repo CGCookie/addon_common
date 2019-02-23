@@ -19,6 +19,11 @@ Created by Jonathan Denning, Jonathan Williamson
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+'''
+This code helps prevent circular importing.
+Each of the main common objects are referenced here.
+'''
+
 debugger = None
 dprint = None
 profiler = None
