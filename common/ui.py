@@ -36,7 +36,7 @@ from bpy.types import BoolProperty
 from mathutils import Matrix
 
 from .decorators import blender_version_wrapper
-from .maths import Point2D, Vec2D, clamp, mid
+from .maths import Point2D, Vec2D, clamp, mid, Color
 from .profiler import profiler
 from .drawing import Drawing, ScissorStack
 from .utils import iter_head
@@ -154,6 +154,12 @@ class UI_Styling:
                 '0123456789-',
                 '0123456789.'
             ]
+            keywords = [
+                'auto',
+                'transparent',
+                'visible',
+                'hidden',
+            ]
 
             i_char = 0
             def nexttoken():
@@ -161,25 +167,48 @@ class UI_Styling:
                 while i_char < len(charstream) and charstream[i_char] in chars_ignore:
                     i_char += 1
                 fi_char = i_char
-                if i_char == len(charstream): return ('eof', None, fi_char)
+                if i_char == len(charstream):
+                    return ('eof', None, fi_char)
+
                 if charstream[i_char] in chars_num[0]:
                     w = ''
                     while i_char < len(charstream) and charstream[i_char] in chars_num[1]:
                         w += charstream[i_char]
                         i_char += 1
                     return ('num', float(w), fi_char)
+
                 if charstream[i_char] in chars_id[0]:
                     w = ''
                     while i_char < len(charstream) and charstream[i_char] in chars_id[1]:
                         w += charstream[i_char]
                         i_char += 1
-                    if w == 'none':
-                        return ('none', None, fi_char)
+                    if w in keywords:
+                        return (w, w, fi_char)
+                    if w in {'rgb','rgba'}:
+                        is_rgba = (w == 'rgba')
+                        assert nexttoken()[0] == '(', 'expected ( for color'
+                        t,r,_ = nexttoken()
+                        assert t == 'num', 'expected num for red'
+                        assert nexttoken()[0] == ',', 'expected , after red'
+                        t,g,_ = nexttoken()
+                        assert t == 'num', 'expected num for green'
+                        assert nexttoken()[0] == ',', 'expected , after green'
+                        t,b,_ = nexttoken()
+                        assert t == 'num', 'expected num for blue'
+                        if is_rgba:
+                            assert nexttoken()[0] == ',', 'expected , after blue'
+                            t,a,_ = nexttoken()
+                            assert t == 'num', 'expected num for alpha'
+                        else:
+                            a = 1.0
+                        assert nexttoken()[0] == ')', 'expected ) for color'
+                        return ('color', Color((r/255, g/255, b/255, a)), fi_char)
                     return ('id', w, fi_char)
+
                 c = charstream[i_char]
                 i_char += 1
                 return (c, c, fi_char)
-                assert False, 'saw unexpected symbol "%s" (%d)' % (charstream[i_char], i_char)
+
             self.tokens = []
             while True:
                 token = nexttoken()
@@ -209,69 +238,162 @@ class UI_Styling:
             return token[0 if not value else 1]
 
     class Declaration:
-        special_values = {
-            'transparent',
-            'auto',
-        }
         def __init__(self, lexer):
-            self.property = None
-            self.value = None
             self.property = lexer.match('id')
             lexer.match(':')
-            if lexer.peek() == 'num':
-                self.value = lexer.match('num')
-            elif lexer.peek() == 'id':
-                if lexer.peek(value=True) in self.special_values:
-                    self.value = lexer.match('id')
-                else:
-                    assert False, 'unexpected property value "%s"' % (lexer.peek(),)
+            v = lexer.next();
+            if lexer.peek() == ';':
+                self.value = v
             else:
-                assert False, 'property value unexpected "%s"' % (lexer.peek(),)
+                # tuple!
+                l = [v]
+                while lexer.peek() != ';':
+                    l.append(lexer.next())
+                self.value = tuple(l)
             lexer.match(';')
-            #print('  %s = %s' % (self.property, str(self.value)))
+        def __str__(self):
+            return '<Declaration "%s=%s">' % (self.property, str(self.value))
+        def __repr__(self): return self.__str__()
 
     class RuleSet:
         def __init__(self, lexer):
             self.selector = []
             self.decllist = []
             def elem():
-                e = lexer.match({'id','*'})
-                while lexer.peek() in {'.','#'}:
-                    e += lexer.match({'.','#'})
+                if lexer.peek() not in {'.','#',':'}:
+                    e = lexer.match({'id','*'})
+                else:
+                    e = '*'
+                while lexer.peek() in {'.','#',':'}:
+                    e += lexer.match({'.','#',':'})
                     e += lexer.match('id')
                 return e
             while lexer.peek() != '{':
                 if lexer.peek() in {'id','*'}:
                     self.selector.append(elem())
-                elif lexer.peek() in {'>','+'}:
-                    sibling = lexer.match({'>','+'})
+                elif lexer.peek() in {'>'}:
+                    # TODO: handle + and ~ combinators?
+                    sibling = lexer.match({'>'})
                     self.selector.append(sibling)
                     self.selector.append(elem())
-            #print('%s {' % ' '.join(self.selector))
             lexer.match('{')
-            while lexer.peek() != '}': self.decllist.append(UI_Styling.Declaration(lexer))
+            while lexer.peek() != '}':
+                while lexer.peek() == ';': lexer.match(';')
+                if lexer.peek() == '}': break
+                self.decllist.append(UI_Styling.Declaration(lexer))
             lexer.match('}')
-            #print('}')
 
-    class Styling:
-        def __init__(self, lexer):
-            self.rules = []
-            while lexer.peek() != 'eof':
-                self.rules.append(UI_Styling.RuleSet(lexer))
+        def __str__(self):
+            s = ' '.join(self.selector)
+            if not self.decllist: return '<RuleSet "%s">' % (s,)
+            return '<RuleSet "%s"\n%s\n>' % (s,'\n'.join('  '+l for d in self.decllist for l in str(d).splitlines()))
+        def __repr__(self): return self.__str__()
 
-    def __init__(self, path):
-        lines = open(path, 'rt').read()                 # read in style file
+        def match(self, selector):
+            # returns true if self.selector matches passed selector
+            def splitsel(sel):
+                p = {'type':'', 'class':[], 'id':'', 'pseudo':[]}
+                transition = {'.':'class', '#':'id', ':':'pseudo'}
+                v,m = '','type'
+                for c in sel:
+                    if c in '.:#':
+                        if type(p[m]) is list: p[m].append(v)
+                        else: p[m] = v
+                        v,m = '',transition[c]
+                    else:
+                        v += c
+                if type(p[m]) is list: p[m].append(v)
+                else: p[m] = v
+                return p
+            def msel(sa, sb, cont=True):
+                if len(sa) == 0: return True
+                if len(sb) == 0: return False
+                a0,b0 = sa[0],sb[0]
+                if b0 == '>': return msel(sa, sb[1:], cont=False)
+                ap,bp = splitsel(a0),splitsel(b0)
+                m = True
+                m &= bp['type'] == '*' or ap['type'] == bp['type']
+                m &= bp['id'] == '' or ap['id'] == bp['id']
+                m &= all(c in ap['class'] for c in bp['class'])
+                m &= all(c in ap['pseudo'] for c in bp['pseudo'])
+                if m and msel(sa[1:], sb[1:]): return True
+                if cont: return msel(sa, sb[1:])
+                return False
+            return msel(selector, self.selector)
+
+    def __init__(self, lines):
         lines = re.sub(r'/\*[\s\S]*?\*/', '', lines)    # remove multi-line comments
         lines = re.sub(r'//.*', '', lines)              # remove single-line comments
         lexer = UI_Styling.Lexer(lines)                 # tokenize the input
-        self.styling = UI_Styling.Styling(lexer)        # parse the input
+        self.rules = []
+        while lexer.peek() != 'eof': self.rules.append(UI_Styling.RuleSet(lexer))
 
-    def get_style(self, selector):
-        pass
+    def __str__(self):
+        if not self.rules: return '<UI_Styling>'
+        return '<UI_Styling\n%s\n>' % ('\n'.join('  '+l for r in self.rules for l in str(r).splitlines()))
+
+    def get_style(self, selector, override=None):
+        # collect all the declarations that apply to selector
+        full = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+        if override: full += override.get_style(selector)
+        # expand and override declarations
+        decllist = {}
+        for decl in full:
+            p,v = decl.property, decl.value
+            if p in {'margin','padding'}:
+                if type(v) is float:
+                    decllist['%s-top'%p] = v
+                    decllist['%s-right'%p] = v
+                    decllist['%s-bottom'%p] = v
+                    decllist['%s-left'%p] = v
+                elif type(v) is tuple:
+                    if len(v) == 2:
+                        decllist['%s-top'%p] = v[0]
+                        decllist['%s-right'%p] = v[1]
+                        decllist['%s-bottom'%p] = v[0]
+                        decllist['%s-left'%p] = v[1]
+                    elif len(v) == 3:
+                        decllist['%s-top'%p] = v[0]
+                        decllist['%s-right'%p] = v[1]
+                        decllist['%s-bottom'%p] = v[2]
+                        decllist['%s-left'%p] = v[1]
+                    else:
+                        decllist['%s-top'%p] = v[0]
+                        decllist['%s-right'%p] = v[1]
+                        decllist['%s-bottom'%p] = v[2]
+                        decllist['%s-left'%p] = v[3]
+            elif p == 'border':
+                decllist['border-width'] = v[0]
+                decllist['border-color'] = v[1]
+            elif p == 'background':
+                decllist['background'] = v
+            elif p == 'width':
+                decllist['min-width'] = v
+                decllist['max-width'] = v
+            elif p == 'height':
+                decllist['min-height'] = v
+                decllist['max-height'] = v
+            else:
+                decllist[p] = v
+        return decllist
 
 
 # this is just a test
-UI_Styling(os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'ui.css'))
+path = os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'ui.css')
+lines = open(path, 'rt').read()
+styling = UI_Styling(lines)
+#print(styling)
+if False:
+    tests = [
+        ['button'],
+        ['button:hover'],
+        ['button.foo.bar#baz'],
+        ['vertical','element:hover'],
+        ['vertical','button','element'],
+    ]
+    for test in tests:
+        print('%s' % str(test))
+        print('\n'.join('   %s=%s' % (str(k),str(v)) for k,v in styling.get_style(test).items()))
 
 
 class UI_Style:
@@ -308,6 +430,108 @@ class UI_Style:
         self.border_color     = opts.border_color
         self.border_thickness = opts.border_thickness
         self.border_rounded   = opts.border_rounded
+
+
+class UI_Basic:
+    def __init__(self, parent=None, stylesheet=None, id=None, classes=None, style=None):
+        self._parent = None
+        self._stylesheet = None
+        self._id = None
+        self._classes = None
+        self._style = None
+
+        # preferred size ranges (set in self._recalculate)
+        self._min_width, self._min_height, self._max_width, self._max_height = 0,0,0,0
+        # actual absolute position (set in self._update)
+        self._l, self._t, self._w, self._h = 0,0,0,0
+
+        self._is_dirty = True
+        self._defer_recalc = True
+
+        self.parent = parent
+        self.stylesheet = stylesheet or (parent.get_stylesheet() if parent else None)
+        self.style = style
+        self.id = id
+        for cls in (classes or set()):
+            self.add_class(cls)
+
+        self._defer_recalc = False
+        self.dirty()
+
+    @property
+    def parent(self):
+        return self._parent
+    @parent.setter
+    def parent(self, parent):
+        if self._parent == parent: return
+        if self._parent: self._parent.del_child(self)
+        self._parent = parent
+        if self._parent: self._parent.add_child(self)
+        self.dirty()
+
+    @property
+    def stylesheet(self):
+        return self._stylesheet
+    @stylesheet.setter
+    def stylesheet(self, stylesheet):
+        self._stylesheet = stylesheet
+        self.dirty()
+
+    @property
+    def style(self):
+        return dict(self._style)
+    @stylesheet.setter
+    def style(self, style):
+        if not style:
+            self._style = None
+        else:
+            self._style = UI_Styling('*{%s;}' % style)
+        self.dirty()
+
+    @property
+    def id(self):
+        return self._id
+    @id.setter
+    def id(self, id):
+        self._id = id
+        self.dirty()
+
+    @property
+    def classes(self):
+        return set(self._classes)
+    def add_class(self, cls):
+        self._classes.add(cls)
+    def del_class(self, cls):
+        self._classes.discard(cls)
+
+    def _recalculate(self):
+        # recalculates width and height
+        if not self._is_dirty: return
+        if self._defer_recalc: return
+
+        styles = self._stylesheet.get_style(selector, self._style)
+        if styles.get('visibility', 'visible') == 'hidden':
+            self._min_width, self._min_height, self._max_width, self._max_height = 0,0,0,0
+            self._is_dirty = False
+            return
+
+        v = styles.get('min-width', 0)
+        self._min_width = max(0, 0 if v == 'auto' else v)
+        v = styles.get('min-height', 0)
+        self._min_height = max(0, 0 if v == 'auto' else v)
+        v = styles.get('max-width', 0)
+        self._max_width = float('inf') if v == 'auto' else v
+        v = styles.get('max-height', 0)
+        self._max_height = float('inf') if v == 'auto' else v
+
+        self._is_dirty = False
+
+    def _update(self, left, top, width, height):
+        # pos and size define where this element exists
+        self._l, self._t = left, top
+        self._w, self._h = width, height
+
+
 
 
 class UI_Element:

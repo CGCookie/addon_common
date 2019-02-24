@@ -363,6 +363,36 @@ class Normal(VecUtils, Entity3D):
         self.normalize()
 
 
+class Color(Vector):
+    @stats_wrapper
+    def __init__(self, rgba=None):
+        if rgba is not None:
+            self.from_vector(rgba)
+
+    def __str__(self):
+        return '<Color (%0.4f, %0.4f, %0.4f, %0.4f)>' % (self.r, self.g, self.b, self.a)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __mul__(self, other):
+        t = type(other)
+        if t is float or t is int:
+            return Color((other * self.r, other * self.g, other * self.b, self.a))
+        assert False, "unhandled type of other: %s (%s)" % (str(other), str(t))
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def as_vector(self):
+        return Vector(self)
+
+    def from_vector(self, v):
+        if len(v) == 3: self.r, self.g, self.b = v
+        else: self.r, self.g, self.b, self.a = v
+
+
+
 class Ray(Entity3D):
     __slots__ = ['o', 'd', 'max']
 
