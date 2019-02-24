@@ -39,11 +39,25 @@ from .decorators import blender_version_wrapper
 from .maths import Point2D, Vec2D, clamp, mid
 from .profiler import profiler
 from .drawing import Drawing, ScissorStack
+from .utils import iter_head
+from .fontmanager import FontManager
 
 from ..ext import png
 
 
-debug_draw = False
+debug_draw    = False   # set to True to enable debug drawing of UI (borders, padding, etc.)
+debug_profile = False   # set to True to enable profiling of UI
+
+class profiler_nop:
+    def done(self): pass
+def profile_fn(fn):
+    global debug_profile
+    if not debug_profile: return fn
+    return profiler.profile(fn)
+def profile_start(*args, **kwargs):
+    global debug_profile
+    if not debug_profile: return profiler_nop()
+    return profiler.start(*args, **kwargs)
 
 
 '''
@@ -55,20 +69,62 @@ TODO items:
 '''
 
 
-def get_image_path(fn, ext=''):
-    path_images = os.path.join(os.path.dirname(__file__), '..', 'icons')
+def get_image_path(fn, ext=None, subfolders=None):
+    # if no subfolders are given, assuming image path is <root>/icons
+    # or <root>/images where <root> is the 2 levels above this file
+    if subfolders is None: subfolders = ['icons', 'images']
     if ext: fn = '%s.%s' % (fn,ext)
-    return os.path.join(path_images, fn)
+    path_root = os.path.join(os.path.dirname(__file__), '..', '..')
+    paths = [os.path.join(path_root, p, fn) for p in subfolders]
+    return iter_head((p for p in paths if os.path.exists(p)), None)
 
 
 def load_image_png(fn):
-    if not hasattr(load_image_png, 'cache'):
-        load_image_png.cache = {}
+    if not hasattr(load_image_png, 'cache'): load_image_png.cache = {}
     if not fn in load_image_png.cache:
-        # assuming 4 channels per pixel!
+        # have not seen this image before
+        # note: assuming 4 channels (rgba) per pixel!
         w,h,d,m = png.Reader(get_image_path(fn)).read()
         load_image_png.cache[fn] = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
     return load_image_png.cache[fn]
+
+def load_font_ttf(fn):
+    fontid = FontManager.load(get_font_path(fn))
+    FontManager.aspect(1, fontid)
+    FontManager.enable_kerning_default(fontid)
+    return fontid
+
+def kwargopts(kwargs, defvals=None, **mykwargs):
+    opts = defvals.copy() if defvals else {}
+    opts.update(mykwargs)
+    opts.update(kwargs)
+    if 'opts' in kwargs: opts.update(opts['opts'])
+    def factory():
+        class Opts():
+            ''' pretend to be a dictionary, but also add . access fns '''
+            def __init__(self):
+                self.touched = set()
+            def __getattr__(self, opt):
+                self.touched.add(opt)
+                return opts[opt]
+            def __getitem__(self, opt):
+                self.touched.add(opt)
+                return opts[opt]
+            def __len__(self): return len(opts)
+            def has_key(self, opt): return opt in opts
+            def keys(self): return opts.keys()
+            def values(self): return opts.values()
+            def items(self): return opts.items()
+            def __contains__(self, opt): return opt in opts
+            def __iter__(self): return iter(opts)
+            def print_untouched(self):
+                print('untouched: %s' % str(set(opts.keys()) - self.touched))
+            def pass_through(self, *args):
+                return {key:self[key] for key in args}
+        return Opts()
+    return factory()
+
+
 
 
 class GetSet:
@@ -83,6 +139,175 @@ class UI_Event:
     def __init__(self, type, value):
         self.type = type
         self.value = value
+
+
+
+class UI_Styling:
+    class Lexer:
+        def __init__(self, charstream):
+            chars_ignore = ' \t\r\n'
+            chars_id  = [
+                'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_',
+                'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-'
+            ]
+            chars_num = [
+                '0123456789-',
+                '0123456789.'
+            ]
+
+            i_char = 0
+            def nexttoken():
+                nonlocal i_char, charstream
+                while i_char < len(charstream) and charstream[i_char] in chars_ignore:
+                    i_char += 1
+                fi_char = i_char
+                if i_char == len(charstream): return ('eof', None, fi_char)
+                if charstream[i_char] in chars_num[0]:
+                    w = ''
+                    while i_char < len(charstream) and charstream[i_char] in chars_num[1]:
+                        w += charstream[i_char]
+                        i_char += 1
+                    return ('num', float(w), fi_char)
+                if charstream[i_char] in chars_id[0]:
+                    w = ''
+                    while i_char < len(charstream) and charstream[i_char] in chars_id[1]:
+                        w += charstream[i_char]
+                        i_char += 1
+                    if w == 'none':
+                        return ('none', None, fi_char)
+                    return ('id', w, fi_char)
+                c = charstream[i_char]
+                i_char += 1
+                return (c, c, fi_char)
+                assert False, 'saw unexpected symbol "%s" (%d)' % (charstream[i_char], i_char)
+            self.tokens = []
+            while True:
+                token = nexttoken()
+                if token[0] is 'eof': break
+                self.tokens += [token]
+            self.i = 0
+
+        def match(self, t):
+            assert self.i < len(self.tokens), 'hit end on token stream'
+            token = self.tokens[self.i]
+            if type(t) is str:
+                assert token[0] == t, 'expected "%s" but saw "%s" (t: %s, ti: %d, ci: %d)' % (t, token[0], token[1], self.i, token[2])
+            else:
+                assert token[0] in t, 'expected "%s" but saw "%s" (t: %s, ti: %d, ci: %d)' % ('/'.join(t), token[0], token[1], self.i, token[2])
+            self.i += 1
+            return token[1]
+
+        def next(self):
+            assert self.i < len(self.tokens), 'hit end of token stream'
+            token = self.tokens[self.i]
+            self.i += 1
+            return token[1]
+
+        def peek(self, value=False):
+            if self.i == len(self.tokens): return 'eof'
+            token = self.tokens[self.i]
+            return token[0 if not value else 1]
+
+    class Declaration:
+        special_values = {
+            'transparent',
+            'auto',
+        }
+        def __init__(self, lexer):
+            self.property = None
+            self.value = None
+            self.property = lexer.match('id')
+            lexer.match(':')
+            if lexer.peek() == 'num':
+                self.value = lexer.match('num')
+            elif lexer.peek() == 'id':
+                if lexer.peek(value=True) in self.special_values:
+                    self.value = lexer.match('id')
+                else:
+                    assert False, 'unexpected property value "%s"' % (lexer.peek(),)
+            else:
+                assert False, 'property value unexpected "%s"' % (lexer.peek(),)
+            lexer.match(';')
+            #print('  %s = %s' % (self.property, str(self.value)))
+
+    class RuleSet:
+        def __init__(self, lexer):
+            self.selector = []
+            self.decllist = []
+            def elem():
+                e = lexer.match({'id','*'})
+                while lexer.peek() in {'.','#'}:
+                    e += lexer.match({'.','#'})
+                    e += lexer.match('id')
+                return e
+            while lexer.peek() != '{':
+                if lexer.peek() in {'id','*'}:
+                    self.selector.append(elem())
+                elif lexer.peek() in {'>','+'}:
+                    sibling = lexer.match({'>','+'})
+                    self.selector.append(sibling)
+                    self.selector.append(elem())
+            #print('%s {' % ' '.join(self.selector))
+            lexer.match('{')
+            while lexer.peek() != '}': self.decllist.append(UI_Styling.Declaration(lexer))
+            lexer.match('}')
+            #print('}')
+
+    class Styling:
+        def __init__(self, lexer):
+            self.rules = []
+            while lexer.peek() != 'eof':
+                self.rules.append(UI_Styling.RuleSet(lexer))
+
+    def __init__(self, path):
+        lines = open(path, 'rt').read()                 # read in style file
+        lines = re.sub(r'/\*[\s\S]*?\*/', '', lines)    # remove multi-line comments
+        lines = re.sub(r'//.*', '', lines)              # remove single-line comments
+        lexer = UI_Styling.Lexer(lines)                 # tokenize the input
+        self.styling = UI_Styling.Styling(lexer)        # parse the input
+
+    def get_style(self, selector):
+        pass
+
+
+# this is just a test
+UI_Styling(os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'ui.css'))
+
+
+class UI_Style:
+    def __init__(self, **kwargs):
+        opts = kwargopts(kwargs,
+            margin=0,               # all margins (overridden by margin_* below)
+            margin_left=None,
+            margin_right=None,
+            margin_top=None,
+            margin_bottom=None,
+
+            size=None,              # fixed size if not None!
+            size_min=(0,0),         # minimum size for element
+            size_max=None,          # maximum size for element
+
+            background_color=None,  # RGBA or None
+
+            border_color=None,      # RGBA or None
+            border_thickness=0,     # pixels for thickness
+            border_rounded=0,       # pixels for roundedness
+        )
+
+        self.margin_left   = opts.margin if opts.margin_left   is None else opts.margin_left
+        self.margin_right  = opts.margin if opts.margin_right  is None else opts.margin_right
+        self.margin_top    = opts.margin if opts.margin_top    is None else opts.margin_top
+        self.margin_bottom = opts.margin if opts.margin_bottom is None else opts.margin_bottom
+
+        self.size     = opts.size
+        self.size_min = opts.size_min
+        self.size_max = opts.size_max
+
+        self.background_color = opts.background_color
+
+        self.border_color     = opts.border_color
+        self.border_thickness = opts.border_thickness
+        self.border_rounded   = opts.border_rounded
 
 
 class UI_Element:
