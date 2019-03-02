@@ -23,6 +23,7 @@ import os
 import re
 import math
 import time
+import struct
 import random
 import traceback
 import functools
@@ -40,10 +41,16 @@ from .maths import Point2D, Vec2D, clamp, mid, Color
 from .profiler import profiler
 from .drawing import Drawing, ScissorStack
 from .utils import iter_head
+from .shaders import Shader
 from .fontmanager import FontManager
 
 from ..ext import png
 
+major, minor, rev = bpy.app.version
+blenderver = '%d.%02d' % (major, minor)
+if blenderver >= '2.80':
+    import gpu
+    from gpu_extras.batch import batch_for_shader
 
 debug_draw    = False   # set to True to enable debug drawing of UI (borders, padding, etc.)
 debug_profile = False   # set to True to enable profiling of UI
@@ -141,6 +148,32 @@ class UI_Event:
         self.value = value
 
 
+'''
+
+CookieCutter UI Styling
+
+This styling file is formatted _very_ similarly to CSS.
+
+Important notes/differences from CSS:
+
+- rules are applied top-down, so any later conflicting rule will override an earlier rule
+    - in other words, specificity is ignored here (https://developer.mozilla.org/en-US/docs/Web/CSS/Specificity)
+- all units are in pixels; do not specify units (ex: `px`, `in`, `em`)
+- colors must be specified with `rgb(<r>,<g>,<b>)` or `rgba(<r>,<g>,<b>,<a>)` or by color name
+    - red, green, and blue value ranges are 0--255; alpha is 0.0--1.0
+    - no `#FFFFFF` or `hsv()` colors
+- all element types must be explicitly specified, except at beginning or when following a `>`; use `*` to match any type
+    - ex: `elem1 .class` is the same as `elem1.class` and `elem1 . class`, but never `elem1 *.class`
+- spaces are completely ignored except to separate tokens
+- only `>` and ` ` combinators are implemented
+- setting `width` or `height` will set both of the corresponding `min-*` and `max-*` properties
+- `min-*` and `max-*` are used as suggestions to the UI system; they will not be strictly followed
+- numbers cannot begin with a decimal (ex: `.014`); start with `0.` (ex: `0.014`)
+- background has only color (`background: <background-color>;`)
+- border has no style (`border: <border-width> <border-color>;`) and has uniform width
+
+'''
+
 
 class UI_Styling:
     class Lexer:
@@ -156,10 +189,167 @@ class UI_Styling:
             ]
             keywords = [
                 'auto',
-                'transparent',
+                #'transparent',
                 'visible',
                 'hidden',
             ]
+            keywords_pseudoclasses = [
+                'hover',
+                'active',
+            ]
+            keywords_colornames = {
+                'transparent': (255, 0, 255, 0),
+
+                # https://www.quackit.com/css/css_color_codes.cfm
+                'indianred': (205,92,92),
+                'lightcoral': (240,128,128),
+                'salmon': (250,128,114),
+                'darksalmon': (233,150,122),
+                'lightsalmon': (255,160,122),
+                'crimson': (220,20,60),
+                'red': (255,0,0),
+                'firebrick': (178,34,34),
+                'darkred': (139,0,0),
+                'pink': (255,192,203),
+                'lightpink': (255,182,193),
+                'hotpink': (255,105,180),
+                'deeppink': (255,20,147),
+                'mediumvioletred': (199,21,133),
+                'palevioletred': (219,112,147),
+                'coral': (255,127,80),
+                'tomato': (255,99,71),
+                'orangered': (255,69,0),
+                'darkorange': (255,140,0),
+                'orange': (255,165,0),
+                'gold': (255,215,0),
+                'yellow': (255,255,0),
+                'lightyellow': (255,255,224),
+                'lemonchiffon': (255,250,205),
+                'lightgoldenrodyellow': (250,250,210),
+                'papayawhip': (255,239,213),
+                'moccasin': (255,228,181),
+                'peachpuff': (255,218,185),
+                'palegoldenrod': (238,232,170),
+                'khaki': (240,230,140),
+                'darkkhaki': (189,183,107),
+                'lavender': (230,230,250),
+                'thistle': (216,191,216),
+                'plum': (221,160,221),
+                'violet': (238,130,238),
+                'orchid': (218,112,214),
+                'fuchsia': (255,0,255),
+                'magenta': (255,0,255),
+                'mediumorchid': (186,85,211),
+                'mediumpurple': (147,112,219),
+                'blueviolet': (138,43,226),
+                'darkviolet': (148,0,211),
+                'darkorchid': (153,50,204),
+                'darkmagenta': (139,0,139),
+                'purple': (128,0,128),
+                'rebeccapurple': (102,51,153),
+                'indigo': (75,0,130),
+                'mediumslateblue': (123,104,238),
+                'slateblue': (106,90,205),
+                'darkslateblue': (72,61,139),
+                'greenyellow': (173,255,47),
+                'chartreuse': (127,255,0),
+                'lawngreen': (124,252,0),
+                'lime': (0,255,0),
+                'limegreen': (50,205,50),
+                'palegreen': (152,251,152),
+                'lightgreen': (144,238,144),
+                'mediumspringgreen': (0,250,154),
+                'springgreen': (0,255,127),
+                'mediumseagreen': (60,179,113),
+                'seagreen': (46,139,87),
+                'forestgreen': (34,139,34),
+                'green': (0,128,0),
+                'darkgreen': (0,100,0),
+                'yellowgreen': (154,205,50),
+                'olivedrab': (107,142,35),
+                'olive': (128,128,0),
+                'darkolivegreen': (85,107,47),
+                'mediumaquamarine': (102,205,170),
+                'darkseagreen': (143,188,143),
+                'lightseagreen': (32,178,170),
+                'darkcyan': (0,139,139),
+                'teal': (0,128,128),
+                'aqua': (0,255,255),
+                'cyan': (0,255,255),
+                'lightcyan': (224,255,255),
+                'paleturquoise': (175,238,238),
+                'aquamarine': (127,255,212),
+                'turquoise': (64,224,208),
+                'mediumturquoise': (72,209,204),
+                'darkturquoise': (0,206,209),
+                'cadetblue': (95,158,160),
+                'steelblue': (70,130,180),
+                'lightsteelblue': (176,196,222),
+                'powderblue': (176,224,230),
+                'lightblue': (173,216,230),
+                'skyblue': (135,206,235),
+                'lightskyblue': (135,206,250),
+                'deepskyblue': (0,191,255),
+                'dodgerblue': (30,144,255),
+                'cornflowerblue': (100,149,237),
+                'royalblue': (65,105,225),
+                'blue': (0,0,255),
+                'mediumblue': (0,0,205),
+                'darkblue': (0,0,139),
+                'navy': (0,0,128),
+                'midnightblue': (25,25,112),
+                'cornsilk': (255,248,220),
+                'blanchedalmond': (255,235,205),
+                'bisque': (255,228,196),
+                'navajowhite': (255,222,173),
+                'wheat': (245,222,179),
+                'burlywood': (222,184,135),
+                'tan': (210,180,140),
+                'rosybrown': (188,143,143),
+                'sandybrown': (244,164,96),
+                'goldenrod': (218,165,32),
+                'darkgoldenrod': (184,134,11),
+                'peru': (205,133,63),
+                'chocolate': (210,105,30),
+                'saddlebrown': (139,69,19),
+                'sienna': (160,82,45),
+                'brown': (165,42,42),
+                'maroon': (128,0,0),
+                'white': (255,255,255),
+                'snow': (255,250,250),
+                'honeydew': (240,255,240),
+                'mintcream': (245,255,250),
+                'azure': (240,255,255),
+                'aliceblue': (240,248,255),
+                'ghostwhite': (248,248,255),
+                'whitesmoke': (245,245,245),
+                'seashell': (255,245,238),
+                'beige': (245,245,220),
+                'oldlace': (253,245,230),
+                'floralwhite': (255,250,240),
+                'ivory': (255,255,240),
+                'antiquewhite': (250,235,215),
+                'linen': (250,240,230),
+                'lavenderblush': (255,240,245),
+                'mistyrose': (255,228,225),
+                'gainsboro': (220,220,220),
+                'lightgray': (211,211,211),
+                'lightgrey': (211,211,211),
+                'silver': (192,192,192),
+                'darkgray': (169,169,169),
+                'darkgrey': (169,169,169),
+                'gray': (128,128,128),
+                'grey': (128,128,128),
+                'dimgray': (105,105,105),
+                'dimgrey': (105,105,105),
+                'lightslategray': (119,136,153),
+                'lightslategrey': (119,136,153),
+                'slategray': (112,128,144),
+                'slategrey': (112,128,144),
+                'darkslategray': (47,79,79),
+                'darkslategrey': (47,79,79),
+                'black': (0,0,0),
+            }
 
             i_char = 0
             def nexttoken():
@@ -203,6 +393,16 @@ class UI_Styling:
                             a = 1.0
                         assert nexttoken()[0] == ')', 'expected ) for color'
                         return ('color', Color((r/255, g/255, b/255, a)), fi_char)
+                    if w in keywords_colornames:
+                        c = keywords_colornames[w]
+                        if len(c) == 3:
+                            r,g,b = c
+                            a = 1.0
+                        else:
+                            r,g,b,a = c
+                        return ('color', Color((r/255, g/255, b/255, a)), fi_char)
+                    if w in keywords_pseudoclasses:
+                        return ('pseudoclass', w, fi_char)
                     return ('id', w, fi_char)
 
                 c = charstream[i_char]
@@ -257,25 +457,36 @@ class UI_Styling:
 
     class RuleSet:
         def __init__(self, lexer):
-            self.selector = []
-            self.decllist = []
             def elem():
                 if lexer.peek() not in {'.','#',':'}:
                     e = lexer.match({'id','*'})
                 else:
                     e = '*'
                 while lexer.peek() in {'.','#',':'}:
-                    e += lexer.match({'.','#',':'})
-                    e += lexer.match('id')
+                    if lexer.peek() in {'.','#'}:
+                        e += lexer.match({'.','#'})
+                        e += lexer.match('id')
+                    else:
+                        e += lexer.match(':')
+                        e += lexer.match('pseudoclass')
                 return e
+
+            # get selector
+            self.selectors = [[]]
             while lexer.peek() != '{':
                 if lexer.peek() in {'id','*'}:
-                    self.selector.append(elem())
+                    self.selectors[-1].append(elem())
                 elif lexer.peek() in {'>'}:
                     # TODO: handle + and ~ combinators?
                     sibling = lexer.match({'>'})
-                    self.selector.append(sibling)
-                    self.selector.append(elem())
+                    self.selectors[-1].append(sibling)
+                    self.selectors[-1].append(elem())
+                elif lexer.peek() == ',':
+                    lexer.match(',')
+                    self.selectors.append([])
+
+            # get declarations list
+            self.decllist = []
             lexer.match('{')
             while lexer.peek() != '}':
                 while lexer.peek() == ';': lexer.match(';')
@@ -284,7 +495,7 @@ class UI_Styling:
             lexer.match('}')
 
         def __str__(self):
-            s = ' '.join(self.selector)
+            s = ', '.join(' '.join(selector) for selector in self.selectors)
             if not self.decllist: return '<RuleSet "%s">' % (s,)
             return '<RuleSet "%s"\n%s\n>' % (s,'\n'.join('  '+l for d in self.decllist for l in str(d).splitlines()))
         def __repr__(self): return self.__str__()
@@ -319,7 +530,7 @@ class UI_Styling:
                 if m and msel(sa[1:], sb[1:]): return True
                 if cont: return msel(sa, sb[1:])
                 return False
-            return msel(selector, self.selector)
+            return any(msel(selector, sel) for sel in self.selectors)
 
     def __init__(self, lines):
         lines = re.sub(r'/\*[\s\S]*?\*/', '', lines)    # remove multi-line comments
@@ -336,17 +547,13 @@ class UI_Styling:
         # collect all the declarations that apply to selector
         full = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
         if override: full += override.get_style(selector)
+
         # expand and override declarations
         decllist = {}
         for decl in full:
             p,v = decl.property, decl.value
             if p in {'margin','padding'}:
-                if type(v) is float:
-                    decllist['%s-top'%p] = v
-                    decllist['%s-right'%p] = v
-                    decllist['%s-bottom'%p] = v
-                    decllist['%s-left'%p] = v
-                elif type(v) is tuple:
+                if type(v) is tuple:
                     if len(v) == 2:
                         decllist['%s-top'%p] = v[0]
                         decllist['%s-right'%p] = v[1]
@@ -362,11 +569,57 @@ class UI_Styling:
                         decllist['%s-right'%p] = v[1]
                         decllist['%s-bottom'%p] = v[2]
                         decllist['%s-left'%p] = v[3]
+                else:
+                    decllist['%s-top'%p] = v
+                    decllist['%s-right'%p] = v
+                    decllist['%s-bottom'%p] = v
+                    decllist['%s-left'%p] = v
             elif p == 'border':
                 decllist['border-width'] = v[0]
-                decllist['border-color'] = v[1]
+                if len(v) == 2:
+                    decllist['border-top-color'] = v[1]
+                    decllist['border-right-color'] = v[1]
+                    decllist['border-bottom-color'] = v[1]
+                    decllist['border-left-color'] = v[1]
+                elif len(v) == 3:
+                    decllist['border-top-color'] = v[1]
+                    decllist['border-right-color'] = v[2]
+                    decllist['border-bottom-color'] = v[1]
+                    decllist['border-left-color'] = v[2]
+                elif len(v) == 4:
+                    decllist['border-top-color'] = v[1]
+                    decllist['border-right-color'] = v[2]
+                    decllist['border-bottom-color'] = v[3]
+                    decllist['border-left-color'] = v[2]
+                else:
+                    decllist['border-top-color'] = v[1]
+                    decllist['border-right-color'] = v[2]
+                    decllist['border-bottom-color'] = v[3]
+                    decllist['border-left-color'] = v[4]
+            elif p == 'border-color':
+                if type(v) is tuple:
+                    if len(v) == 2:
+                        decllist['border-top-color'] = v[0]
+                        decllist['border-right-color'] = v[1]
+                        decllist['border-bottom-color'] = v[0]
+                        decllist['border-left-color'] = v[1]
+                    elif len(v) == 3:
+                        decllist['border-top-color'] = v[0]
+                        decllist['border-right-color'] = v[1]
+                        decllist['border-bottom-color'] = v[2]
+                        decllist['border-left-color'] = v[1]
+                    else:
+                        decllist['border-top-color'] = v[0]
+                        decllist['border-right-color'] = v[1]
+                        decllist['border-bottom-color'] = v[2]
+                        decllist['border-left-color'] = v[3]
+                else:
+                    decllist['border-top-color'] = v
+                    decllist['border-right-color'] = v
+                    decllist['border-bottom-color'] = v
+                    decllist['border-left-color'] = v
             elif p == 'background':
-                decllist['background'] = v
+                decllist['background-color'] = v
             elif p == 'width':
                 decllist['min-width'] = v
                 decllist['max-width'] = v
@@ -375,6 +628,11 @@ class UI_Styling:
                 decllist['max-height'] = v
             else:
                 decllist[p] = v
+
+        # delete properties with `initial` values
+        for k in [k for (k,v) in decllist.items() if v == 'initial']:
+            del decllist[k]
+
         return decllist
 
 
@@ -382,7 +640,7 @@ class UI_Styling:
 path = os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'ui.css')
 lines = open(path, 'rt').read()
 styling = UI_Styling(lines)
-#print(styling)
+# print(styling)
 if False:
     tests = [
         ['button'],
@@ -396,78 +654,177 @@ if False:
         print('\n'.join('   %s=%s' % (str(k),str(v)) for k,v in styling.get_style(test).items()))
 
 
-class UI_Style:
-    def __init__(self, **kwargs):
-        opts = kwargopts(kwargs,
-            margin=0,               # all margins (overridden by margin_* below)
-            margin_left=None,
-            margin_right=None,
-            margin_top=None,
-            margin_bottom=None,
 
-            size=None,              # fixed size if not None!
-            size_min=(0,0),         # minimum size for element
-            size_max=None,          # maximum size for element
+class UI_Draw:
+    @blender_version_wrapper('<=', '2.79')
+    def init_draw(self):
+        # TODO: test this implementation!
+        assert False, 'function implementation not tested yet!!!'
 
-            background_color=None,  # RGBA or None
+        UI_Draw._shader = Shader.load_from_file('ui', 'uielement.glsl', checkErrors=True)
 
-            border_color=None,      # RGBA or None
-            border_thickness=0,     # pixels for thickness
-            border_rounded=0,       # pixels for roundedness
-        )
+        sizeOfFloat, sizeOfInt = 4, 4
 
-        self.margin_left   = opts.margin if opts.margin_left   is None else opts.margin_left
-        self.margin_right  = opts.margin if opts.margin_right  is None else opts.margin_right
-        self.margin_top    = opts.margin if opts.margin_top    is None else opts.margin_top
-        self.margin_bottom = opts.margin if opts.margin_bottom is None else opts.margin_bottom
+        pos = [(0,0),(1,0),(1,1),  (0,0),(1,1),(0,1)]
+        count = len(pos)
+        buf_pos = bgl.Buffer(bgl.GL_FLOAT, [count, 2], pos)
 
-        self.size     = opts.size
-        self.size_min = opts.size_min
-        self.size_max = opts.size_max
+        vbos = bgl.Buffer(bgl.GL_INT, 1)
+        bgl.glGenBuffers(1, vbos)
+        vbo_pos = vbos[0]
+        bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, vbo_pos)
+        bgl.glBufferData(bgl.GL_ARRAY_BUFFER, count * 2 * sizeOfFloat, buf_pos, bgl.GL_STATIC_DRAW)
+        bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, 0)
 
-        self.background_color = opts.background_color
+        en = UI_Draw._shader.enable
+        di = UI_Draw._shader.disable
+        eva = UI_Draw._shader.vertexAttribPointer
+        dva = UI_Draw._shader.disableVertexAttribArray
+        a = UI_Draw._shader.assign
+        def draw(left, top, width, height, style):
+            nonlocal vbo_pos, count, en, di, eva, dva, a
+            en()
+            a('left',   left)
+            a('top',    top)
+            a('right',  left+width-1)
+            a('bottom', top-height+1)
+            a('margin_left',   style['margin-left'])
+            a('margin_right',  style['margin-right'])
+            a('margin_top',    style['margin-top'])
+            a('margin_bottom', style['margin-bottom'])
+            a('border_width',  style['border-width'])
+            a('border_radius', style['border-radius'])
+            a('border_left_color',   style['border-left-color'])
+            a('border_right_color',  style['border-right-color'])
+            a('border_top_color',    style['border-top-color'])
+            a('border_bottom_color', style['border-bottom-color'])
+            a('background_color',    style['background-color'])
+            eva(vbo_pos, 'pos', 2, bgl.GL_FLOAT)
+            bgl.glDrawArrays(bgl.GL_TRIANGLES, 0, count)
+            dva('pos')
+            di()
+        UI_Draw._draw = draw
 
-        self.border_color     = opts.border_color
-        self.border_thickness = opts.border_thickness
-        self.border_rounded   = opts.border_rounded
+    @blender_version_wrapper('>=', '2.80')
+    def init_draw(self):
+        vertex_positions = [(0,0),(1,0),(1,1),  (1,1),(0,1),(0,0)]
+        fmt = gpu.types.GPUVertFormat()
+        fmt.attr_add(id="pos", comp_type='F32', len=2, fetch_mode='FLOAT')
+        vbo = gpu.types.GPUVertBuf(len=len(vertex_positions), format=fmt)
+        vbo.attr_fill(id="pos", data=vertex_positions)
+        pos = [(0,0),(1,0),(1,1),  (1,1),(0,1),(0,0)]
+        vertex_shader, fragment_shader = Shader.parse_file('uielement.glsl')
+        vertex_shader = '\n'.join(vertex_shader.splitlines()[1:])
+        fragment_shader = '\n'.join(fragment_shader.splitlines()[1:])
+        shader = gpu.types.GPUShader(vertex_shader, fragment_shader)
+        batch = batch_for_shader(shader, 'TRIS', {"pos": pos})
+        get_pixel_matrix = Drawing.get_instance().get_pixel_matrix
+
+        def upd():
+            nonlocal shader, get_pixel_matrix
+            shader.bind()
+            shader.uniform_float("uMVPMatrix", get_pixel_matrix())
+
+        def draw(left, top, width, height, style):
+            nonlocal shader, batch
+            shader.bind()
+            shader.uniform_float('left',   left)
+            shader.uniform_float('top',    top)
+            shader.uniform_float('right',  left+width-1)
+            shader.uniform_float('bottom', top-height+1)
+            shader.uniform_float('margin_left',   style['margin-left'])
+            shader.uniform_float('margin_right',  style['margin-right'])
+            shader.uniform_float('margin_top',    style['margin-top'])
+            shader.uniform_float('margin_bottom', style['margin-bottom'])
+            shader.uniform_float('border_width',  style['border-width'])
+            shader.uniform_float('border_radius', style['border-radius'])
+            shader.uniform_float('border_left_color',   style['border-left-color'])
+            shader.uniform_float('border_right_color',  style['border-right-color'])
+            shader.uniform_float('border_top_color',    style['border-top-color'])
+            shader.uniform_float('border_bottom_color', style['border-bottom-color'])
+            shader.uniform_float('background_color',    style['background-color'])
+            batch.draw(shader)
+
+        UI_Draw._update = upd
+        UI_Draw._draw = draw
+
+    def __init__(self):
+        if not hasattr(UI_Draw, '_shader'):
+            self.init_draw()
+
+    def update(self):
+        UI_Draw._update()
+
+    def draw(self, left, top, width, height, style):
+        UI_Draw._draw(left, top, width, height, style)
+
+ui_draw = UI_Draw()
+#ui_draw.draw(0, 0, 1, 1, styling.get_style(['button']))
 
 
 class UI_Basic:
-    def __init__(self, parent=None, stylesheet=None, id=None, classes=None, style=None):
+    selector_type = 'basic'
+
+    def __init__(self, stylesheet=None, id=None, classes=None, style=None):
         self._parent = None
+        self._selector = None
         self._stylesheet = None
         self._id = None
-        self._classes = None
+        self._classes = set()
+        self._pseudoclasses = set()
         self._style = None
+        self._style_str = ''
+        self._children = []
+        self._is_visible = False
+        self._computed_styles = None
+        self._scissor_buffer = bgl.Buffer(bgl.GL_INT, 4)
 
-        # preferred size ranges (set in self._recalculate)
-        self._min_width, self._min_height, self._max_width, self._max_height = 0,0,0,0
-        # actual absolute position (set in self._update)
+        # preferred size (set in self._recalculate), used for positioning and sizing
+        self._width, self._height = 0,0
+        self._min_width, self._min_height = 0,0
+        self._max_width, self._max_height = 0,0
+
+        # actual absolute position (set in self._update), used for drawing
         self._l, self._t, self._w, self._h = 0,0,0,0
+        # offset drawing (for scrolling)
+        self._x, self._y = 0,0
 
-        self._is_dirty = True
-        self._defer_recalc = True
+        self._is_dirty = True       # set to True (through self.dirty) to force recalculations
+        self._defer_recalc = True   # set to True to defer recalculations (useful when many changes are occurring)
 
-        self.parent = parent
         self.stylesheet = stylesheet or (parent.get_stylesheet() if parent else None)
         self.style = style
         self.id = id
-        for cls in (classes or set()):
-            self.add_class(cls)
+        self.classes = classes
 
         self._defer_recalc = False
         self.dirty()
 
-    @property
-    def parent(self):
-        return self._parent
-    @parent.setter
-    def parent(self, parent):
-        if self._parent == parent: return
-        if self._parent: self._parent.del_child(self)
-        self._parent = parent
-        if self._parent: self._parent.add_child(self)
+    def dirty(self, parent=True, children=False):
+        self._is_dirty = True
+        if parent and self._parent:
+            self._parent.dirty()
+        if children:
+            for child in self._children:
+                child.dirty(parent=False, children=True)
+
+    def add_child(self, child):
+        assert child
+        assert child not in self._children, 'attempting to add existing child?'
+        if child._parent:
+            child._parent.del_child(child)
+        self._children.append(child)
+        child.dirty()
+    def del_child(self, child):
+        assert child
+        assert child in self._children, 'attempting to delete child that does not exist?'
+        self._children.remove(child)
+        child._parent = None
+        child.dirty()
         self.dirty()
+
+    def _visible_children(self):
+        return [child for child in self._children if child._is_visible]
 
     @property
     def stylesheet(self):
@@ -479,9 +836,10 @@ class UI_Basic:
 
     @property
     def style(self):
-        return dict(self._style)
+        return str(self._style_str)
     @stylesheet.setter
     def style(self, style):
+        self._style_str = str(style)
         if not style:
             self._style = None
         else:
@@ -493,43 +851,118 @@ class UI_Basic:
         return self._id
     @id.setter
     def id(self, id):
-        self._id = id
-        self.dirty()
+        self._id = id.strip()
+        self.dirty(parent=True, children=True) # changing id can affect children styles!
 
     @property
     def classes(self):
-        return set(self._classes)
+        return ' '.join(self._classes)
+    @classes.setter
+    def classes(self, classes):
+        if not classes: self._classes = set()
+        else: self._classes = set(c for c in classes.split(' ') if c)
+        self.dirty(parent=True, children=True) # changing classes can affect children styles!
     def add_class(self, cls):
+        if cls in self._classes: return
         self._classes.add(cls)
+        self.dirty(parent=True, children=True) # changing classes can affect children styles!
     def del_class(self, cls):
+        assert cls in self._classes, 'attempting to delete class that does not exist?'
         self._classes.discard(cls)
+        self.dirty(parent=True, children=True) # changing classes can affect children styles!
+
+    def clear_pseudoclass(self):
+        self._pseudoclasses = set()
+        self.dirty(parent=True, children=True)
+    def add_pseudoclass(self, pseudo):
+        if pseudo in self._pseudoclasses: return
+        self._pseudoclasses.add(pseudo)
+    def del_pseudoclass(self, pseudo):
+        assert pseudo in self._pseudoclasses, 'attempting to delete a pseudoclass that does not exist?'
+        self._pseudoclasses.discard(pseudo)
+        self.dirty(parent=True, children=True)
+
+    def _get_style_num(self, k, def_v=0, min_v=0, max_v=None):
+        v = self._computed_styles.get(k, def_v)
+        if v == 'auto': v = def_v
+        if min_v is not None: v = max(min_v, v)
+        if max_v is not None: v = min(max_v, v)
+        return v
+    def _get_style_trbl(self, kb):
+        t = self._get_style_num('%s-top' % kb)
+        r = self._get_style_num('%s-right' % kb)
+        b = self._get_style_num('%s-bottom' % kb)
+        l = self._get_style_num('%s-left' % kb)
+        return (t,r,b,l)
 
     def _recalculate(self):
         # recalculates width and height
         if not self._is_dirty: return
         if self._defer_recalc: return
 
-        styles = self._stylesheet.get_style(selector, self._style)
-        if styles.get('visibility', 'visible') == 'hidden':
-            self._min_width, self._min_height, self._max_width, self._max_height = 0,0,0,0
+        sel_parent = [] if not self._parent else self._parent._selector
+        sel_type = self.selector_type
+        sel_id = '#%s' % self._id if self._id else ''
+        sel_cls = ''.join('.%s' % c for c in self._classes)
+        sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
+        self._selector = sel_parent + [sel_type + sel_id + sel_cls + sel_pseudo]
+
+        self._computed_styles = self._stylesheet.get_style(self._selector, self._style)
+        self._is_visible = self._computed_styles.get('visibility', 'visible') != 'hidden'
+        if not self._is_visible:
+            #self._min_width, self._min_height, self._max_width, self._max_height = 0,0,0,0
             self._is_dirty = False
             return
 
-        v = styles.get('min-width', 0)
-        self._min_width = max(0, 0 if v == 'auto' else v)
-        v = styles.get('min-height', 0)
-        self._min_height = max(0, 0 if v == 'auto' else v)
-        v = styles.get('max-width', 0)
-        self._max_width = float('inf') if v == 'auto' else v
-        v = styles.get('max-height', 0)
-        self._max_height = float('inf') if v == 'auto' else v
+        min_width, min_height = self._get_style_num('min-width'), self._get_style_num('min-height')
+        max_width, max_height = self._get_style_num('max-width', def_v=float('inf')), self._get_style_num('max-height', def_v=float('inf'))
+        margin_top, margin_right, margin_bottom, margin_left = self._get_style_trbl('margin')
+        padding_top, padding_right, padding_bottom, padding_left = self._get_style_trbl('padding')
+        border_width = self._get_style_num('border-width')
 
-        self._is_dirty = False
+        self._min_width  = min_width
+        self._min_height = min_height
+        self._max_width  = max_width
+        self._max_height = max_height
 
-    def _update(self, left, top, width, height):
+        for child in self._children: child._recalculate()
+
+        self._recalculate_children()
+
+        # make sure there is room for margin + border + padding
+        self._min_width  = (margin_left + border_width + padding_left) + self._min_width  + (padding_right  + border_width + margin_right )
+        self._min_height = (margin_top  + border_width + padding_top ) + self._min_height + (padding_bottom + border_width + margin_bottom)
+        self._max_width  = (margin_left + border_width + padding_left) + self._max_width  + (padding_right  + border_width + margin_right )
+        self._max_height = (margin_top  + border_width + padding_top ) + self._max_height + (padding_bottom + border_width + margin_bottom)
+
+        # do not clean self if any children are still dirty (ex: they are deferring recalculation)
+        self._is_dirty = any(child._is_dirty for child in self._children)
+
+    def _recalculate_children(self):
+        # assuming all children are drawn on top on one another
+        w,h = self._min_width,self._min_height
+        W,H = self._max_width,self._max_height
+        for child in self._visible_children():
+            w = max(w, child._min_width)
+            h = max(h, child._min_height)
+            W = min(W, child._max_width)
+            H = min(H, child._max_height)
+        self._min_width,self.min_height = w,h
+        self._max_width,self.max_height = W,H
+
+    def _position(self, left, top, width, height):
         # pos and size define where this element exists
         self._l, self._t = left, top
         self._w, self._h = width, height
+        # might need to wrap text
+        self._position_children(left, top, width, height)
+        # TODO: update self._x and self._y
+
+    def _position_children(self, left, top, width, height):
+        for child in self._visible_children():
+            child._position(left, top, width, height)
+
+
 
 
 

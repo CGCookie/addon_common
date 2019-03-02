@@ -47,7 +47,7 @@ buf_zero = vbv_zero.buf    #bgl.Buffer(bgl.GL_BYTE, 1, [0])
 
 class Shader():
     @staticmethod
-    def shader_compile(name, shader):
+    def shader_compile(name, shader, src):
         '''
         logging and error-checking not quite working :(
         '''
@@ -64,29 +64,21 @@ class Shader():
         log = ''.join(chr(v) for v in bufLog.to_list() if v)
         if bufStatus[0] == 0:
             print('ERROR WHILE COMPILING SHADER %s' % name)
+            print('\n'.join(['% 3d %s'%(i+1,l) for (i,l) in enumerate(src.splitlines())]))
             print('\n'.join(['    %s'%l for l in log.splitlines()]))
             assert False
         return log
 
     @staticmethod
-    def load_from_file(name, filename, *args, **kwargs):
-        # https://www.blender.org/api/blender_python_api_2_77_1/bgl.html
-        # https://en.wikibooks.org/wiki/GLSL_Programming/Blender/Shading_in_View_Space
-        # https://www.khronos.org/opengl/wiki/Built-in_Variable_(GLSL)
-
-        filename_guess = os.path.join(os.path.dirname(__file__), 'shaders', filename)
-        if os.path.exists(filename):
-            pass
-        elif os.path.exists(filename_guess):
-            filename = filename_guess
-        else:
-            assert False, "Shader file could not be found: %s" % filename
-
+    def parse_string(string):
         uniforms, varyings, attributes = [],[],[]
         vertSource, fragSource = [],[]
         vertVersion, fragVersion = '', ''
         mode = None
-        for line in open(filename,'rt').read().splitlines():
+        lines = string.splitlines()
+        assert '// vertex shader' in lines, 'could not detect vertex shader'
+        assert '// fragment shader' in lines, 'could not detect fragment shader'
+        for line in lines:
             if line.startswith('uniform '):
                 uniforms.append(line)
             elif line.startswith('attribute '):
@@ -110,6 +102,33 @@ class Shader():
                     fragSource.append(line)
         srcVertex = '\n'.join([vertVersion] + uniforms + attributes + varyings + vertSource)
         srcFragment = '\n'.join([fragVersion] + uniforms + varyings + fragSource)
+        return (srcVertex, srcFragment)
+
+    @staticmethod
+    def parse_file(filename):
+        filename_guess = os.path.join(os.path.dirname(__file__), 'shaders', filename)
+        if os.path.exists(filename):
+            pass
+        elif os.path.exists(filename_guess):
+            filename = filename_guess
+        else:
+            assert False, "Shader file could not be found: %s" % filename
+
+        string = open(filename, 'rt').read()
+        return Shader.parse_string(string)
+
+    @staticmethod
+    def load_from_string(name, string, *args, **kwargs):
+        srcVertex, srcFragment = Shader.parse_string(string)
+        return Shader(name, srcVertex, srcFragment, *args, **kwargs)
+
+    @staticmethod
+    def load_from_file(name, filename, *args, **kwargs):
+        # https://www.blender.org/api/blender_python_api_2_77_1/bgl.html
+        # https://en.wikibooks.org/wiki/GLSL_Programming/Blender/Shading_in_View_Space
+        # https://www.khronos.org/opengl/wiki/Built-in_Variable_(GLSL)
+
+        srcVertex, srcFragment = Shader.parse_file(filename)
         return Shader(name, srcVertex, srcFragment, *args, **kwargs)
 
     def __init__(self, name, srcVertex, srcFragment, funcStart=None, funcEnd=None, checkErrors=True, bindTo0=None):
@@ -129,8 +148,8 @@ class Shader():
         bgl.glShaderSource(self.shaderFrag, srcFragment)
 
         dprint('RetopoFlow Shader Info: %s (%d)' % (self.name,self.shaderProg))
-        logv = self.shader_compile(name, self.shaderVert)
-        logf = self.shader_compile(name, self.shaderFrag)
+        logv = self.shader_compile(name, self.shaderVert, srcVertex)
+        logf = self.shader_compile(name, self.shaderFrag, srcFragment)
         if len(logv.strip()):
             dprint('  vert log:\n' + '\n'.join(('    '+l) for l in logv.splitlines()))
         if len(logf.strip()):
