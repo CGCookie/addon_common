@@ -54,21 +54,15 @@ def link_object(o):
     bpy.context.scene.objects.link(o)
 @blender_version_wrapper('>=','2.80')
 def link_object(o):
-    print('unhandled: link_object')
-    pass
+    bpy.context.scene.collection.objects.link(o)
 
 @blender_version_wrapper('<=','2.79')
 def set_active_object(o):
     bpy.context.scene.objects.active = o
 @blender_version_wrapper('>=','2.80')
 def set_active_object(o):
-    print('unhandled: set_active_object')
-    pass
+    bpy.context.window.view_layer.objects.active = o
 
-@blender_version_wrapper('<=','2.79')
-def get_active_object():
-    return bpy.context.scene.objects.active
-@blender_version_wrapper('>=','2.80')
 def get_active_object():
     return bpy.context.active_object
 
@@ -153,4 +147,3 @@ def bversion(short=True):
     bver_long = '%03d.%03d.%03d' % (major,minor,rev)
     bver_short = '%d.%02d' % (major, minor)
     return bver_short if short else bver_long
-
