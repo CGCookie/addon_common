@@ -24,7 +24,8 @@ import bpy
 import bgl
 import ctypes
 
-from .ui import Drawing
+from .globals import get_global
+from .drawing import Drawing
 from .debug import dprint
 
 from ..ext.bgl_ext import VoidBufValue
@@ -70,7 +71,7 @@ class Shader():
         return log
 
     @staticmethod
-    def parse_string(string):
+    def parse_string(string, includeVersion=True):
         uniforms, varyings, attributes = [],[],[]
         vertSource, fragSource = [],[]
         vertVersion, fragVersion = '', ''
@@ -100,12 +101,18 @@ class Shader():
                     vertSource.append(line)
                 elif mode == 'frag':
                     fragSource.append(line)
-        srcVertex = '\n'.join([vertVersion] + uniforms + attributes + varyings + vertSource)
-        srcFragment = '\n'.join([fragVersion] + uniforms + varyings + fragSource)
+        srcVertex = '\n'.join(
+            ([vertVersion] if includeVersion else []) +
+            uniforms + attributes + varyings + vertSource
+        )
+        srcFragment = '\n'.join(
+            ([fragVersion] if includeVersion else []) +
+            uniforms + varyings + fragSource
+        )
         return (srcVertex, srcFragment)
 
     @staticmethod
-    def parse_file(filename):
+    def parse_file(filename, includeVersion=True):
         filename_guess = os.path.join(os.path.dirname(__file__), 'shaders', filename)
         if os.path.exists(filename):
             pass
@@ -115,7 +122,7 @@ class Shader():
             assert False, "Shader file could not be found: %s" % filename
 
         string = open(filename, 'rt').read()
-        return Shader.parse_string(string)
+        return Shader.parse_string(string, includeVersion=includeVersion)
 
     @staticmethod
     def load_from_string(name, string, *args, **kwargs):
@@ -132,7 +139,7 @@ class Shader():
         return Shader(name, srcVertex, srcFragment, *args, **kwargs)
 
     def __init__(self, name, srcVertex, srcFragment, funcStart=None, funcEnd=None, checkErrors=True, bindTo0=None):
-        self.drawing = Drawing.get_instance()
+        self.drawing = get_global('drawing')
 
         self.name = name
         self.shaderProg = bgl.glCreateProgram()

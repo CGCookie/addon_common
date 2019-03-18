@@ -1,0 +1,415 @@
+'''
+Copyright (C) 2019 CG Cookie
+http://cgcookie.com
+hello@cgcookie.com
+
+Created by Jonathan Denning, Jonathan Williamson
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+'''
+
+import re
+
+from .decorators import debug_test_call
+from .maths import Color
+
+
+
+#####################################################################################
+# below are helper classes for converting input to character stream,
+# and for converting character stream to token stream
+
+class CharStream:
+    def __init__(self, charstream):
+        self.i_char = 0
+        self.i_line = 0
+        self.charstream = charstream
+
+    def numberoflines(self):
+        return self.charstream.count('\n')
+
+    def endofstream(self):
+        return self.i_char >= len(self.charstream)
+
+    def peek(self, l=1):
+        if self.endofstream(): return ''
+        return self.charstream[self.i_char:self.i_char+l]
+
+    def peek_restofline(self):
+        if self.endofstream(): return ''
+        i = self.charstream.find('\n', self.i_char)
+        if i == -1: return self.charstream[self.i_char:]
+        return self.charstream[self.i_char:i]
+
+    def peek_remaining(self):
+        if self.endofstream(): return ''
+        return self.charstream[self.i_char:]
+
+    def consume(self, m=None, l=None):
+        if l is None: l = 1 if m is None else len(m)
+        o = self.peek(l=l)
+        if m is not None: assert o == m
+        self.i_char += l
+        self.i_line += o.count('\n')
+        return o
+
+    def consume_while_in(self, s):
+        w = ''
+        while self.peek() in s: w += self.consume()
+        return w
+
+
+class Lexer:
+    '''
+    Converts character stream input into a stream of tokens
+    '''
+    def __init__(self, charstream, token_matchers):
+        token_matchers = [(tname, conv, list(map(re.compile, retokens))) for (tname,conv,retokens) in token_matchers]
+
+        self.tokens = []
+        self.i = 0
+        self.max_lines = charstream.numberoflines()
+
+        while not charstream.endofstream():
+            rest = charstream.peek_remaining()
+            i_line = charstream.i_line+1
+
+            # match against all possible tokens
+            matches = [(tname, conv, retoken.match(rest)) for (tname,conv,retokens) in token_matchers for retoken in retokens]
+            # filter out non-matches
+            matches = list(filter(lambda nm: nm[2] is not None, matches))
+            assert matches, 'syntax error on line %d: "%s"' % (i_line, charstream.peek_restofline())
+            # find longest match
+            longest = max(len(m.group(0)) for (tname,conv,m) in matches)
+            # filter out non-longest matches
+            matches = list(filter(lambda nm: len(nm[2].group(0))==longest, matches))
+            matches = {k:(c,v) for (k,c,v) in matches}
+
+            charstream.consume(l=longest)
+
+            # convert token to python/blender types
+            for k,(conv,v) in list(matches.items()):
+                v = conv(v)
+                if v is None: del matches[k]
+                else: matches[k] = v
+            if not matches: continue
+
+            ks = set(matches.keys())
+            v = list(matches.values())[0]
+            self.tokens.append((ks, v, i_line))
+
+    def current_line(self):
+        tts,tv,ti_line = self.tokens[self.i]
+        return ti_line
+
+    def match_t_v(self, t):
+        assert self.i < len(self.tokens), 'hit end on token stream'
+        tts,tv,ti_line = self.tokens[self.i]
+        t = {t} if type(t) is str else set(t)
+        assert tts & t, 'expected type(s) "%s" but saw "%s" (text: "%s", line: %d)' % ('","'.join(t), '","'.join(tts), tv, ti_line)
+        self.i += 1
+        return tv
+
+    def match_v_v(self, v):
+        assert self.i < len(self.tokens), 'hit end on token stream'
+        tts,tv,ti_line = self.tokens[self.i]
+        v = {v} if type(v) is str else set(v)
+        assert tv in v, 'expected value(s) "%s" but saw "%s" (type: "%s", line: %d)' % ('","'.join(v), tv, '","'.join(tts), ti_line)
+        self.i += 1
+        return tv
+
+    def next_t(self):
+        assert self.i < len(self.tokens), 'hit end of token stream'
+        tts,tv,ti_line = self.tokens[self.i]
+        self.i += 1
+        return tts
+
+    def next_v(self):
+        assert self.i < len(self.tokens), 'hit end of token stream'
+        tts,tv,ti_line = self.tokens[self.i]
+        self.i += 1
+        return tv
+
+    def peek(self):
+        if self.i == len(self.tokens): return ('eof','eof',self.max_lines)
+        return self.tokens[self.i]
+
+    def peek_t(self):
+        if self.i == len(self.tokens): return 'eof'
+        tts,tv,ti_line = self.tokens[self.i]
+        return tts
+
+    def peek_v(self):
+        if self.i == len(self.tokens): return 'eof'
+        tts,tv,ti_line = self.tokens[self.i]
+        return tv
+
+
+
+#####################################################################################
+# below are various token converters
+
+# dictionary to convert color name to color values, either (R,G,B) or (R,G,B,a)
+# https://www.quackit.com/css/css_color_codes.cfm
+colorname_to_color = {
+    'transparent': (255, 0, 255, 0),
+
+    # https://www.quackit.com/css/css_color_codes.cfm
+    'indianred': (205,92,92),
+    'lightcoral': (240,128,128),
+    'salmon': (250,128,114),
+    'darksalmon': (233,150,122),
+    'lightsalmon': (255,160,122),
+    'crimson': (220,20,60),
+    'red': (255,0,0),
+    'firebrick': (178,34,34),
+    'darkred': (139,0,0),
+    'pink': (255,192,203),
+    'lightpink': (255,182,193),
+    'hotpink': (255,105,180),
+    'deeppink': (255,20,147),
+    'mediumvioletred': (199,21,133),
+    'palevioletred': (219,112,147),
+    'coral': (255,127,80),
+    'tomato': (255,99,71),
+    'orangered': (255,69,0),
+    'darkorange': (255,140,0),
+    'orange': (255,165,0),
+    'gold': (255,215,0),
+    'yellow': (255,255,0),
+    'lightyellow': (255,255,224),
+    'lemonchiffon': (255,250,205),
+    'lightgoldenrodyellow': (250,250,210),
+    'papayawhip': (255,239,213),
+    'moccasin': (255,228,181),
+    'peachpuff': (255,218,185),
+    'palegoldenrod': (238,232,170),
+    'khaki': (240,230,140),
+    'darkkhaki': (189,183,107),
+    'lavender': (230,230,250),
+    'thistle': (216,191,216),
+    'plum': (221,160,221),
+    'violet': (238,130,238),
+    'orchid': (218,112,214),
+    'fuchsia': (255,0,255),
+    'magenta': (255,0,255),
+    'mediumorchid': (186,85,211),
+    'mediumpurple': (147,112,219),
+    'blueviolet': (138,43,226),
+    'darkviolet': (148,0,211),
+    'darkorchid': (153,50,204),
+    'darkmagenta': (139,0,139),
+    'purple': (128,0,128),
+    'rebeccapurple': (102,51,153),
+    'indigo': (75,0,130),
+    'mediumslateblue': (123,104,238),
+    'slateblue': (106,90,205),
+    'darkslateblue': (72,61,139),
+    'greenyellow': (173,255,47),
+    'chartreuse': (127,255,0),
+    'lawngreen': (124,252,0),
+    'lime': (0,255,0),
+    'limegreen': (50,205,50),
+    'palegreen': (152,251,152),
+    'lightgreen': (144,238,144),
+    'mediumspringgreen': (0,250,154),
+    'springgreen': (0,255,127),
+    'mediumseagreen': (60,179,113),
+    'seagreen': (46,139,87),
+    'forestgreen': (34,139,34),
+    'green': (0,128,0),
+    'darkgreen': (0,100,0),
+    'yellowgreen': (154,205,50),
+    'olivedrab': (107,142,35),
+    'olive': (128,128,0),
+    'darkolivegreen': (85,107,47),
+    'mediumaquamarine': (102,205,170),
+    'darkseagreen': (143,188,143),
+    'lightseagreen': (32,178,170),
+    'darkcyan': (0,139,139),
+    'teal': (0,128,128),
+    'aqua': (0,255,255),
+    'cyan': (0,255,255),
+    'lightcyan': (224,255,255),
+    'paleturquoise': (175,238,238),
+    'aquamarine': (127,255,212),
+    'turquoise': (64,224,208),
+    'mediumturquoise': (72,209,204),
+    'darkturquoise': (0,206,209),
+    'cadetblue': (95,158,160),
+    'steelblue': (70,130,180),
+    'lightsteelblue': (176,196,222),
+    'powderblue': (176,224,230),
+    'lightblue': (173,216,230),
+    'skyblue': (135,206,235),
+    'lightskyblue': (135,206,250),
+    'deepskyblue': (0,191,255),
+    'dodgerblue': (30,144,255),
+    'cornflowerblue': (100,149,237),
+    'royalblue': (65,105,225),
+    'blue': (0,0,255),
+    'mediumblue': (0,0,205),
+    'darkblue': (0,0,139),
+    'navy': (0,0,128),
+    'midnightblue': (25,25,112),
+    'cornsilk': (255,248,220),
+    'blanchedalmond': (255,235,205),
+    'bisque': (255,228,196),
+    'navajowhite': (255,222,173),
+    'wheat': (245,222,179),
+    'burlywood': (222,184,135),
+    'tan': (210,180,140),
+    'rosybrown': (188,143,143),
+    'sandybrown': (244,164,96),
+    'goldenrod': (218,165,32),
+    'darkgoldenrod': (184,134,11),
+    'peru': (205,133,63),
+    'chocolate': (210,105,30),
+    'saddlebrown': (139,69,19),
+    'sienna': (160,82,45),
+    'brown': (165,42,42),
+    'maroon': (128,0,0),
+    'white': (255,255,255),
+    'snow': (255,250,250),
+    'honeydew': (240,255,240),
+    'mintcream': (245,255,250),
+    'azure': (240,255,255),
+    'aliceblue': (240,248,255),
+    'ghostwhite': (248,248,255),
+    'whitesmoke': (245,245,245),
+    'seashell': (255,245,238),
+    'beige': (245,245,220),
+    'oldlace': (253,245,230),
+    'floralwhite': (255,250,240),
+    'ivory': (255,255,240),
+    'antiquewhite': (250,235,215),
+    'linen': (250,240,230),
+    'lavenderblush': (255,240,245),
+    'mistyrose': (255,228,225),
+    'gainsboro': (220,220,220),
+    'lightgray': (211,211,211),
+    'lightgrey': (211,211,211),
+    'silver': (192,192,192),
+    'darkgray': (169,169,169),
+    'darkgrey': (169,169,169),
+    'gray': (128,128,128),
+    'grey': (128,128,128),
+    'dimgray': (105,105,105),
+    'dimgrey': (105,105,105),
+    'lightslategray': (119,136,153),
+    'lightslategrey': (119,136,153),
+    'slategray': (112,128,144),
+    'slategrey': (112,128,144),
+    'darkslategray': (47,79,79),
+    'darkslategrey': (47,79,79),
+    'black': (0,0,0),
+}
+
+# dictionary to convert cursor name to Blender cursor enum
+# https://docs.blender.org/api/blender2.8/bpy.types.Window.html#bpy.types.Window.cursor_modal_set
+#   DEFAULT, NONE, WAIT, HAND,
+#   CROSSHAIR, TEXT,
+#   PAINT_BRUSH, EYEDROPPER, KNIFE,
+#   MOVE_X, MOVE_Y,
+#   SCROLL_X, SCROLL_Y, SCROLL_XY
+cursorname_to_cursor = {
+    'default': 'DEFAULT', 'auto': 'DEFAULT', 'initial': 'DEFAULT',
+    'none': 'NONE',
+    'wait': 'WAIT',
+    'grab': 'HAND',
+    'crosshair': 'CROSSHAIR', 'pointer': 'CROSSHAIR',
+    'text': 'TEXT',
+    'e-resize': 'MOVE_X', 'w-resize': 'MOVE_X', 'ew-resize': 'MOVE_X',
+    'n-resize': 'MOVE_Y', 's-resize': 'MOVE_Y', 'ns-resize': 'MOVE_Y',
+    'all-scroll': 'SCROLL_XY',
+}
+
+
+# @debug_test_call('rgb(  255,128,  64  )')
+# @debug_test_call('rgba(255, 128, 64, 0.5)')
+# @debug_test_call('hsl(0, 100%, 50%)')
+# @debug_test_call('hsl(240, 100%, 50%)')
+# @debug_test_call('hsl(147, 50%, 47%)')
+# @debug_test_call('hsl(300, 76%, 72%)')
+# @debug_test_call('hsl(39, 100%, 50%)')
+# @debug_test_call('hsla(248, 53%, 58%, 0.5)')
+# @debug_test_call('#FFc080')
+# @debug_test_call('transparent')
+# @debug_test_call('white')
+# @debug_test_call('black')
+def convert_token_to_color(c):
+    r,g,b,a = 0,0,0,1
+    if type(c) is re.Match: c = c.group(0)
+
+    if c in colorname_to_color:
+        c = colorname_to_color[c]
+        if len(c) == 3: r,g,b = c
+        else: r,g,b,a = c
+
+    elif c.startswith('#'):
+        r,g,b = map(lambda v:int(v,16), [c[1:3],c[3:5],c[5:7]])
+
+    elif c.startswith('rgb(') or c.startswith('rgba('):
+        c = c.replace('rgb(','').replace('rgba(','').replace(')','').replace(' ','').split(',')
+        c = list(map(float, c))
+        r,g,b = c[:3]
+        if len(c) == 4: a = c[3]
+
+    elif c.startswith('hsl(') or c.startswith('hsla('):
+        c = c.replace('hsl(','').replace('hsla(','').replace(')','').replace(' ','').replace('%', '').split(',')
+        c = list(map(float, c))
+        h,s,l = c[0]/360, c[1]/100, c[2]/100
+        if len(c) == 4: a = c[3]
+        # https://gist.github.com/mjackson/5311256
+        # TODO: use equations on https://www.rapidtables.com/convert/color/hsl-to-rgb.html
+        if s <= 0.00001:
+            r,g,b = 255
+        else:
+            def hue2rgb(p, q, t):
+                t %= 1
+                if t < 1/6: return p + (q - p) * 6 * t
+                if t < 1/2: return q
+                if t < 2/3: return p + (q - p) * (2/3 - t) * 6
+                return p
+            q = (l * ( 1 + s)) if l < 0.5 else (l + s - l * s)
+            p = 2 * l - q
+            r = hue2rgb(p, q, h + 1/3) * 255
+            g = hue2rgb(p, q, h) * 255
+            b = hue2rgb(p, q, h - 1/3) * 255
+
+    else:
+        assert 'could not convert "%s" to color' % c
+
+    c = Color((r/255, g/255, b/255, a))
+    c.freeze()
+    return c
+
+def convert_token_to_cursor(c):
+    if type(c) is re.Match: c = c.group(0)
+    assert c in cursorname_to_cursor, 'could not convert "%s" to cursor' % c
+    return cursorname_to_cursor[c]
+
+def convert_token_to_number(n):
+    if type(n) is re.Match: n = n.group(0)
+    return float(n)
+
+def skip_token(n):
+    return None
+
+def convert_token_to_string(s):
+    if type(s) is re.Match: s = s.group(0)
+    return str(s)
+
+
+

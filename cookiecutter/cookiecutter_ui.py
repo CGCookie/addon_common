@@ -23,6 +23,7 @@ import bpy
 import bgl
 from bpy.types import SpaceView3D
 
+from ..common.globals import get_global
 from ..common.blender import bversion
 from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger
@@ -74,8 +75,8 @@ class CookieCutter_UI:
             return run
 
     def ui_init(self):
-        self.wm = UI_WindowManager()
-        self.drawing = Drawing.get_instance()
+        #self.wm = UI_WindowManager()
+        self.drawing = get_global('drawing')
         self.drawing.set_region(bpy.context.space_data, bpy.context.region, bpy.context.space_data.region_3d, bpy.context.window)
         self.blenderui_init()
         fns = {'pre3d':[], 'post3d':[], 'post2d':[]}
@@ -100,7 +101,8 @@ class CookieCutter_UI:
             self._draw_post2d()
 
             try:
-                self.wm.draw_postpixel(self.context)
+                #self.wm.draw_postpixel(self.context)
+                pass
             except Exception as e:
                 print('Caught exception while trying to draw window UI')
                 debugger.print_exception()
@@ -113,8 +115,8 @@ class CookieCutter_UI:
 
     def ui_update(self):
         self._area.tag_redraw()
-        ret = self.wm.modal(self.context, self.event)
-        if self.wm.has_focus(): return True
+        ret = None #self.wm.modal(self.context, self.event)
+        #if self.wm.has_focus(): return True
         if ret and 'hover' in ret: return True
         return False
 

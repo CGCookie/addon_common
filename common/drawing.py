@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2018 CG Cookie
+Copyright (C) 2019 CG Cookie
 http://cgcookie.com
 hello@cgcookie.com
 
@@ -32,12 +32,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 import bpy
 import bgl
-# import blf
 from bpy.types import BoolProperty
 from mathutils import Matrix
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d
 from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_origin_3d
 
+from .globals import set_global, is_global_set, get_global
 from .blender import get_preferences
 from .decorators import blender_version_wrapper
 from .fontmanager import FontManager as fm
@@ -79,13 +79,13 @@ class Drawing:
             dprint(s)
 
     @staticmethod
-    def get_instance():
+    def initialize():
         Drawing.update_dpi()
-        if not Drawing._instance:
-            Drawing._creating = True
-            Drawing._instance = Drawing()
-            del Drawing._creating
-        return Drawing._instance
+        if is_global_set('drawing'): return
+        Drawing._creating = True
+        set_global(Drawing())
+        del Drawing._creating
+        Drawing._instance = get_global('drawing')
 
     def __init__(self):
         assert hasattr(self, '_creating'), "Do not instantiate directly.  Use Drawing.get_instance()"
@@ -361,6 +361,10 @@ class Drawing:
 
     def Point_to_Point2D(self, p3d):
         return Point2D(location_3d_to_region_2d(self.rgn, self.r3d, p3d))
+
+Drawing.initialize()
+
+
 
 class ScissorStack:
     context = None

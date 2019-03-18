@@ -28,34 +28,33 @@ debugger = None
 dprint = None
 profiler = None
 logger = None
+drawing = None
+ui_draw = None
 
 def set_global(o):
     global debugger, dprint
     global profiler, logger
+    global drawing, ui_draw
 
     cn = type(o).__name__
-    if cn == 'Debugger':
-        # print('setting debugger: ' + str(o))
-        debugger = o
-        dprint = o.dprint
-    elif cn == 'Profiler':
-        # print('setting profiler: ' + str(o))
-        profiler = o
-    elif cn == 'Logger':
-        # print('setting logger: ' + str(o))
-        logger = o
-    else:
-        assert False
+    if cn == 'Debugger':   debugger, dprint = o, o.dprint
+    elif cn == 'Profiler': profiler = o
+    elif cn == 'Logger':   logger = o
+    elif cn == 'Drawing':  drawing = o
+    elif cn == 'UI_Draw':  ui_draw = o
+    else: assert False
+
+def is_global_set(s): return get_global(s) is not None
 
 def get_global(s):
     global debuggor, dprint
     global profiler, logger
-    if s == 'debugger':
-        return debugger
-    if s == 'dprint':
-        return dprint
-    if s == 'profiler':
-        return profiler
-    if s == 'logger':
-        return logger
+    global drawing, ui_draw
+    if s == 'debugger': return debugger
+    if s == 'dprint':   return dprint
+    if s == 'profiler': return profiler
+    if s == 'logger':   return logger
+    if s == 'drawing':  return drawing
+    if s == 'ui_draw':  return ui_draw
     assert False
+

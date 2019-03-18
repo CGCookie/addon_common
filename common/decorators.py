@@ -27,6 +27,22 @@ import inspect
 import bpy
 
 
+debug_run_test_calls = False
+def debug_test_call(*args, **kwargs):
+    def wrapper(fn):
+        if debug_run_test_calls:
+            ret = str(fn(*args,*kwargs))
+            print('TEST: %s()' % fn.__name__)
+            if args:
+                print('  arg:', args)
+            if kwargs:
+                print('  kwa:', kwargs)
+            print('  ret:', ret)
+        return fn
+    return wrapper
+
+
+
 def stats_wrapper(fn):
     return fn
 
