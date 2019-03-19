@@ -23,7 +23,7 @@ import os
 import inspect
 import time
 
-from .globals import set_global, get_global
+from .globals import Globals
 
 class Profiler:
     _enabled = False
@@ -183,7 +183,7 @@ class Profiler:
                 pr.done()
                 print('CAUGHT EXCEPTION ' + str(e))
                 print(text)
-                get_global('debugger').print_exception()
+                Globals.debugger.print_exception()
                 raise e
         wrapper.__name__ = fn.__name__
         wrapper.__doc__ = fn.__doc__
@@ -240,4 +240,4 @@ class Profiler:
         open(filename, 'wt').write(self.strout())
 
 profiler = Profiler()
-set_global(profiler)
+Globals.set(profiler)

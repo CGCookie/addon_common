@@ -24,37 +24,25 @@ This code helps prevent circular importing.
 Each of the main common objects are referenced here.
 '''
 
-debugger = None
-dprint = None
-profiler = None
-logger = None
-drawing = None
-ui_draw = None
+class GlobalsMeta(type):
+    # allows for `Globals.drawing` instead of `Globals.get('drawing')`
+    def __setattr__(self, name, value):
+        self.set(value, objtype=name)
+    def __getattr__(self, objtype):
+        return self.get(objtype)
 
-def set_global(o):
-    global debugger, dprint
-    global profiler, logger
-    global drawing, ui_draw
+class Globals(metaclass=GlobalsMeta):
+    __vars = {}
 
-    cn = type(o).__name__
-    if cn == 'Debugger':   debugger, dprint = o, o.dprint
-    elif cn == 'Profiler': profiler = o
-    elif cn == 'Logger':   logger = o
-    elif cn == 'Drawing':  drawing = o
-    elif cn == 'UI_Draw':  ui_draw = o
-    else: assert False
+    @staticmethod
+    def set(obj, objtype=None):
+        Globals.__vars[objtype or type(obj).__name__.lower()] = obj
 
-def is_global_set(s): return get_global(s) is not None
+    @staticmethod
+    def is_set(objtype):
+        return Globals.__vars.get(objtype, None) is not None
 
-def get_global(s):
-    global debuggor, dprint
-    global profiler, logger
-    global drawing, ui_draw
-    if s == 'debugger': return debugger
-    if s == 'dprint':   return dprint
-    if s == 'profiler': return profiler
-    if s == 'logger':   return logger
-    if s == 'drawing':  return drawing
-    if s == 'ui_draw':  return ui_draw
-    assert False
+    @staticmethod
+    def get(objtype):
+        return Globals.__vars.get(objtype, None)
 

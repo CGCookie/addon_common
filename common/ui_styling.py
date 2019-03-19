@@ -57,32 +57,44 @@ from .fontmanager import FontManager
 
 CookieCutter UI Styling
 
-This styling file is formatted _very_ similarly to CSS.
-
-Important notes/differences from CSS:
+This styling file is formatted _very_ similarly to CSS, but below is a list of a few important notes/differences:
 
 - rules are applied top-down, so any later conflicting rule will override an earlier rule
     - in other words, specificity is ignored here (https://developer.mozilla.org/en-US/docs/Web/CSS/Specificity)
+    - if you want to override a setting, place it lower in the styling input.
+    - there is no `!important` keyword
+
 - all units are in pixels; do not specify units (ex: `px`, `in`, `em`, `%`)
-- colors can have different formats
+
+- colors can come in various formats
     - `rgb(<r>,<g>,<b>)` or `rgba(<r>,<g>,<b>,<a>)`, where r,g,b values in 0--255; a in 0.0--1.0
     - `hsl(<h>,<s>%,<l>%)` or `hsla(<h>,<s>%,<l>%,<a>)`, where h in 0--360; s,l in 0--100 (%); a in 0.0--1.0
     - `#RRGGBB`, where r,g,b in 00--FF
     - or by colorname
-- all element types must be explicitly specified, except at beginning or when following a `>`; use `*` to match any type
-    - ex: `elem1 .class` is the same as `elem1.class` and `elem1 . class`, but never `elem1 *.class`
-- spaces are completely ignored except to separate tokens
-- only `>` and ` ` combinators are implemented
+
+- selectors
+    - all element types must be explicitly specified, except at beginning or when following a `>`; use `*` to match any type
+        - ex: `elem1 .class` is the same as `elem1.class` and `elem1 . class`, but never `elem1 *.class`
+    - only `>` and ` ` combinators are implemented
+
+- spaces,tabs,newlines are completely ignored except to separate tokens
+
+- numbers cannot begin with a decimal. instead, start with `0.` (ex: use `0.014` not `.014`)
+
+- background has only color (no images)
+    - `background: <background-color>`
+
+- border has no style (such as dotted or dashed) and has uniform width
+    - `border: <border-width> <border-color>`
+
 - setting `width` or `height` will set both of the corresponding `min-*` and `max-*` properties
+
 - `min-*` and `max-*` are used as suggestions to the UI system; they will not be strictly followed
-- numbers cannot begin with a decimal (ex: `.014`); start with `0.` (ex: `0.014`)
-- background has only color (`background: <background-color>;`)
-- border has no style (`border: <border-width> <border-color>;`) and has uniform width
 
 '''
 
 
-token_matchers = [
+token_rules = [
     ('ignore', skip_token, [
         r'[ \t\r\n]',           # ignoring any tab, space, newline
         r'/[*][\s\S]*?[*]/',    # multi-line comments
@@ -298,7 +310,7 @@ class UI_Styling:
 
     def __init__(self, lines):
         charstream = CharStream(lines)              # convert input into character stream
-        lexer = Lexer(charstream, token_matchers)   # tokenize the character stream
+        lexer = Lexer(charstream, token_rules)      # tokenize the character stream
         self.rules = []
         while lexer.peek_t() != 'eof':
             self.rules.append(RuleSet(lexer))

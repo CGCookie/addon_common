@@ -24,7 +24,7 @@ import bpy
 import bgl
 import ctypes
 
-from .globals import get_global
+from .globals import Globals
 from .drawing import Drawing
 from .debug import dprint
 
@@ -139,7 +139,7 @@ class Shader():
         return Shader(name, srcVertex, srcFragment, *args, **kwargs)
 
     def __init__(self, name, srcVertex, srcFragment, funcStart=None, funcEnd=None, checkErrors=True, bindTo0=None):
-        self.drawing = get_global('drawing')
+        self.drawing = Globals.drawing
 
         self.name = name
         self.shaderProg = bgl.glCreateProgram()

@@ -37,7 +37,7 @@ from mathutils import Matrix
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d
 from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_origin_3d
 
-from .globals import set_global, is_global_set, get_global
+from .globals import Globals
 from .blender import get_preferences
 from .decorators import blender_version_wrapper
 from .fontmanager import FontManager as fm
@@ -81,11 +81,11 @@ class Drawing:
     @staticmethod
     def initialize():
         Drawing.update_dpi()
-        if is_global_set('drawing'): return
+        if Globals.is_set('drawing'): return
         Drawing._creating = True
-        set_global(Drawing())
+        Globals.set(Drawing())
         del Drawing._creating
-        Drawing._instance = get_global('drawing')
+        Drawing._instance = Globals.drawing
 
     def __init__(self):
         assert hasattr(self, '_creating'), "Do not instantiate directly.  Use Drawing.get_instance()"

@@ -36,7 +36,7 @@ import bgl
 
 from .ui_styling import UI_Styling
 
-from .globals import set_global, get_global
+from .globals import Globals
 from .decorators import blender_version_wrapper
 from .maths import Point2D, Vec2D, clamp, mid, Color
 from .drawing import Drawing, ScissorStack
@@ -114,7 +114,7 @@ class UI_Draw:
         vertex_shader, fragment_shader = Shader.parse_file('uielement.glsl', includeVersion=False)
         shader = gpu.types.GPUShader(vertex_shader, fragment_shader)
         batch = batch_for_shader(shader, 'TRIS', {"pos": vertex_positions})
-        get_pixel_matrix = get_global('drawing').get_pixel_matrix
+        get_pixel_matrix = Globals.drawing.get_pixel_matrix
         def_color = (0,0,0,1)
 
         def update():
@@ -157,14 +157,14 @@ class UI_Draw:
     def draw(self, left, top, width, height, style):
         UI_Draw._draw(left, top, width, height, style)
 
-set_global(UI_Draw())
+Globals.set(UI_Draw())
 
 
 class UI_Basic:
     selector_type = 'basic'
 
     def __init__(self, stylesheet=None, id=None, classes=None, style=None):
-        self._ui_draw = get_global('ui_draw')
+        self._ui_draw = Globals.ui_draw
         self._parent = None
         self._selector = None
         self._stylesheet = None
@@ -429,7 +429,7 @@ class UI_Window(UI_Basic):
 
 class UI_WindowManager:
     def __init__(self, **kwargs):
-        self.drawing = get_global('drawing')
+        self.drawing = Globals.drawing
         self.windows = []
         self.windows_unfocus = None
         self.active = None

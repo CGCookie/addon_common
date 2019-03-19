@@ -35,7 +35,7 @@ import traceback
 from datetime import datetime
 from hashlib import md5
 
-from .globals import set_global, get_global
+from .globals import Globals
 from .blender import show_blender_popup
 from .hasher import Hasher
 
@@ -158,5 +158,5 @@ class Debugger:
 
 debugger = Debugger()
 dprint = debugger.dprint
-set_global(debugger)
-
+Globals.set(debugger)
+Globals.dprint = dprint

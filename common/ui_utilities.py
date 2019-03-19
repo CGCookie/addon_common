@@ -74,8 +74,8 @@ class Lexer:
     '''
     Converts character stream input into a stream of tokens
     '''
-    def __init__(self, charstream, token_matchers):
-        token_matchers = [(tname, conv, list(map(re.compile, retokens))) for (tname,conv,retokens) in token_matchers]
+    def __init__(self, charstream, token_rules):
+        token_rules = [(tname, conv, list(map(re.compile, retokens))) for (tname,conv,retokens) in token_rules]
 
         self.tokens = []
         self.i = 0
@@ -86,7 +86,7 @@ class Lexer:
             i_line = charstream.i_line+1
 
             # match against all possible tokens
-            matches = [(tname, conv, retoken.match(rest)) for (tname,conv,retokens) in token_matchers for retoken in retokens]
+            matches = [(tname, conv, retoken.match(rest)) for (tname,conv,retokens) in token_rules for retoken in retokens]
             # filter out non-matches
             matches = list(filter(lambda nm: nm[2] is not None, matches))
             assert matches, 'syntax error on line %d: "%s"' % (i_line, charstream.peek_restofline())
