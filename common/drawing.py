@@ -41,7 +41,7 @@ from .globals import Globals
 from .blender import get_preferences
 from .decorators import blender_version_wrapper
 from .fontmanager import FontManager as fm
-from .maths import Point2D, Vec2D, Point, Ray, Direction, clamp, mid
+from .maths import Point2D, Vec2D, Point, Ray, Direction, mid
 from .profiler import profiler
 from .debug import dprint
 
@@ -367,103 +367,96 @@ Drawing.initialize()
 
 
 class ScissorStack:
-    context = None
     buf = bgl.Buffer(bgl.GL_INT, 4)
-    box = None
-    started = False
-    scissor_enabled = False
-    stack = None
+    region_box = None                   # (l,b,w,h) of region in window-coords
+    is_started = False
+    scissor_test_was_enabled = False
+    stack = None                        # stack of (l,b,w,h) in region-coordinates, because viewport is set to region
 
     @staticmethod
     def start(context):
-        assert not ScissorStack.started
+        assert not ScissorStack.is_started, 'Attempting to start a started ScissorStack'
 
+        # region pos and size are window-coordinates
         rgn = context.region
-        ScissorStack.context = context
-        ScissorStack.box = (rgn.x, rgn.y, rgn.width, rgn.height)
+        rl,rb,rw,rh = rgn.x, rgn.y, rgn.width, rgn.height
+        ScissorStack.region_box = (rl, rb, rw, rh)
 
-        bgl.glGetIntegerv(bgl.GL_SCISSOR_BOX, ScissorStack.buf)
-        ScissorStack.scissor_enabled = (bgl.glIsEnabled(bgl.GL_SCISSOR_TEST) == bgl.GL_TRUE)
-        ScissorStack.stack = [tuple(ScissorStack.buf)]
-
-        ScissorStack.started = True
-
-        if not ScissorStack.scissor_enabled:
+        # remember the current scissor box settings so we can return to them when done
+        ScissorStack.scissor_test_was_enabled = (bgl.glIsEnabled(bgl.GL_SCISSOR_TEST) == bgl.GL_TRUE)
+        if ScissorStack.scissor_test_was_enabled:
+            bgl.glGetIntegerv(bgl.GL_SCISSOR_BOX, ScissorStack.buf)
+            pl, pb, pw, ph = ScissorStack.buf
+            ScissorStack.stack = [(pl, pb, pw, ph)]
+            # don't need to enable, because we are already scissoring!
+            # TODO: this is not tested!
+        else:
+            ScissorStack.stack = [(0, 0, rw, rh)]
             bgl.glEnable(bgl.GL_SCISSOR_TEST)
+
+        # we're ready to go!
+        ScissorStack.is_started = True
 
     @staticmethod
     def end():
-        assert ScissorStack.started
-        assert len(ScissorStack.stack) == 1, 'stack size = %d (not 1)' % len(ScissorStack.started)
-        if not ScissorStack.scissor_enabled:
-            bgl.glDisable(bgl.GL_SCISSOR_TEST)
-        ScissorStack.started = False
+        assert ScissorStack.is_started, 'Attempting to end a non-started ScissorStack'
+        assert len(ScissorStack.stack) == 1, 'Attempting to end a non-empty ScissorStack (size: %d)' % (len(ScissorStack.stack)-1)
+        if not ScissorStack.scissor_test_was_enabled: bgl.glDisable(bgl.GL_SCISSOR_TEST)
+        ScissorStack.is_started = False
 
     @staticmethod
     def _set_scissor():
-        assert ScissorStack.started and ScissorStack.stack
+        assert ScissorStack.is_started, 'Attempting to set scissor settings with non-started ScissorStack'
         bgl.glScissor(*ScissorStack.stack[-1])
 
     @staticmethod
-    def push(pos, size):
-        assert ScissorStack.started, 'Attempting to push a new scissor onto stack before starting!'
-        assert ScissorStack.stack
+    def push(nl, nt, nw, nh, clamp=True):
+        # note: pos and size are already in region-coordinates, but it is specified from top-left corner
 
-        rl,rt,rw,rh = ScissorStack.box
+        assert ScissorStack.is_started, 'Attempting to push to a non-started ScissorStack!'
 
-        nl,nt = pos
-        nw,nh = size
-        nl,nt,nw,nh = int(rl+nl),int(rt+nt-nh),int(nw+1),int(nh+1)
-        nr,nb = nl+nw,nt+nh
+        # compute right and bottom of new scissor box
+        nr, nb = nl+nw-1, nt-nh+1
 
-        pl,pt,pw,ph = ScissorStack.stack[-1]
-        pr,pb = pl+pw,pt+ph
+        if clamp:
+            # get previous scissor box
+            pl, pb, pw, ph = ScissorStack.stack[-1]
+            pr, pt = pl+pw-1, pb+ph-1
+            # clamp new box to previous (extra +1/-1 is to handle 0-sized width/height if boxes do not intersect)
+            cl, cr, ct, cb = mid(nl,pl,pr), mid(nr+1,pl,pr)-1, mid(nt+1,pt,pb)-1, mid(nb,pt,pb)
+            cw, ch = max(0, cr-cl+1), max(0, ct-cb+1)
+            ScissorStack.stack.append((cl, cb, cw, ch))
+        else:
+            ScissorStack.stack.append((nl, nb, nw, nh))
 
-        nl,nr,nt,nb = clamp(nl,pl,pr),clamp(nr,pl,pr),clamp(nt,pt,pb),clamp(nb,pt,pb)
-        nw,nh = max(0, nr-nl),max(0, nb-nt)
+        ScissorStack._set_scissor()
 
-        ScissorStack.stack.append((nl, nt, nw, nh))
+    @staticmethod
+    def pop():
+        assert len(ScissorStack.stack) > 1, 'Attempting to pop from empty ScissorStack!'
+        ScissorStack.stack.pop()
         ScissorStack._set_scissor()
 
     @staticmethod
     def get_current_view():
-        assert ScissorStack.started
+        assert ScissorStack.is_started
         assert ScissorStack.stack
-        rl,rt,rw,rh = ScissorStack.box
-        l,t,w,h = ScissorStack.stack[-1]
-        return (l-rl,t+h-rt,w,h)
+        l, b, w, h = ScissorStack.stack[-1]
+        r, t = l+w-1, b+h-1
+        return (l, t, w, h)
 
     @staticmethod
     def is_visible():
-        assert ScissorStack.started
+        assert ScissorStack.is_started
         assert ScissorStack.stack
-        sl,st,sw,sh = ScissorStack.stack[-1]
-        return sw > 0 and sh > 0
+        vl, vb, vw, vh = ScissorStack.stack[-1]
+        return vw > 0 and vh > 0
 
     @staticmethod
-    def is_box_visible(l,t,w,h):
-        assert ScissorStack.started
+    def is_box_visible(l, t, w, h):
+        assert ScissorStack.is_started
         assert ScissorStack.stack
-        vl, vt, vw, vh = ScissorStack.get_current_view()
-        vr, vb = vl + vw, vt - vh
-        r, b = l + w, t - h
+        vl, vb, vw, vh = ScissorStack.get_current_view()
+        vr, vt = vl+vw-1, vb+vh-1
+        r, b = l+w-1, t-h+1
         return not (l > vr or r < vl or t < vb or b > vt)
-        # rl,rt,rw,rh = ScissorStack.box
-        # l += rl
-        # t += rt
-        # r = l + w
-        # b = t - h
-        # sl,st,sw,sh = ScissorStack.stack[-1]
-        # sr = sl + sw
-        # sb = st - sh
-        # if l > sr: return False
-        # if r < sl: return False
-        # if t < sb: return False
-        # if b > st: return False
-        # return True
-
-    @staticmethod
-    def pop():
-        assert ScissorStack.stack, 'Attempting to pop a scissor from empty stack!'
-        ScissorStack.stack.pop()
-        ScissorStack._set_scissor()

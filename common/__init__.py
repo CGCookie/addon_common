@@ -23,6 +23,7 @@ __all__ = [
     'bezier',
     'blender',
     'bmesh_render',
+    'bmesh_utils',
     'debug',
     'decorators',
     'drawing',
@@ -40,3 +41,10 @@ __all__ = [
     'utils',
     'xmesh',
 ]
+
+# import the following only to populate the globals
+from . import debug as _
+from . import drawing as _
+from . import logger as _
+from . import profiler as _
+from . import ui_core as _

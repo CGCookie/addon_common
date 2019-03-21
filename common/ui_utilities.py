@@ -21,8 +21,47 @@ Created by Jonathan Denning, Jonathan Williamson
 
 import re
 
-from .decorators import debug_test_call
+from .globals import Globals
+from .decorators import debug_test_call, blender_version_wrapper
 from .maths import Color
+from .shaders import Shader
+
+'''
+Links to useful resources
+
+- How Browsers Work: https://www.html5rocks.com/en/tutorials/internals/howbrowserswork
+- WebCore Rendering
+    - https://webkit.org/blog/114/webcore-rendering-i-the-basics/
+    - https://webkit.org/blog/115/webcore-rendering-ii-blocks-and-inlines/
+    - https://webkit.org/blog/116/webcore-rendering-iii-layout-basics/
+    - https://webkit.org/blog/117/webcore-rendering-iv-absolutefixed-and-relative-positioning/
+    - https://webkit.org/blog/118/webcore-rendering-v-floats/
+- Mozilla's Layout Engine: https://www-archive.mozilla.org/newlayout/doc/layout-2006-12-14/master.xhtml
+- Mozilla's Notes on HTML Reflow: https://www-archive.mozilla.org/newlayout/doc/reflow.html
+- How Browser Rendering Works: http://dbaron.github.io/browser-rendering/
+- Render-tree Construction, Layout, and Paint: https://developers.google.com/web/fundamentals/performance/critical-rendering-path/render-tree-construction
+- Beginner's Guide to Choose Between CSS Grid and Flexbox: https://medium.com/youstart-labs/beginners-guide-to-choose-between-css-grid-and-flexbox-783005dd2412
+'''
+
+
+###########################################################################
+# below is a helper class for drawing ui
+
+
+
+class UIRender:
+    def __init__(self):
+        self._children = []
+    def append_child(self, child):
+        self._children.append(child)
+
+class UIRender_Block(UIRender):
+    def __init__(self):
+        super.__init__(self)
+
+class UIRender_Inline(UIRender):
+    def __init__(self):
+        super.__init__(self)
 
 
 

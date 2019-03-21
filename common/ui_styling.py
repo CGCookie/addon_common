@@ -91,6 +91,18 @@ This styling file is formatted _very_ similarly to CSS, but below is a list of a
 
 - `min-*` and `max-*` are used as suggestions to the UI system; they will not be strictly followed
 
+
+Things to think about:
+
+- `:scrolling` pseudoclass, for when we're scrolling through content
+- `:focus` pseudoclass, for when textbox has focus, or changing a number input
+- add drop shadow (works in the margins?) and outline (for focus viz)
+- allow for absolute, fixed, relative positioning?
+- allow for float boxes?
+- z-index (how is this done?  nodes of render tree get placed in rendering list?)
+- ability to be dragable?
+
+
 '''
 
 
@@ -321,7 +333,17 @@ class UI_Styling:
 
     def compute_style(self, selector, override=None):
         # collect all the declarations that apply to selector
-        full = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+        full = []
+        if False:
+            # Cascading not implemented correctly (only add prop+vals that are inherited)
+            # see: https://developer.mozilla.org/en-US/docs/Learn/CSS/Introduction_to_CSS/Cascade_and_inheritance
+            # see: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference
+            selector_parts = selector.split(' ')
+            for i in range(len(selector_parts)):
+                sub_selector = ' '.join(selector_parts[:i+1])
+                full += [d for rule in self.rules if rule.match(sub_selector) for d in rule.decllist]
+        else:
+            full += [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
         if override: full += override.compute_style(selector)
 
         # expand and override declarations

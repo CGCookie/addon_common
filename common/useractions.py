@@ -50,6 +50,7 @@ def strip_mods(action):
 
 class Actions:
     # https://docs.blender.org/api/2.79/bpy.types.KeyMapItems.html
+    # https://docs.blender.org/api/blender2.8/bpy.types.KeyMapItems.html
     ndof_actions = {
         'NDOF_MOTION', 'NDOF_BUTTON', 'NDOF_BUTTON_FIT',
         'NDOF_BUTTON_TOP', 'NDOF_BUTTON_BOTTOM', 'NDOF_BUTTON_LEFT', 'NDOF_BUTTON_RIGHT', 'NDOF_BUTTON_FRONT', 'NDOF_BUTTON_BACK',

@@ -37,6 +37,7 @@ class Globals(metaclass=GlobalsMeta):
     @staticmethod
     def set(obj, objtype=None):
         Globals.__vars[objtype or type(obj).__name__.lower()] = obj
+        return obj
 
     @staticmethod
     def is_set(objtype):

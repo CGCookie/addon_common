@@ -30,9 +30,10 @@ varying vec2 screen_pos;
 #version 120
 
 void main() {
+    // set vertex to bottom-left, top-left, top-right, or bottom-right location, depending on pos
     vec2 p = vec2(left, bottom);
-    if(pos.x > 0) p.x = right;
-    if(pos.y > 0) p.y = top;
+    if(pos.x > 0.5) p.x = right;
+    if(pos.y > 0.5) p.y = top;
 
     screen_pos  = p;
     gl_Position = uMVPMatrix * vec4(p, 0, 1);
