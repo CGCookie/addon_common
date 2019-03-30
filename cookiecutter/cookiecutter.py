@@ -64,6 +64,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Uti
     def end_commit(self): pass
     def end_cancel(self): pass
     def end(self): pass
+    def should_pass_through(self, context, event): return False
 
     ############################################################################
 
@@ -147,7 +148,11 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Uti
         if ret: return ret
 
         self.fsm_update()
-        return {'RUNNING_MODAL'}
+
+        if self.should_pass_through(context, event):
+            return {"PASS_THROUGH"}
+        else:
+            return {"RUNNING_MODAL"}
 
     def actions_init(self):
         self.actions = Actions(self.context, self.default_keymap)
@@ -159,6 +164,3 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Uti
     def actions_end(self):
         self.context.window_manager.event_timer_remove(self._timer)
         del self._timer
-
-
-
