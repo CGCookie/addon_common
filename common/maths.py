@@ -956,6 +956,137 @@ class BBox:
         return self.max_dim
 
 
+class Box2D:
+    '''
+    WARNING: this class does not prevent right < left or top < bottom!
+    '''
+    def __init__(self, **kwargs):
+        left, right, width = kwargs.get('left', None), kwargs.get('right', None)
+        top, bottom, height = kwargs.get('top', None), kwargs.get('bottom', None)
+        width, height = kwargs.get('width', None),  kwargs.get('height', None)
+        # composite specification
+        topleft, topright = kwargs.get('topleft', None), kwargs.get('topright', None)
+        bottomleft, bottomright = kwargs.get('bottomleft', None), kwargs.get('bottomright', None)
+        size = kwargs.get('size', None)
+        # relative positioning
+        above, below = kwargs.get('above', None), kwargs.get('below', None)
+        sideleft, sideright = kwargs.get('sideleft', None), kwargs.get('sideright', None)
+        parent = kwargs.get('parent', None)     # if None, pos is abs; ow rel
+
+        if size is not None: width,height = size
+        if topleft is not None: left,top = topleft
+        if topright is not None: right,top = topright
+        if bottomleft is not None: left,bottom = bottomleft
+        if bottomright is not None: right,bottom = bottomright
+
+        ln,rn,wn = left is not None, right  is not None, width  is not None
+        tn,bn,hn = top  is not None, bottom is not None, height is not None
+        assert ln or rn, "Box2D: left and right cannot both be None"
+        assert tn or bn, "Box2D: top and bottom cannot both be None"
+        assert (ln and rn) or wn, "Box2D: must specify both left and right or width"
+        assert (tn and bn) or hn, "Box2D: must specify both top and bottom or height"
+        if ln and rn and wn: assert width == right - left + 1, "Box2D: left (%f), right (%f), and width (%f) do not agree" % (left, right, width)
+        if tn and bn and hn: assert height == top - bottom + 1, "Box2D: top (%f), bottom (%f), and height (%f) do not agree" % (top, bottom, height)
+        self._left   = left   if ln else right  - (width  - 1)
+        self._right  = right  if rn else left   + (width  - 1)
+        self._width  = width  if wn else right  -  left   + 1
+        self._top    = top    if tn else bottom + (height - 1)
+        self._bottom = bottom if bn else top    - (height - 1)
+        self._height = height if hn else top    -  bottom + 1
+
+    @property
+    def left(self):
+        return self._left
+    @left.setter
+    def left(self, v):
+        self._left = v
+        self._width = self._right - self._left + 1
+
+    @property
+    def right(self):
+        return self._right
+    @right.setter
+    def right(self, v):
+        self._right = v
+        self._width = self._right - self._left + 1
+
+    @property
+    def bottom(self):
+        return self._bottom
+    @bottom.setter
+    def bottom(self, v):
+        self._bottom = v
+        self._height = self._top - self._bottom + 1
+
+    @property
+    def top(self):
+        return self._top
+    @top.setter
+    def top(self, v):
+        self._top = v
+        self._height = self._top - self._bottom + 1
+
+    @property
+    def topleft(self):
+        return (self._left, self._top)
+    @topleft.setter
+    def topleft(self, lt):
+        self._left, self._top = lt
+        self._width = self._right - self._left + 1
+        self._height = self._top - self._bottom + 1
+
+    @property
+    def topright(self):
+        return (self._right, self._top)
+    @topright.setter
+    def topright(self, rt):
+        self._right, self._top = rt
+        self._width = self._right - self._left + 1
+        self._height = self._top - self._bottom + 1
+
+    @property
+    def bottomleft(self):
+        return (self._left, self._bottom)
+    @bottomleft.setter
+    def bottomleft(self, lb):
+        self._left, self._bottom = lb
+        self._width = self._right - self._left + 1
+        self._height = self._top - self._bottom + 1
+
+    @property
+    def bottomright(self):
+        return (self._right, self._bottom)
+    @bottomright.setter
+    def bottomright(self, rb):
+        self._right, self._bottom = rb
+        self._width = self._right - self._left + 1
+        self._height = self._top - self._bottom + 1
+
+    @property
+    def width(self):
+        return self._width
+
+    @property
+    def height(self):
+        return self._height
+
+    def overlap(self, that:Box2D):
+        if self._left > that._right: return False
+        if that._left > self._right: return False
+        if self._bottom > that._top: return False
+        if that._bottom > self._top: return False
+        return True
+
+    def point_inside(self, point:Point2D):
+        x,y = point
+        if x < self._left or x > self._right: return False
+        if y < self._bottom or y > self._top: return False
+        return True
+
+    # (bbox) intersect, union, difference
+    # copy
+
+
 class Accel2D:
     bin_cols = 20
     bin_rows = 20

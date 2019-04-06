@@ -104,7 +104,7 @@ class Debugger:
                 pfilename = filename
                 if filename.startswith(base_path):
                     filename = '.../%s' % filename[len(base_path)+1:]
-                errormsg += ['%s' % (filename, )]
+                errormsg += ['    %s' % (filename, )]
             errormsg += ['%03d %04d:%s() %s' % (i, lineno, funcname, line.strip())]
 
         return ('\n'.join(errormsg), hasher.get_hash())

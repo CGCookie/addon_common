@@ -56,24 +56,31 @@ Notes about addon_common's UI system
 
 Implementation details
 
-- UI is recalculated
-
+- UI is recalculated ...
 
 See top comment in `ui_utilities.py` for links to useful resources.
 '''
 
 
 
-class UI_Container(UI_Core):
-    selector_type = 'container'
+
+class UI_Flexbox(UI_Core):
+    '''
+    This container will resize the width/height of all children to fill the available space
+    '''
+
+    default_style = [
+        'flex-direction: row',
+        'overflow: scroll',
+    ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def get_visible_children(self):
-        return [child for child in self._children if child.visible]
+    def compute_content_size(self):
+        for child in self._children: 
 
-    def recalculate_children(self):
+    def layout_children(self):
         for child in self._children: child.recalculate()
 
         # assuming all children are drawn on top on one another
@@ -101,16 +108,12 @@ class UI_Container(UI_Core):
 
 
 class UI_Label(UI_Core):
-    selector_type = 'label'
-
     def __init__(self, label=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._label = label or ''
 
 
 class UI_Button(UI_Core):
-    selector_type = 'button'
-
     def __init__(self, label=None, click=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._label = label or ''
@@ -118,16 +121,14 @@ class UI_Button(UI_Core):
 
 
 
+
 class UI_Window(UI_Core):
-    selector_type = 'window'
     def __init__(self, *args, **kwargs):
         super().__init__()
 
 
 
 class UI_Body(UI_Core):
-    selector_type = 'body'
-
     def __init__(self, actions, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

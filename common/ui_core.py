@@ -26,7 +26,7 @@ from .drawing import ScissorStack
 
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
-from .maths import Color
+from .maths import Color, mid, Box2D
 from .shaders import Shader
 
 
@@ -155,27 +155,31 @@ def defer_dirty(fn):
 
 
 class UI_Core:
-    selector_type = 'DO NOT INSTANTIATE DIRECTLY!'
+    selector_type = 'FILLED IN AUTOMATICALLY BY __init__'
+    default_style = ''
 
     def __init__(self, parent=None, id=None, classes=None, style=None):
         assert type(self) is not UI_Core, 'DO NOT INSTANTIATE DIRECTLY!'
+        self.selector_type = type(self).__name__[3:].lower()
         self._parent = None
         self._children = []
         self._selector = None
         self._id = None
         self._classes = set()
         self._pseudoclasses = set()
-        self._style = None
+        self._default_styling = None
+        self._custom_styling = None
         self._style_str = ''
         self._is_visible = False
         self._computed_styles = None
 
-        # preferred size (set in self._recalculate), used for positioning and sizing
-        self._width, self._height = 0,0
-        self._min_width, self._min_height = 0,0
-        self._max_width, self._max_height = 0,0
+        # preferred and content size (set in self._layout), used by container for positioning and sizing
+        self._preferred_width, self._preferred_height = 0,0
+        self._content_width, self._content_height = 0,0
 
-        # actual absolute position (set in self._update), used for drawing
+        # actual absolute position (set in self._position), used for drawing
+        self._box_draw = Box2D(topleft=(0,0), size=(-1,-1))
+        self._box_full = Box2D(topleft=(0,0), size=(-1,-1))
         self._l, self._t, self._w, self._h = 0,0,0,0
         # offset drawing (for scrolling)
         self._x, self._y = 0,0
@@ -186,7 +190,12 @@ class UI_Core:
         self._defered_dirty_children = False    # is True when dirtying children was deferred
         self._defer_recalc = True   # set to True to defer recalculations (useful when many changes are occurring)
 
+        def_style = self.default_style
+        if type(def_style) is dict: def_style = ['%s:%s' % (k,v) for (k,v) in def_style.items()]
+        if type(def_style) is list: def_style = ';'.join(def_style)
+        self._default_styling = UI_Styling('*{%s;}' % def_style)
         self.style = style
+
         self.id = id
         self.classes = classes
 
@@ -239,7 +248,7 @@ class UI_Core:
     @style.setter
     def style(self, style):
         self._style_str = str(style or '')
-        self._style = UI_Styling('*{%s;}' % self._style_str)
+        self._custom_styling = UI_Styling('*{%s;}' % self._style_str)
         self.dirty()
     def add_style(self, style):
         self.style = '%s;%s' % (self.style, str(style or ''))
@@ -292,8 +301,15 @@ class UI_Core:
     def visible(self):
         return self._is_visible
 
-    def _get_style_num(self, k, def_v, min_v=0, max_v=None):
-        v = self._computed_styles.get(k, def_v)
+    def get_visible_children(self):
+        # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
+        # NOTE: returns list of children without `display:none` style.
+        #       does _NOT_ mean that the child is going to be drawn
+        #       (might still be clipped with scissor)
+        return [child for child in self._children if child.visible]
+
+    def _get_style_num(self, k, def_v, min_v=None, max_v=None):
+        v = self._computed_styles.get(k, 'auto')
         if v == 'auto': v = def_v
         if min_v is not None: v = max(min_v, v)
         if max_v is not None: v = min(max_v, v)
@@ -305,12 +321,9 @@ class UI_Core:
         l = self._get_style_num('%s-left' % kb, 0)
         return (t,r,b,l)
 
-    def recalculate(self):
-        # recalculates width and height
-        if not self._is_dirty: return
-        if self._defer_recalc: return
 
-        self._is_dirty = True
+    def compute_style(self):
+        if not self._is_dirty: return
 
         sel_parent = [] if not self._parent else self._parent._selector
         sel_type = self.selector_type
@@ -319,35 +332,48 @@ class UI_Core:
         sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
         self._selector = sel_parent + [sel_type + sel_id + sel_cls + sel_pseudo]
 
-        stylesheet = ui_draw.stylesheet
-        if stylesheet:
-            self._computed_styles = stylesheet.compute_style(self._selector, self._style)
-        else:
-            self._computed_styles = self._style(self._selector)
+        self._computed_styles = self._default_styling.compute_style(self._selector, [ui_draw.stylesheet, self._custom_styling])
         self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
-        if not self.visible:
-            #self._min_width, self._min_height, self._max_width, self._max_height = 0,0,0,0
-            self._is_dirty = False
-            return
 
-        min_width, min_height = self._get_style_num('min-width', 0), self._get_style_num('min-height', 0)
-        max_width, max_height = self._get_style_num('max-width', float('inf')), self._get_style_num('max-height', float('inf'))
-        margin_top, margin_right, margin_bottom, margin_left = self._get_style_trbl('margin')
+        for child in self._children: child.compute_style()
+
+    def compute_preferred_size(self):
+        if not self._is_dirty: return
+        if self._defer_recalc: return
+        if not self.visible: return
+
+        self._content_width, self._content_height = 0, 0
+        for child in self._children: child.compute_preferred_size()
+        self.compute_children_content_size()
+
+    def layout(self):
+        # recalculates width and height
+
+        if not self._is_dirty: return
+        if self._defer_recalc: return
+        if not self.visible: return
+
+        # determine how much space we will need for all the content (children)
+        for child in self._children: child.layout()
+        self.layout_children()
+
+        min_width,  max_width  = self._get_style_num('min-width',  0), self._get_style_num('max-width',  float('inf'))
+        min_height, max_height = self._get_style_num('min-height', 0), self._get_style_num('max-height', float('inf'))
+        margin_top,  margin_right,  margin_bottom,  margin_left  = self._get_style_trbl('margin')
         padding_top, padding_right, padding_bottom, padding_left = self._get_style_trbl('padding')
         border_width = self._get_style_num('border-width', 0)
 
-        self._min_width  = min_width
-        self._min_height = min_height
-        self._max_width  = max_width
-        self._max_height = max_height
+        self._preferred_width = (
+            margin_left + border_width + padding_left +
+            mid(self._get_style_num('width', self._content_width), min_width, max_width) +
+            padding_right + border_width + margin_right
+        )
 
-        self.recalculate_children()
-
-        # make sure there is room for margin + border + padding
-        self._min_width  = (margin_left + border_width + padding_left) + self._min_width  + (padding_right  + border_width + margin_right )
-        self._min_height = (margin_top  + border_width + padding_top ) + self._min_height + (padding_bottom + border_width + margin_bottom)
-        self._max_width  = (margin_left + border_width + padding_left) + self._max_width  + (padding_right  + border_width + margin_right )
-        self._max_height = (margin_top  + border_width + padding_top ) + self._max_height + (padding_bottom + border_width + margin_bottom)
+        self._preferred_height = (
+            margin_top + border_width + padding_top +
+            mid(self._get_style_num('height', self._content_height), min_height, max_height) +
+            padding_bottom + border_width + margin_bottom
+        )
 
     def position(self, left, top, width, height):
         # pos and size define where this element exists
@@ -382,21 +408,27 @@ class UI_Core:
             if r: return r
         return self
 
-    def recalculate_children(self): pass
+    ################################################################################
+    # the following methods can be overridden to create different types of UI
+
+    ## Layout, Positioning, and Drawing
+    # `self.layout_children()` should set `self._content_width` and `self._content_height` based on children.
+    def compute_children_content_size(self): pass
+    def layout_children(self): pass
     def position_children(self, left, top, width, height): pass
     def draw_children(self): pass
 
-    # EVENTS
-    def on_focus(self):         pass    # self gains focus (:active is added)
-    def on_blur(self):          pass    # self loses focus (:active is removed)
-    def on_keydown(self):       pass    # key is pressed down
-    def on_keyup(self):         pass    # key is released
-    def on_keypress(self):      pass    # key is entered (down+up)
-    def on_mouseenter(self):    pass    # mouse enters self (:hover is added)
-    def on_mousemove(self):     pass    # mouse moves over self
-    def on_mousedown(self):     pass    # mouse left button is pressed down
-    def on_mouseup(self):       pass    # mouse left button is released
-    def on_mouseclick(self):    pass    # mouse left button is clicked (down+up while remaining on self)
-    def on_mousedblclick(self): pass    # mouse left button is pressed twice in quick succession
-    def on_mouseleave(self):    pass    # mouse leaves self (:hover is removed)
-    def on_scroll(self):        pass    # self is being scrolled
+    # Event Handling
+    def on_focus(self): pass             # self gains focus (:active is added)
+    def on_blur(self): pass              # self loses focus (:active is removed)
+    def on_keydown(self): pass           # key is pressed down
+    def on_keyup(self): pass             # key is released
+    def on_keypress(self): pass          # key is entered (down+up)
+    def on_mouseenter(self): pass        # mouse enters self (:hover is added)
+    def on_mousemove(self): pass         # mouse moves over self
+    def on_mousedown(self): pass         # mouse left button is pressed down
+    def on_mouseup(self): pass           # mouse left button is released
+    def on_mouseclick(self): pass        # mouse left button is clicked (down+up while remaining on self)
+    def on_mousedblclick(self): pass     # mouse left button is pressed twice in quick succession
+    def on_mouseleave(self): pass        # mouse leaves self (:hover is removed)
+    def on_scroll(self): pass            # self is being scrolled

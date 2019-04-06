@@ -124,12 +124,17 @@ token_rules = [
         r'((min|max)-)?width',
         r'((min|max)-)?height',
         r'cursor',
+        r'overflow',
+        r'flex-(direction|wrap)',
+        r'position',
     ]),
     ('value', convert_token_to_string, [
         r'auto',
-        r'visible',
-        r'hidden',
-        r'none',
+        r'inline|block|none',           # display
+        r'visible|hidden|scroll|auto',  # overflow
+        r'column|row',                  # flex-direction
+        r'nowrap|wrap',                 # flex-wrap
+        r'static|fixed|sticky',         # position
     ]),
     ('cursor', convert_token_to_cursor, [
         r'default|auto|initial',
@@ -331,7 +336,10 @@ class UI_Styling:
         if not self.rules: return '<UI_Styling>'
         return '<UI_Styling\n%s\n>' % ('\n'.join('  '+l for r in self.rules for l in str(r).splitlines()))
 
-    def compute_style(self, selector, override=None):
+    def get_decllist(self, selector):
+        return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+
+    def compute_style(self, selector, overrides):
         # collect all the declarations that apply to selector
         full = []
         if False:
@@ -343,8 +351,9 @@ class UI_Styling:
                 sub_selector = ' '.join(selector_parts[:i+1])
                 full += [d for rule in self.rules if rule.match(sub_selector) for d in rule.decllist]
         else:
-            full += [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
-        if override: full += override.compute_style(selector)
+            full += self.get_decllist(selector)
+        for override in overrides:
+            if override: full += override.get_decllist(selector)
 
         # expand and override declarations
         decllist = {}
