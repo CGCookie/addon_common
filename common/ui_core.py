@@ -26,7 +26,7 @@ from .drawing import ScissorStack
 
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
-from .maths import Color, mid, Box2D
+from .maths import Color, mid, Box2D, Size2D
 from .shaders import Shader
 
 
@@ -160,7 +160,9 @@ class UI_Core:
 
     def __init__(self, parent=None, id=None, classes=None, style=None):
         assert type(self) is not UI_Core, 'DO NOT INSTANTIATE DIRECTLY!'
-        self.selector_type = type(self).__name__[3:].lower()
+        tn = type(self).__name__.lower()
+        assert tn.startswith('ui_'), '%s has unhandled type name' % (type(self).__name__)
+        self.selector_type = tn[3:]
         self._parent = None
         self._children = []
         self._selector = None

@@ -956,13 +956,66 @@ class BBox:
         return self.max_dim
 
 
+class Size2D:
+    def __init__(self, **kwargs):
+        self._width = kwargs.get('width', kwargs.get('w', None))
+        self._height = kwargs.get('height', kwargs.get('h', None))
+        self._min_width = kwargs.get('min_width', None)
+        self._min_height = kwargs.get('min_height', None)
+        self._max_width = kwargs.get('max_width', None)
+        self._max_height = kwargs.get('max_height', None)
+
+    def __iter__(self):
+        return iter([self._width, self._height])
+
+    @property
+    def width(self):
+        if self._width is None: return None
+        v = self._width
+        if self._min_width is not None: v = max(v, self._min_width)
+        if self._max_width is not None: v = min(v, self._max_width)
+        return v
+    @width.setter
+    def width(self, v): self._width = v
+
+    @property
+    def height(self):
+        if self._height is None: return None
+        v = self._height
+        if self._min_height is not None: v = max(v, self._min_height)
+        if self._max_height is not None: v = min(v, self._max_height)
+        return v
+    @height.setter
+    def height(self, v): self._height = v
+
+    @property
+    def min_width(self): return self._min_width
+    @min_width.setter
+    def min_width(self, v): self._min_width = v
+
+    @property
+    def min_height(self): return self._min_height
+    @min_height.setter
+    def min_height(self, v): self._min_height = v
+
+    @property
+    def max_width(self): return self._max_width
+    @max_width.setter
+    def max_width(self, v): self._max_width = v
+
+    @property
+    def max_height(self): return self._max_height
+    @max_height.setter
+    def max_height(self, v): self._max_height = v
+
+
 class Box2D:
     '''
     WARNING: this class does not prevent right < left or top < bottom!
     '''
     def __init__(self, **kwargs):
-        left, right, width = kwargs.get('left', None), kwargs.get('right', None)
-        top, bottom, height = kwargs.get('top', None), kwargs.get('bottom', None)
+        left, right = kwargs.get('left', None), kwargs.get('right', None)
+        top, bottom = kwargs.get('top', None), kwargs.get('bottom', None)
         width, height = kwargs.get('width', None),  kwargs.get('height', None)
         # composite specification
         topleft, topright = kwargs.get('topleft', None), kwargs.get('topright', None)
@@ -983,8 +1036,8 @@ class Box2D:
         tn,bn,hn = top  is not None, bottom is not None, height is not None
         assert ln or rn, "Box2D: left and right cannot both be None"
         assert tn or bn, "Box2D: top and bottom cannot both be None"
-        assert (ln and rn) or wn, "Box2D: must specify both left and right or width"
-        assert (tn and bn) or hn, "Box2D: must specify both top and bottom or height"
+        assert (ln and rn) or wn, "Box2D: must specify either both left and right or width"
+        assert (tn and bn) or hn, "Box2D: must specify either both top and bottom or height"
         if ln and rn and wn: assert width == right - left + 1, "Box2D: left (%f), right (%f), and width (%f) do not agree" % (left, right, width)
         if tn and bn and hn: assert height == top - bottom + 1, "Box2D: top (%f), bottom (%f), and height (%f) do not agree" % (top, bottom, height)
         self._left   = left   if ln else right  - (width  - 1)
@@ -1070,7 +1123,7 @@ class Box2D:
     def height(self):
         return self._height
 
-    def overlap(self, that:Box2D):
+    def overlap(self, that:'Box2D'):
         if self._left > that._right: return False
         if that._left > self._right: return False
         if self._bottom > that._top: return False
@@ -1085,6 +1138,7 @@ class Box2D:
 
     # (bbox) intersect, union, difference
     # copy
+    # above, below, toleft, toright
 
 
 class Accel2D:

@@ -40,7 +40,7 @@ from .ui_styling import UI_Styling
 
 from .globals import Globals
 from .decorators import blender_version_wrapper
-from .maths import Point2D, Vec2D, clamp, mid, Color
+from .maths import Point2D, Vec2D, clamp, mid, Color, Box2D, Size2D
 from .drawing import Drawing, ScissorStack
 from .fontmanager import FontManager
 
@@ -56,7 +56,12 @@ Notes about addon_common's UI system
 
 Implementation details
 
-- UI is recalculated ...
+- root element will be sized to entire 3D view region
+- each element
+    - is responsible for communicating with children
+    - will estimate its size (min, max, preferred), but these are only suggestions for the parent
+    - dictates size and position of its children
+    - must submit to the sizing and position given by the parent
 
 See top comment in `ui_utilities.py` for links to useful resources.
 '''
@@ -66,7 +71,8 @@ See top comment in `ui_utilities.py` for links to useful resources.
 
 class UI_Flexbox(UI_Core):
     '''
-    This container will resize the width/height of all children to fill the available space
+    This container will resize the width/height of all children to fill the available space.
+    Children of row flexboxes will take up entire height; children of column flexboxes will take up entire width.
     '''
 
     default_style = [
@@ -78,7 +84,8 @@ class UI_Flexbox(UI_Core):
         super().__init__(*args, **kwargs)
 
     def compute_content_size(self):
-        for child in self._children: 
+        for child in self._children:
+            pass
 
     def layout_children(self):
         for child in self._children: child.recalculate()
