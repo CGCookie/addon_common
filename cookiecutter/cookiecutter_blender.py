@@ -25,8 +25,8 @@ import bgl
 from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger
 from ..common.drawing import Drawing
-from ..common.ui import UI_WindowManager
 from ..common.utils import iter_head
+from ..common.blender import toggle_screen_header, toggle_screen_toolbar, toggle_screen_properties, toggle_screen_lastop
 
 
 class CookieCutter_Blender:
@@ -81,26 +81,30 @@ class CookieCutter_Blender:
 
     def panels_get_details(self):
         # regions for 3D View:
-        #     279: [ HEADER, TOOLS, TOOL_PROPS, UI, WINDOW ]
-        #     280: [ HEADER, TOOLS, UI,         '', WINDOW ]  ( yes, there is no name at index 3 :( )
+        #     279: [ HEADER, TOOLS, TOOL_PROPS, UI,  WINDOW ]
+        #     280: [ HEADER, TOOLS, UI,         HUD, WINDOW ]
         #            0       1      2           3   4
         # could hard code the indices, but these magic numbers might change.
         # will stick to magic (but also way more descriptive) types
         rgn_header = iter_head(r for r in self._area.regions if r.type == 'HEADER')
         rgn_toolshelf = iter_head(r for r in self._area.regions if r.type == 'TOOLS')
         rgn_properties = iter_head(r for r in self._area.regions if r.type == 'UI')
-        return (rgn_header, rgn_toolshelf, rgn_properties)
+        rgn_hud = iter_head(r for r in self._area.regions if r.type == 'HUD')
+        return (rgn_header, rgn_toolshelf, rgn_properties, rgn_hud)
 
     def panels_store(self):
-        rgn_header,rgn_toolshelf,rgn_properties = self.panels_get_details()
+        rgn_header,rgn_toolshelf,rgn_properties,rgn_hud = self.panels_get_details()
         show_header,show_toolshelf,show_properties = rgn_header.height>1, rgn_toolshelf.width>1, rgn_properties.width>1
+        show_hud = rgn_hud.width>1 if rgn_hud else False
         self._show_header = show_header
         self._show_toolshelf = show_toolshelf
         self._show_properties = show_properties
+        self._show_hud = show_hud
 
     def panels_restore(self):
-        rgn_header,rgn_toolshelf,rgn_properties = self.panels_get_details()
+        rgn_header,rgn_toolshelf,rgn_properties,rgn_hud = self.panels_get_details()
         show_header,show_toolshelf,show_properties = rgn_header.height>1, rgn_toolshelf.width>1, rgn_properties.width>1
+        show_hud = rgn_hud.width>1 if rgn_hud else False
         ctx = {
             'area': self._area,
             'space_data': self._space,
@@ -108,16 +112,26 @@ class CookieCutter_Blender:
             'screen': self._screen,
             'region': self._region,
         }
-        if self._show_header and not show_header: bpy.ops.screen.header(ctx)
-        if self._show_toolshelf and not show_toolshelf: bpy.ops.view3d.toolshelf(ctx)
-        if self._show_properties and not show_properties: bpy.ops.view3d.properties(ctx)
+        if self._show_header and not show_header: toggle_screen_header(ctx)
+        if self._show_toolshelf and not show_toolshelf: toggle_screen_toolbar(ctx)
+        if self._show_properties and not show_properties: toggle_screen_properties(ctx)
+        if self._show_hud and not show_hud: toggle_screen_lastop(ctx)
 
     def panels_hide(self):
-        rgn_header,rgn_toolshelf,rgn_properties = self.panels_get_details()
+        rgn_header,rgn_toolshelf,rgn_properties,rgn_hud = self.panels_get_details()
         show_header,show_toolshelf,show_properties = rgn_header.height>1, rgn_toolshelf.width>1, rgn_properties.width>1
-        if show_header: bpy.ops.screen.header()
-        if show_toolshelf: bpy.ops.view3d.toolshelf()
-        if show_properties: bpy.ops.view3d.properties()
+        show_hud = rgn_hud.width>1 if rgn_hud else False
+        ctx = {
+            'area': self._area,
+            'space_data': self._space,
+            'window': self._window,
+            'screen': self._screen,
+            'region': self._region,
+        }
+        if show_header: toggle_screen_header(ctx)
+        if show_toolshelf: toggle_screen_toolbar(ctx)
+        if show_properties: toggle_screen_properties(ctx)
+        if show_hud: toggle_screen_lastop(ctx)
 
 
     #########################################

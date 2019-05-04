@@ -36,8 +36,8 @@ import bgl
 from bpy.types import BoolProperty
 from mathutils import Matrix
 
+from .parse import Parse_CharStream, Parse_Lexer
 from .ui_utilities import (
-    CharStream, Lexer,
     convert_token_to_string, convert_token_to_cursor,
     convert_token_to_color, convert_token_to_number,
     skip_token,
@@ -65,6 +65,7 @@ This styling file is formatted _very_ similarly to CSS, but below is a list of a
     - there is no `!important` keyword
 
 - all units are in pixels; do not specify units (ex: `px`, `in`, `em`, `%`)
+    - TODO: change to allow for %?
 
 - colors can come in various formats
     - `rgb(<r>,<g>,<b>)` or `rgba(<r>,<g>,<b>,<a>)`, where r,g,b values in 0--255; a in 0.0--1.0
@@ -84,7 +85,7 @@ This styling file is formatted _very_ similarly to CSS, but below is a list of a
 - background has only color (no images)
     - `background: <background-color>`
 
-- border has no style (such as dotted or dashed) and has uniform width
+- border has no style (such as dotted or dashed) and has uniform width (no left, right, top, bottom widths)
     - `border: <border-width> <border-color>`
 
 - setting `width` or `height` will set both of the corresponding `min-*` and `max-*` properties
@@ -96,11 +97,11 @@ Things to think about:
 
 - `:scrolling` pseudoclass, for when we're scrolling through content
 - `:focus` pseudoclass, for when textbox has focus, or changing a number input
-- add drop shadow (works in the margins?) and outline (for focus viz)
+- add drop shadow (draws in the margins?) and outline (for focus viz)
 - allow for absolute, fixed, relative positioning?
 - allow for float boxes?
 - z-index (how is this done?  nodes of render tree get placed in rendering list?)
-- ability to be dragable?
+- ability to be drag-able?
 
 
 '''
@@ -125,16 +126,18 @@ token_rules = [
         r'((min|max)-)?height',
         r'cursor',
         r'overflow',
-        r'flex-(direction|wrap)',
         r'position',
+        r'flex(-(direction|wrap|grow|shrink|basis))?',
+        r'justify-content|align-content|align-items',
     ]),
     ('value', convert_token_to_string, [
         r'auto',
-        r'inline|block|none',           # display
-        r'visible|hidden|scroll|auto',  # overflow
-        r'column|row',                  # flex-direction
-        r'nowrap|wrap',                 # flex-wrap
-        r'static|fixed|sticky',         # position
+        r'inline|block|none|flexbox',           # display
+        r'visible|hidden|scroll|auto',          # overflow
+        r'static|fixed|sticky',                 # position
+        r'column|row',                          # flex-direction
+        r'nowrap|wrap',                         # flex-wrap
+        r'flex-start|flex-end|center|stretch',  # justify-content, align-content, align-items
     ]),
     ('cursor', convert_token_to_cursor, [
         r'default|auto|initial',
@@ -190,7 +193,7 @@ token_rules = [
 ]
 
 
-class Declaration:
+class UI_Style_Declaration:
     '''
     CSS Declarations are of the form:
 
@@ -217,14 +220,14 @@ class Declaration:
             self.value = tuple(l)
         lexer.match_v_v(';')
     def __str__(self):
-        return '<Declaration "%s=%s">' % (self.property, str(self.value))
+        return '<UI_Style_Declaration "%s=%s">' % (self.property, str(self.value))
     def __repr__(self): return self.__str__()
 
 
-class RuleSet:
+class UI_Style_RuleSet:
     '''
     CSS RuleSets are in the form shown below.
-    Note: each `property: value;` is a Declaration
+    Note: each `property: value;` is a UI_Style_Declaration
 
         selector {
             property0: value;
@@ -273,13 +276,13 @@ class RuleSet:
         while lexer.peek_v() != '}':
             while lexer.peek_v() == ';': lexer.match_v_v(';')
             if lexer.peek_v() == '}': break
-            self.decllist.append(Declaration(lexer))
+            self.decllist.append(UI_Style_Declaration(lexer))
         lexer.match_v_v('}')
 
     def __str__(self):
         s = ', '.join(' '.join(selector) for selector in self.selectors)
-        if not self.decllist: return '<RuleSet "%s">' % (s,)
-        return '<RuleSet "%s"\n%s\n>' % (s,'\n'.join('  '+l for d in self.decllist for l in str(d).splitlines()))
+        if not self.decllist: return '<UI_Style_RuleSet "%s">' % (s,)
+        return '<UI_Style_RuleSet "%s"\n%s\n>' % (s,'\n'.join('  '+l for d in self.decllist for l in str(d).splitlines()))
     def __repr__(self): return self.__str__()
 
     def match(self, selector):
@@ -326,11 +329,11 @@ class UI_Styling:
         return UI_Styling(lines)
 
     def __init__(self, lines):
-        charstream = CharStream(lines)              # convert input into character stream
-        lexer = Lexer(charstream, token_rules)      # tokenize the character stream
+        charstream = Parse_CharStream(lines)            # convert input into character stream
+        lexer = Parse_Lexer(charstream, token_rules)    # tokenize the character stream
         self.rules = []
         while lexer.peek_t() != 'eof':
-            self.rules.append(RuleSet(lexer))
+            self.rules.append(UI_Style_RuleSet(lexer))
 
     def __str__(self):
         if not self.rules: return '<UI_Styling>'
@@ -339,7 +342,55 @@ class UI_Styling:
     def get_decllist(self, selector):
         return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
 
-    def compute_style(self, selector, overrides):
+    @staticmethod
+    def _trbl_split(v):
+        if type(v) is not tuple: return (v, v, v, v)
+        if   len(v) == 1: return (v[0], v[0], v[0], v[0])
+        elif len(v) == 2: return (v[0], v[1], v[0], v[1])
+        elif len(v) == 3: return (v[0], v[1], v[2], v[1])
+        else:             return (v[0], v[1], v[2], v[3])
+
+    @staticmethod
+    def _expand_declarations(decls):
+        decllist = {}
+        for decl in decls:
+            p,v = decl.property, decl.value
+            if p in {'margin','padding'}:
+                vals = UI_Styling._trbl_split(v)
+                decllist['%s-top'%p]    = vals[0]
+                decllist['%s-right'%p]  = vals[1]
+                decllist['%s-bottom'%p] = vals[2]
+                decllist['%s-left'%p]   = vals[3]
+            elif p == 'border':
+                if type(v) is not tuple: v = (v,)
+                decllist['border-width'] = v[0]
+                if len(v) > 1:
+                    vals = UI_Styling._trbl_split(v[1:])
+                    decllist['border-top-color']    = vals[0]
+                    decllist['border-right-color']  = vals[1]
+                    decllist['border-bottom-color'] = vals[2]
+                    decllist['border-left-color']   = vals[3]
+            elif p == 'border-color':
+                vals = UI_Styling._trbl_split(v)
+                decllist['border-top-color']    = vals[0]
+                decllist['border-right-color']  = vals[1]
+                decllist['border-bottom-color'] = vals[2]
+                decllist['border-left-color']   = vals[3]
+            elif p == 'background':
+                decllist['background-color'] = v
+            elif p == 'width':
+                decllist['min-width'] = v
+                decllist['max-width'] = v
+            elif p == 'height':
+                decllist['min-height'] = v
+                decllist['max-height'] = v
+            else:
+                decllist[p] = v
+        # filter out properties with `initial` values
+        decllist = { k:v for (k,v) in decllist.items() if v != 'initial' }
+        return decllist
+
+    def compute_style(self, selector, initial_styling, override_styling):
         # collect all the declarations that apply to selector
         full = []
         if False:
@@ -352,94 +403,15 @@ class UI_Styling:
                 full += [d for rule in self.rules if rule.match(sub_selector) for d in rule.decllist]
         else:
             full += self.get_decllist(selector)
-        for override in overrides:
-            if override: full += override.get_decllist(selector)
+        if override_styling: full += override_styling.get_decllist(selector)
 
         # expand and override declarations
-        decllist = {}
-        for decl in full:
-            p,v = decl.property, decl.value
-            if p in {'margin','padding'}:
-                if type(v) is tuple:
-                    if len(v) == 2:
-                        decllist['%s-top'%p] = v[0]
-                        decllist['%s-right'%p] = v[1]
-                        decllist['%s-bottom'%p] = v[0]
-                        decllist['%s-left'%p] = v[1]
-                    elif len(v) == 3:
-                        decllist['%s-top'%p] = v[0]
-                        decllist['%s-right'%p] = v[1]
-                        decllist['%s-bottom'%p] = v[2]
-                        decllist['%s-left'%p] = v[1]
-                    else:
-                        decllist['%s-top'%p] = v[0]
-                        decllist['%s-right'%p] = v[1]
-                        decllist['%s-bottom'%p] = v[2]
-                        decllist['%s-left'%p] = v[3]
-                else:
-                    decllist['%s-top'%p] = v
-                    decllist['%s-right'%p] = v
-                    decllist['%s-bottom'%p] = v
-                    decllist['%s-left'%p] = v
-            elif p == 'border':
-                decllist['border-width'] = v[0]
-                if len(v) == 2:
-                    decllist['border-top-color'] = v[1]
-                    decllist['border-right-color'] = v[1]
-                    decllist['border-bottom-color'] = v[1]
-                    decllist['border-left-color'] = v[1]
-                elif len(v) == 3:
-                    decllist['border-top-color'] = v[1]
-                    decllist['border-right-color'] = v[2]
-                    decllist['border-bottom-color'] = v[1]
-                    decllist['border-left-color'] = v[2]
-                elif len(v) == 4:
-                    decllist['border-top-color'] = v[1]
-                    decllist['border-right-color'] = v[2]
-                    decllist['border-bottom-color'] = v[3]
-                    decllist['border-left-color'] = v[2]
-                else:
-                    decllist['border-top-color'] = v[1]
-                    decllist['border-right-color'] = v[2]
-                    decllist['border-bottom-color'] = v[3]
-                    decllist['border-left-color'] = v[4]
-            elif p == 'border-color':
-                if type(v) is tuple:
-                    if len(v) == 2:
-                        decllist['border-top-color'] = v[0]
-                        decllist['border-right-color'] = v[1]
-                        decllist['border-bottom-color'] = v[0]
-                        decllist['border-left-color'] = v[1]
-                    elif len(v) == 3:
-                        decllist['border-top-color'] = v[0]
-                        decllist['border-right-color'] = v[1]
-                        decllist['border-bottom-color'] = v[2]
-                        decllist['border-left-color'] = v[1]
-                    else:
-                        decllist['border-top-color'] = v[0]
-                        decllist['border-right-color'] = v[1]
-                        decllist['border-bottom-color'] = v[2]
-                        decllist['border-left-color'] = v[3]
-                else:
-                    decllist['border-top-color'] = v
-                    decllist['border-right-color'] = v
-                    decllist['border-bottom-color'] = v
-                    decllist['border-left-color'] = v
-            elif p == 'background':
-                decllist['background-color'] = v
-            elif p == 'width':
-                decllist['min-width'] = v
-                decllist['max-width'] = v
-            elif p == 'height':
-                decllist['min-height'] = v
-                decllist['max-height'] = v
-            else:
-                decllist[p] = v
+        init_decllist = self._expand_declarations(initial_styling.get_decllist(selector)) if initial_styling else {}
+        full_decllist = self._expand_declarations(full)
 
-        # delete properties with `initial` values
-        for k in [k for (k,v) in decllist.items() if v == 'initial']:
-            del decllist[k]
-
+        # apply initial
+        decllist = init_decllist
+        decllist.update(full_decllist)
         return decllist
 
 

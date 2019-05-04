@@ -1014,6 +1014,7 @@ class Box2D:
     WARNING: this class does not prevent right < left or top < bottom!
     '''
     def __init__(self, **kwargs):
+        # gather position and size info from kwargs
         left, right = kwargs.get('left', None), kwargs.get('right', None)
         top, bottom = kwargs.get('top', None), kwargs.get('bottom', None)
         width, height = kwargs.get('width', None),  kwargs.get('height', None)
@@ -1022,16 +1023,18 @@ class Box2D:
         bottomleft, bottomright = kwargs.get('bottomleft', None), kwargs.get('bottomright', None)
         size = kwargs.get('size', None)
         # relative positioning
-        above, below = kwargs.get('above', None), kwargs.get('below', None)
-        sideleft, sideright = kwargs.get('sideleft', None), kwargs.get('sideright', None)
-        parent = kwargs.get('parent', None)     # if None, pos is abs; ow rel
+        #above, below = kwargs.get('above', None), kwargs.get('below', None)
+        #toleft, toright = kwargs.get('toleft', None), kwargs.get('toright', None)
+        #parent = kwargs.get('parent', None)     # if None, pos is abs; ow rel
 
+        # unpack composite specs
         if size is not None: width,height = size
         if topleft is not None: left,top = topleft
         if topright is not None: right,top = topright
         if bottomleft is not None: left,bottom = bottomleft
         if bottomright is not None: right,bottom = bottomright
 
+        # make sure that caller sent all info needed to create Box2D instance
         ln,rn,wn = left is not None, right  is not None, width  is not None
         tn,bn,hn = top  is not None, bottom is not None, height is not None
         assert ln or rn, "Box2D: left and right cannot both be None"
@@ -1040,6 +1043,8 @@ class Box2D:
         assert (tn and bn) or hn, "Box2D: must specify either both top and bottom or height"
         if ln and rn and wn: assert width == right - left + 1, "Box2D: left (%f), right (%f), and width (%f) do not agree" % (left, right, width)
         if tn and bn and hn: assert height == top - bottom + 1, "Box2D: top (%f), bottom (%f), and height (%f) do not agree" % (top, bottom, height)
+
+        # set properties
         self._left   = left   if ln else right  - (width  - 1)
         self._right  = right  if rn else left   + (width  - 1)
         self._width  = width  if wn else right  -  left   + 1
@@ -1052,32 +1057,52 @@ class Box2D:
         return self._left
     @left.setter
     def left(self, v):
+        ''' sets left side to v, keeps right '''
         self._left = v
         self._width = self._right - self._left + 1
+    def move_left(self, v):
+        ''' moves left side to v, keeps width '''
+        self._left = v
+        self._right = self._left + self._width - 1
 
     @property
     def right(self):
         return self._right
     @right.setter
     def right(self, v):
+        ''' sets right side to v, keeps left '''
         self._right = v
         self._width = self._right - self._left + 1
+    def move_right(self, v):
+        ''' moves right side to v, keeps width '''
+        self._right = v
+        self._left = self._right - self._width + 1
 
     @property
     def bottom(self):
         return self._bottom
     @bottom.setter
     def bottom(self, v):
+        ''' sets bottom side to v, keeps top '''
         self._bottom = v
         self._height = self._top - self._bottom + 1
+    def move_bottom(self, v):
+        ''' moves bottom side to v, keeps height '''
+        self._bottom = v
+        self._top = self._bottom + self._height - 1
 
     @property
     def top(self):
         return self._top
     @top.setter
     def top(self, v):
+        ''' sets top side to v, keeps bottom '''
         self._top = v
         self._height = self._top - self._bottom + 1
+    def move_top(self, v):
+        ''' moves top side to v, keeps height '''
+        self._top = v
+        self._bottom = self._top - self._height + 1
 
     @property
     def topleft(self):
@@ -1124,6 +1149,7 @@ class Box2D:
         return self._height
 
     def overlap(self, that:'Box2D'):
+        ''' do self and that overlap? '''
         if self._left > that._right: return False
         if that._left > self._right: return False
         if self._bottom > that._top: return False
@@ -1131,14 +1157,29 @@ class Box2D:
         return True
 
     def point_inside(self, point:Point2D):
+        ''' is given point inside self? '''
         x,y = point
         if x < self._left or x > self._right: return False
         if y < self._bottom or y > self._top: return False
         return True
 
+    def new_neighbor(self, rellocation, padding=0, **kwargs):
+        ''' create new Box2D that neighbors self '''
+        box = Box2D(**kwargs)
+        if rellocation in {'above'}:
+            box.move_bottom(self._top + padding + 1)
+        elif rellocation in {'below'}:
+            box.move_top(self._bottom - padding - 1)
+        elif rellocation in {'left', 'toleft'}:
+            box.move_right(self._left - padding - 1)
+        elif rellocation in {'right', 'toright'}:
+            box.move_left(self._right + padding + 1)
+        else:
+            assert False, 'Unhandled relative location: %s' % rellocation
+        return box
+
     # (bbox) intersect, union, difference
     # copy
-    # above, below, toleft, toright
 
 
 class Accel2D:

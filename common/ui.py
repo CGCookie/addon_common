@@ -67,18 +67,23 @@ See top comment in `ui_utilities.py` for links to useful resources.
 '''
 
 
+# all html tags: https://www.w3schools.com/tags/
 
 
 class UI_Flexbox(UI_Core):
     '''
     This container will resize the width/height of all children to fill the available space.
+    This element is useful for lists of children elements, growing along one dimension and filling along other dimension.
     Children of row flexboxes will take up entire height; children of column flexboxes will take up entire width.
+
+    TODO: model off flexbox more closely?  https://css-tricks.com/snippets/css/a-guide-to-flexbox/
     '''
 
-    default_style = [
-        'flex-direction: row',
-        'overflow: scroll',
-    ]
+    default_style = '''
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow: scroll;
+    '''
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -129,7 +134,11 @@ class UI_Button(UI_Core):
 
 
 
-class UI_Window(UI_Core):
+class UI_Dialog(UI_Core):
+    '''
+    a dialog window, can be shown modal
+    '''
+
     def __init__(self, *args, **kwargs):
         super().__init__()
 
@@ -196,7 +205,11 @@ class UI_Body(UI_Core):
 
 
 
-class UI_WindowManager:
+class UI_Document:
+    '''
+    This is the main manager of the UI system.
+    '''
+
     def __init__(self, **kwargs):
         self.drawing = Globals.drawing
         self.windows = []
@@ -212,7 +225,7 @@ class UI_WindowManager:
         self.tooltip_value = None
         self.tooltip_time = time.time()
         self.tooltip_show = kwargs.get('show tooltips', True)
-        self.tooltip_window = UI_Window(None, {'bgcolor':(0,0,0,0.75), 'visible':False})
+        self.tooltip_window = UI_Dialog(None, {'bgcolor':(0,0,0,0.75), 'visible':False})
         self.tooltip_label = self.tooltip_window.add(UI_Label('foo bar'))
         self.tooltip_offset = Vec2D((15, -15))
 
@@ -239,7 +252,7 @@ class UI_WindowManager:
         # self.tooltip_window.update_pos()
 
     def create_window(self, title, options):
-        win = UI_Window(title, options)
+        win = UI_Dialog(title, options)
         self.windows.append(win)
         return win
 

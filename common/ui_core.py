@@ -26,7 +26,7 @@ from .drawing import ScissorStack
 
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
-from .maths import Color, mid, Box2D, Size2D
+from .maths import Vec2D, Color, mid, Box2D, Size2D
 from .shaders import Shader
 
 
@@ -141,116 +141,254 @@ ui_draw = Globals.set(UI_Draw())
 
 
 
-def defer_dirty(fn):
-    '''
-    this UI_Core-specific decorator will prevent dirty propagation until the wrapped fn has finished
-    '''
-    def wrapper(self, *args, **kwargs):
-        self._defer_dirty = True
-        ret = fn(self, *args, **kwargs)
-        self._defer_dirty = False
-        self.dirty(parent=False, children=False)
-        return ret
-    return wrapper
+'''
+UI_Document manages UI_Body
+
+example hierarchy of UI
+
+- UI_Body: (singleton!)
+    - UI_Dialog: tooltips
+    - UI_Dialog: menu
+        - help
+        - about
+        - exit
+    - UI_Dialog: tools
+        - UI_Button: toolA
+        - UI_Button: toolB
+        - UI_Button: toolC
+    - UI_Dialog: options
+        - option1
+        - option2
+        - option3
 
 
-class UI_Core:
-    selector_type = 'FILLED IN AUTOMATICALLY BY __init__'
-    default_style = ''
+clean call order
+
+- compute_style (only if style is dirty)
+    - call compute_style on all children
+    - dirtied by change in style, ID, class, pseudoclass, parent, or ID/class/pseudoclass of an ancestor
+    - cleaning style dirties size
+- compute_preferred_size (only if size or content are dirty)
+    - determines min, max, preferred size for element (override in subclass)
+    - for containers that resize based on children, whether wrapped (inline), list (block), or table, ...
+        - 
+
+'''
+
+
+class UI_Core_Utils:
+    @staticmethod
+    def defer_dirty(properties=None, parent=True, children=False):
+        ''' prevents dirty propagation until the wrapped fn has finished '''
+        def wrapper(fn):
+            def wrapped(self, *args, **kwargs):
+                self._defer_dirty = True
+                ret = fn(self, *args, **kwargs)
+                self._defer_dirty = False
+                self.dirty(properties, parent=parent, children=children)
+                return ret
+            return wrapped
+        return wrapper
+
+
+class UI_Core(UI_Core_Utils):
+    selector_type = ''  # filled in automatically by __init__
+    default_style = ''  # override this is subclass definition
+
+    @classmethod
+    def init_default_style(cls):
+        s = cls.default_style
+        if type(s) is UI_Styling: return
+        if type(s) is dict: s = ['%s:%s' % (k,v) for (k,v) in s.items()]
+        if type(s) is list: s = ';'.join(s)
+        cls.default_style = UI_Styling('*{%s;}' % s)
 
     def __init__(self, parent=None, id=None, classes=None, style=None):
         assert type(self) is not UI_Core, 'DO NOT INSTANTIATE DIRECTLY!'
+
+        self.init_default_style()
+
         tn = type(self).__name__.lower()
         assert tn.startswith('ui_'), '%s has unhandled type name' % (type(self).__name__)
-        self.selector_type = tn[3:]
-        self._parent = None
-        self._children = []
-        self._selector = None
-        self._id = None
-        self._classes = set()
-        self._pseudoclasses = set()
-        self._default_styling = None
-        self._custom_styling = None
-        self._style_str = ''
-        self._is_visible = False
-        self._computed_styles = None
+        self.selector_type = tn[3:]     # remove 'UI_' at start
 
-        # preferred and content size (set in self._layout), used by container for positioning and sizing
+        self._parent = None             # set in parent.append_child(self) below
+        self._children = []             # list of all children
+        self._selector = None           # full selector of self, set in compute_style()
+        self._id = None                 # unique identifier for self
+        self._classes = set()           # TODO: should order matter here? (make list)
+        self._pseudoclasses = set()     # TODO: should order matter here? (make list)
+        self._custom_style = None       # custom style UI_Style for self
+        self._style_str = ''            # custom style string for self
+        self._is_visible = False        # indicates if self is visible, set in compute_style()
+        self._computed_styles = None    # computed style UI_Style after applying all styling
+
+        # TODO: REPLACE WITH BETTER PROPERTIES AND DELETE!!
         self._preferred_width, self._preferred_height = 0,0
         self._content_width, self._content_height = 0,0
-
-        # actual absolute position (set in self._position), used for drawing
-        self._box_draw = Box2D(topleft=(0,0), size=(-1,-1))
-        self._box_full = Box2D(topleft=(0,0), size=(-1,-1))
         self._l, self._t, self._w, self._h = 0,0,0,0
-        # offset drawing (for scrolling)
-        self._x, self._y = 0,0
 
-        self._is_dirty = True       # set to True (through self.dirty) to force recalculations
-        self._defer_dirty = False   # set to True to defer dirty propagation (useful when many changes are occurring)
-        self._defered_dirty_parent = False      # is True when dirtying parent was deferred
-        self._defered_dirty_children = False    # is True when dirtying children was deferred
-        self._defer_recalc = True   # set to True to defer recalculations (useful when many changes are occurring)
+        # various sizes and boxes (set in self._position), used for layout and drawing
+        self._preferred_size = Size2D()                         # computed preferred size, set in self._layout, used as suggestion to parent
+        self._pref_content_size = Size2D()                      # size of content
+        self._pref_full_size = Size2D()                         # _pref_content_size + margins + border + padding
+        self._box_draw = Box2D(topleft=(0,0), size=(-1,-1))     # where UI will be drawn (restricted by parent)
+        self._box_full = Box2D(topleft=(0,0), size=(-1,-1))     # where UI would draw if not restricted (offset for scrolling)
 
-        def_style = self.default_style
-        if type(def_style) is dict: def_style = ['%s:%s' % (k,v) for (k,v) in def_style.items()]
-        if type(def_style) is list: def_style = ';'.join(def_style)
-        self._default_styling = UI_Styling('*{%s;}' % def_style)
+        self._dirty_properties = {              # set of dirty properties, add through self.dirty to force propagation of dirtiness
+            'style',                            # force recalculations of style
+            'size',                             # force recalculations of size
+            'content',                          # content of self has changed
+        }
+        self._dirty_propagation = {             # contains deferred dirty propagation for parent and children; parent will be dirtied later
+            'defer':    False,                  # set to True to defer dirty propagation (useful when many changes are occurring)
+            'parent':   set(),                  # set of properties to dirty for parent
+            'children': set(),                  # set of properties to dirty for children
+        }
+        self._defer_clean = False               # set to True to defer cleaning (useful when many changes are occurring)
+
         self.style = style
-
         self.id = id
         self.classes = classes
 
-        if parent:
-            parent.append_child(self)
+        if parent: parent.append_child(self)    # note: parent.append_child(self) will set self._parent
 
         self._defer_recalc = False
         self.dirty()
 
-    def dirty(self, parent=True, children=False):
-        self._is_dirty = True
-        if self._defer_dirty:
-            self._defered_dirty_parent |= parent
-            self._defered_dirty_children |= children
-            return
-        if parent or self._defered_dirty_parent:
-            if self._parent: self._parent.dirty(parent=True, children=False)
-        if children or self._defered_dirty_children:
+    def dirty(self, properties=None, parent=True, children=False):
+        if properties is None: properties = {'style', 'size', 'content'}
+        elif type(properties) is str: properties = {properties}
+        elif type(properties) is list: properties = set(properties)
+        self._dirty_properties |= properties
+        if parent: self._dirty_propagation['parent'] |= properties
+        if children: self._dirty_propagation['children'] |= properties
+        self.propagate_dirtiness()
+
+    @property
+    def is_dirty(self):
+        return bool(self._dirty_properties) or bool(self._dirty_propagation['parent']) or bool(self._dirty_propagation['children'])
+
+    def propagate_dirtiness(self):
+        if self._dirty_propagation['defer']: return
+        if self._dirty_propagation['parent']:
+            if self._parent:
+                self._parent.dirty(self._dirty_propagation['parent'], parent=True, children=False)
+            self._dirty_propagation['parent'].clear()
+        if self._dirty_propagation['children']:
             for child in self._children:
-                child.dirty(parent=False, children=True)
-        self._defered_dirty_parent = False
-        self._defered_dirty_children = False
+                child.dirty(self._dirty_propagation['children'], parent=False, children=True)
+            self._dirty_propagation['children'].clear()
+
+    @property
+    def defer_dirty_propagation(self):
+        return self._dirty_propagation['defer']
+    @defer_dirty_propagation.setter
+    def defer_dirty_propagation(self, v):
+        self._dirty_propagation['defer'] = bool(v)
+        self.propagate_dirtiness()
+
+    def clean(self):
+        '''
+        No need to clean if
+        - already clean,
+        - possibly more dirtiness to propagate,
+        - if deferring cleaning.
+        '''
+        if not self.is_dirty or self._defer_clean: return
+
+        # clean various properties
+        self._compute_style()
+        self._compute_content()
+        self._compute_preferred_size()
+
+    def _compute_style(self):
+        if self._defer_clean: return
+        if 'style' not in self._dirty_properties: return
+
+        self.defer_dirty_propagation = True
+
+        # rebuild up full selector
+        sel_parent = [] if not self._parent else self._parent._selector
+        sel_type = self.selector_type
+        sel_id = '#%s' % self._id if self._id else ''
+        sel_cls = ''.join('.%s' % c for c in self._classes)
+        sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
+        self._selector = sel_parent + [sel_type + sel_id + sel_cls + sel_pseudo]
+
+        # compute styles applied to self based on selector
+        self._computed_styles = self.default_style.compute_style(self._selector, ui_draw.stylesheet, self._custom_style)
+        self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
+
+        # tell children to recompute selector
+        for child in self._children: child._compute_style()
+
+        # style changes might have changed size
+        self.dirty('size')
+        self._dirty_properties.discard('style')
+
+        self.defer_dirty_propagation = False
+
+    def _compute_content(self):
+        if self._defer_clean: return
+        if 'content' not in self._dirty_properties: return
+        if not self.is_visible: return
+
+        self.defer_dirty_propagation = True
+
+        self.compute_content()
+        for child in self._children: child._compute_content()
+
+        # content changes might have changed size
+        self.dirty('size')
+        self._dirty_properties.discard('content')
+
+        self.defer_dirty_propagation = False
+
+    def _compute_preferred_size(self):
+        if self._defer_clean: return
+        if 'size' not in self._dirty_properties: return
+        if not self.is_visible: return
+
+        self.defer_dirty_propagation = True
+
+        self._content_width, self._content_height = 0, 0
+        for child in self._children: child._compute_preferred_size()
+        self.compute_children_content_size()
+
+        self.defer_dirty_propagation = False
+
 
     @property
     def children(self):
         return list(self._children)
-    @defer_dirty
-    def clear_children(self):
-        for child in list(self._children):
-            self.del_child(child)
     def append_child(self, child):
         assert child
         assert child not in self._children, 'attempting to add existing child?'
         if child._parent:
-            child._parent.del_child(child)
+            child._parent.delete_child(child)
         self._children.append(child)
         child.dirty()
         self.dirty()
-    def del_child(self, child):
+    def delete_child(self, child):
         assert child
         assert child in self._children, 'attempting to delete child that does not exist?'
         self._children.remove(child)
         child._parent = None
         child.dirty()
-        self.dirty()
+        self.dirty('content')
+    @UI_Core_Utils.defer_dirty()
+    def clear_children(self):
+        for child in list(self._children):
+            self.delete_child(child)
 
     @property
     def style(self):
-        return str(self._style_str or '')
+        return self._style_str
     @style.setter
     def style(self, style):
         self._style_str = str(style or '')
-        self._custom_styling = UI_Styling('*{%s;}' % self._style_str)
+        self._custom_style = UI_Styling('*{%s;}' % self._style_str)
         self.dirty()
     def add_style(self, style):
         self.style = '%s;%s' % (self.style, str(style or ''))
@@ -300,64 +438,33 @@ class UI_Core:
         self.dirty(parent=True, children=True)
 
     @property
-    def visible(self):
+    def is_visible(self):
+        # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
         return self._is_visible
 
     def get_visible_children(self):
         # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
         # NOTE: returns list of children without `display:none` style.
         #       does _NOT_ mean that the child is going to be drawn
-        #       (might still be clipped with scissor)
-        return [child for child in self._children if child.visible]
+        #       (might still be clipped with scissor or `visibility:hidden` style)
+        return [child for child in self._children if child.is_visible]
 
-    def _get_style_num(self, k, def_v, min_v=None, max_v=None):
-        v = self._computed_styles.get(k, 'auto')
-        if v == 'auto': v = def_v
-        if min_v is not None: v = max(min_v, v)
-        if max_v is not None: v = min(max_v, v)
-        return v
-    def _get_style_trbl(self, kb):
-        t = self._get_style_num('%s-top' % kb, 0)
-        r = self._get_style_num('%s-right' % kb, 0)
-        b = self._get_style_num('%s-bottom' % kb, 0)
-        l = self._get_style_num('%s-left' % kb, 0)
-        return (t,r,b,l)
-
-
-    def compute_style(self):
-        if not self._is_dirty: return
-
-        sel_parent = [] if not self._parent else self._parent._selector
-        sel_type = self.selector_type
-        sel_id = '#%s' % self._id if self._id else ''
-        sel_cls = ''.join('.%s' % c for c in self._classes)
-        sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
-        self._selector = sel_parent + [sel_type + sel_id + sel_cls + sel_pseudo]
-
-        self._computed_styles = self._default_styling.compute_style(self._selector, [ui_draw.stylesheet, self._custom_styling])
-        self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
-
-        for child in self._children: child.compute_style()
-
-    def compute_preferred_size(self):
-        if not self._is_dirty: return
-        if self._defer_recalc: return
-        if not self.visible: return
-
-        self._content_width, self._content_height = 0, 0
-        for child in self._children: child.compute_preferred_size()
-        self.compute_children_content_size()
 
     def layout(self):
         # recalculates width and height
 
         if not self._is_dirty: return
         if self._defer_recalc: return
-        if not self.visible: return
+        if not self.is_visible: return
 
         # determine how much space we will need for all the content (children)
         for child in self._children: child.layout()
-        self.layout_children()
+
+        display = self._computed_styles.get('display', 'block')
+        if display == 'flexbox': self.layout_flexbox()
+        elif display == 'block': self.layout_block()
+        elif display == 'inline': self.layout_inline()
+        else: pass
 
         min_width,  max_width  = self._get_style_num('min-width',  0), self._get_style_num('max-width',  float('inf'))
         min_height, max_height = self._get_style_num('min-height', 0), self._get_style_num('max-height', float('inf'))
@@ -376,6 +483,24 @@ class UI_Core:
             mid(self._get_style_num('height', self._content_height), min_height, max_height) +
             padding_bottom + border_width + margin_bottom
         )
+
+    def layout_flexbox(self):
+        style = self._computed_styles
+        direction = style.get('flex-direction', 'row')
+        wrap = style.get('flex-wrap', 'nowrap')
+        justify = style.get('justify-content', 'flex-start')
+        align_items = style.get('align-items', 'flex-start')
+        align_content = style.get('align-content', 'flex-start')
+
+    def layout_block(self):
+        pass
+
+    def layout_inline(self):
+        pass
+
+    def layout_none(self):
+        pass
+
 
     def position(self, left, top, width, height):
         # pos and size define where this element exists
@@ -410,11 +535,15 @@ class UI_Core:
             if r: return r
         return self
 
+
     ################################################################################
     # the following methods can be overridden to create different types of UI
 
     ## Layout, Positioning, and Drawing
     # `self.layout_children()` should set `self._content_width` and `self._content_height` based on children.
+    def compute_content(self): pass
+    def compute_preferred_size(self): pass
+
     def compute_children_content_size(self): pass
     def layout_children(self): pass
     def position_children(self, left, top, width, height): pass
@@ -434,3 +563,22 @@ class UI_Core:
     def on_mousedblclick(self): pass     # mouse left button is pressed twice in quick succession
     def on_mouseleave(self): pass        # mouse leaves self (:hover is removed)
     def on_scroll(self): pass            # self is being scrolled
+
+
+    #####################################################################
+    # HELPER FUNCTIONS
+    # MUST BE CALLED AFTER `compute_stile()` METHOD IS CALLED!
+
+    def _get_style_num(self, k, def_v, min_v=None, max_v=None):
+        v = self._computed_styles.get(k, 'auto')
+        if v == 'auto': v = def_v
+        if min_v is not None: v = max(min_v, v)
+        if max_v is not None: v = min(max_v, v)
+        return v
+
+    def _get_style_trbl(self, kb):
+        t = self._get_style_num('%s-top' % kb, 0)
+        r = self._get_style_num('%s-right' % kb, 0)
+        b = self._get_style_num('%s-bottom' % kb, 0)
+        l = self._get_style_num('%s-left' % kb, 0)
+        return (t,r,b,l)

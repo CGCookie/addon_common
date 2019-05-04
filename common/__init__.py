@@ -34,6 +34,7 @@ __all__ = [
     'logger',
     'maths',
     'metaclasses',
+    'parse',
     'profiler',
     'shaders',
     'ui',

@@ -63,6 +63,41 @@ def set_active_object(o):
 def set_active_object(o):
     bpy.context.window.view_layer.objects.active = o
 
+@blender_version_wrapper('<=', '2.79')
+def toggle_screen_header(ctx):
+    bpy.ops.screen.header(ctx)
+@blender_version_wrapper('>=', '2.80')
+def toggle_screen_header(ctx):
+    space = ctx['space_data'] if type(ctx) is dict else ctx.space_data
+    space.show_region_header = not space.show_region_header
+
+@blender_version_wrapper('<=', '2.79')
+def toggle_screen_toolbar(ctx):
+    bpy.ops.view3d.toolshelf(ctx)
+@blender_version_wrapper('>=', '2.80')
+def toggle_screen_toolbar(ctx):
+    space = ctx['space_data'] if type(ctx) is dict else ctx.space_data
+    space.show_region_toolbar = not space.show_region_toolbar
+
+@blender_version_wrapper('<=', '2.79')
+def toggle_screen_properties(ctx):
+    bpy.ops.view3d.properties(ctx)
+@blender_version_wrapper('>=', '2.80')
+def toggle_screen_properties(ctx):
+    space = ctx['space_data'] if type(ctx) is dict else ctx.space_data
+    space.show_region_ui = not space.show_region_ui
+
+@blender_version_wrapper('<=', '2.79')
+def toggle_screen_lastop(ctx):
+    # Blender 2.79 does not have a last operation region
+    pass
+@blender_version_wrapper('>=', '2.80')
+def toggle_screen_lastop(ctx):
+    space = ctx['space_data'] if type(ctx) is dict else ctx.space_data
+    space.show_region_hud = not space.show_region_hud
+
+
+
 def get_active_object():
     return bpy.context.active_object
 
@@ -140,7 +175,7 @@ def show_blender_text(textblock_name, hide_header=True, goto_top=True):
             space.top = 0
             if hide_header and area.regions[0].height != 1:
                 # hide header
-                bpy.ops.screen.header({'window':win, 'region':area.regions[2], 'area':area})
+                toggle_screen_header({'window':win, 'region':area.regions[2], 'area':area, 'space_data':space})
 
 def bversion(short=True):
     major,minor,rev = bpy.app.version
