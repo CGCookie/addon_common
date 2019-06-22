@@ -28,7 +28,7 @@ import random
 import traceback
 import functools
 import urllib.request
-from itertools import chain
+from itertools import chain, zip_longest
 from concurrent.futures import ThreadPoolExecutor
 
 import bpy
@@ -129,6 +129,7 @@ token_rules = [
         r'position',
         r'flex(-(direction|wrap|grow|shrink|basis))?',
         r'justify-content|align-content|align-items',
+        r'font(-(style|weight|size|family))?',
     ]),
     ('value', convert_token_to_string, [
         r'auto',
@@ -138,6 +139,9 @@ token_rules = [
         r'column|row',                          # flex-direction
         r'nowrap|wrap',                         # flex-wrap
         r'flex-start|flex-end|center|stretch',  # justify-content, align-content, align-items
+        r'normal|italic',                       # font-style
+        r'normal|bold',                         # font-weight
+        r'serif|sans-serif|monospace',          # font-family
     ]),
     ('cursor', convert_token_to_cursor, [
         r'default|auto|initial',
@@ -181,8 +185,11 @@ token_rules = [
         r'lightslategray|lightslategrey|slategray|slategrey|darkslategray|darkslategrey|black',     #   ^
     ]),
     ('pseudoclass', convert_token_to_string, [
-        r'hover',
-        r'active',
+        r'hover',   # applies when mouse is hovering over
+        r'active',  # applies between mousedown and mouseup
+        r'focus',   # applies if element has focus
+        #r'link',    # unvisited link
+        #r'visited', # visited link
     ]),
     ('num', convert_token_to_number, [
         r'-?((\d+)|(\d*\.\d+))',
@@ -191,6 +198,17 @@ token_rules = [
         r'[a-zA-Z_][a-zA-Z_-]*',
     ]),
 ]
+
+
+default_fonts = {
+    'default':       ('normal', 'normal', '12', 'serif'),
+    'caption':       ('normal', 'normal', '12', 'serif'),
+    'icon':          ('normal', 'normal', '12', 'serif'),
+    'menu':          ('normal', 'normal', '12', 'serif'),
+    'message-box':   ('normal', 'normal', '12', 'serif'),
+    'small-caption': ('normal', 'normal', '12', 'serif'),
+    'status-bar':    ('normal', 'normal', '12', 'serif'),
+}
 
 
 class UI_Style_Declaration:
@@ -202,23 +220,28 @@ class UI_Style_Declaration:
 
     Value is either a single token or a tuple if the token immediately following the first value is not ';'.
 
-        ex: border: 1 5;
+        ex: border: 1 yellow;
 
     '''
 
-    def __init__(self, lexer):
-        self.property = lexer.match_t_v('key')
+    def from_lexer(lexer):
+        prop = lexer.match_t_v('key')
         lexer.match_v_v(':')
         v = lexer.next_v();
         if lexer.peek_v() == ';':
-            self.value = v
+            val = v
         else:
             # tuple!
             l = [v]
             while lexer.peek_v() not in {';', '}'}:
                 l.append(lexer.next_v())
-            self.value = tuple(l)
+            val = tuple(l)
         lexer.match_v_v(';')
+        return UI_Style_Declaration(prop, val)
+
+    def __init__(self, prop="", val=""):
+        self.property = prop
+        self.value = val
     def __str__(self):
         return '<UI_Style_Declaration "%s=%s">' % (self.property, str(self.value))
     def __repr__(self): return self.__str__()
@@ -237,7 +260,10 @@ class UI_Style_RuleSet:
 
     '''
 
-    def __init__(self, lexer):
+    @staticmethod
+    def from_lexer(lexer):
+        rs = UI_Style_RuleSet()
+
         def elem():
             if lexer.peek_v() in {'.','#',':'}:
                 e = '*'
@@ -255,29 +281,43 @@ class UI_Style_RuleSet:
             return e
 
         # get selector
-        self.selectors = [[]]
+        rs.selectors = [[]]
         while lexer.peek_v() != '{':
             if lexer.peek_v() == '*' or 'id' in lexer.peek_t():
-                self.selectors[-1].append(elem())
+                rs.selectors[-1].append(elem())
             elif lexer.peek_v() in {'>'}:
                 # TODO: handle + and ~ combinators?
                 sibling = lexer.match_v_v({'>'})
-                self.selectors[-1].append(sibling)
-                self.selectors[-1].append(elem())
+                rs.selectors[-1].append(sibling)
+                rs.selectors[-1].append(elem())
             elif lexer.peek_v() == ',':
                 lexer.match_v_v(',')
-                self.selectors.append([])
+                rs.selectors.append([])
             else:
                 assert False, 'expected selector or "{" but saw "%s" on line %d' % (lexer.peek_v(),lexer.current_line())
 
         # get declarations list
-        self.decllist = []
+        rs.decllist = []
         lexer.match_v_v('{')
         while lexer.peek_v() != '}':
             while lexer.peek_v() == ';': lexer.match_v_v(';')
             if lexer.peek_v() == '}': break
-            self.decllist.append(UI_Style_Declaration(lexer))
+            rs.decllist.append(UI_Style_Declaration.from_lexer(lexer))
         lexer.match_v_v('}')
+
+        return rs
+
+    @staticmethod
+    def from_decllist(decllist, tagname, pseudoclass=None):
+        rs = UI_Style_RuleSet()
+        rs.selectors = [[tagname + (':%s'%pseudoclass if pseudoclass else '')]]
+        for k,v in decllist.items():
+            rs.decllist.append(UI_Style_Declaration(k,v))
+        return rs
+
+    def __init__(self):
+        self.selectors = []
+        self.decllist = []
 
     def __str__(self):
         s = ', '.join(' '.join(selector) for selector in self.selectors)
@@ -324,16 +364,34 @@ class UI_Styling:
     '''
 
     @staticmethod
+    def from_var(var, tagname='*', pseudoclass=None):
+        if not var: return UI_Styling()
+        if type(var) is UI_Styling: return var
+        sel = tagname + (':%s' % pseudoclass if pseudoclass else '')
+        if type(var) is dict: var = ['%s:%s' % (k,v) for (k,v) in var.items()]
+        if type(var) is list: var = ';'.join(var)
+        if type(var) is str:  var = UI_Styling('%s{%s;}' % (sel,var))
+        assert type(var) is UI_Styling
+        return var
+
+    @staticmethod
     def from_file(filename):
         lines = open(filename, 'rt').read()
         return UI_Styling(lines)
 
-    def __init__(self, lines):
-        charstream = Parse_CharStream(lines)            # convert input into character stream
-        lexer = Parse_Lexer(charstream, token_rules)    # tokenize the character stream
+    @staticmethod
+    def from_decllist(decllist, tagname='*', pseudoclass=None):
+        var = UI_Styling()
+        var.rules = [UI_Style_RuleSet.from_decllist(decllist, tagname, pseudoclass)]
+        return var
+
+    def __init__(self, lines=''):
         self.rules = []
-        while lexer.peek_t() != 'eof':
-            self.rules.append(UI_Style_RuleSet(lexer))
+        if lines:
+            charstream = Parse_CharStream(lines)            # convert input into character stream
+            lexer = Parse_Lexer(charstream, token_rules)    # tokenize the character stream
+            while lexer.peek_t() != 'eof':
+                self.rules.append(UI_Style_RuleSet.from_lexer(lexer))
 
     def __str__(self):
         if not self.rules: return '<UI_Styling>'
@@ -342,6 +400,11 @@ class UI_Styling:
     def get_decllist(self, selector):
         return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
 
+    def append(self, other_styling):
+        self.rules += other_styling.rules
+        return self
+
+
     @staticmethod
     def _trbl_split(v):
         if type(v) is not tuple: return (v, v, v, v)
@@ -349,6 +412,12 @@ class UI_Styling:
         elif len(v) == 2: return (v[0], v[1], v[0], v[1])
         elif len(v) == 3: return (v[0], v[1], v[2], v[1])
         else:             return (v[0], v[1], v[2], v[3])
+
+    @staticmethod
+    def _font_split(vs):
+        if type(vs) is not tuple:
+            return default_fonts[vs] if vs in default_fonts else default_fonts['default']
+        return tuple(v if v else d for (v,d) in zip_longest(vs,default_fonts['default']))
 
     @staticmethod
     def _expand_declarations(decls):
@@ -376,6 +445,12 @@ class UI_Styling:
                 decllist['border-right-color']  = vals[1]
                 decllist['border-bottom-color'] = vals[2]
                 decllist['border-left-color']   = vals[3]
+            elif p == 'font':
+                vals = UI_Styling._font_split(v)
+                decllist['font-style'] = v[0]
+                decllist['font-weight'] = v[1]
+                decllist['font-size'] = v[2]
+                decllist['font-family'] = v[3]
             elif p == 'background':
                 decllist['background-color'] = v
             elif p == 'width':
@@ -390,7 +465,7 @@ class UI_Styling:
         decllist = { k:v for (k,v) in decllist.items() if v != 'initial' }
         return decllist
 
-    def compute_style(self, selector, initial_styling, override_styling):
+    def compute_style(self, selector, *overriding_stylings):
         # collect all the declarations that apply to selector
         full = []
         if False:
@@ -403,16 +478,41 @@ class UI_Styling:
                 full += [d for rule in self.rules if rule.match(sub_selector) for d in rule.decllist]
         else:
             full += self.get_decllist(selector)
-        if override_styling: full += override_styling.get_decllist(selector)
 
-        # expand and override declarations
-        init_decllist = self._expand_declarations(initial_styling.get_decllist(selector)) if initial_styling else {}
-        full_decllist = self._expand_declarations(full)
+        for override in overriding_stylings:
+            full += override.get_decllist(selector)
 
-        # apply initial
-        decllist = init_decllist
-        decllist.update(full_decllist)
-        return decllist
+        return self._expand_declarations(full)
 
+    def filter_styling(self, tagname, pseudoclass=None):
+        if type(pseudoclass) is list: pseudoclass = ':'.join(pseudoclass)
+        selector = [tagname + (':%s'%pseudoclass if pseudoclass else '')]
+        decllist = self.compute_style(selector)
+        return UI_Styling.from_decllist(decllist, tagname=tagname, pseudoclass=pseudoclass)
 
+    # def compute_style(self, selector, initial_styling, override_styling):
+    #     # collect all the declarations that apply to selector
+    #     full = []
+    #     if False:
+    #         # Cascading not implemented correctly (only add prop+vals that are inherited)
+    #         # see: https://developer.mozilla.org/en-US/docs/Learn/CSS/Introduction_to_CSS/Cascade_and_inheritance
+    #         # see: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference
+    #         selector_parts = selector.split(' ')
+    #         for i in range(len(selector_parts)):
+    #             sub_selector = ' '.join(selector_parts[:i+1])
+    #             full += [d for rule in self.rules if rule.match(sub_selector) for d in rule.decllist]
+    #     else:
+    #         full += self.get_decllist(selector)
+    #     if override_styling: full += override_styling.get_decllist(selector)
 
+    #     # expand and override declarations
+    #     init_decllist = self._expand_declarations(initial_styling.get_decllist(selector)) if initial_styling else {}
+    #     full_decllist = self._expand_declarations(full)
+
+    #     # apply initial
+    #     decllist = init_decllist
+    #     decllist.update(full_decllist)
+    #     return decllist
+
+path = os.path.join(os.path.split(__file__)[0], 'ui_defaultstyles.css')
+ui_defaultstylings = UI_Styling.from_file(path) if os.path.exists(path) else UI_Styling()

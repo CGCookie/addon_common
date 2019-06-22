@@ -28,7 +28,7 @@ from ..common.blender import bversion
 from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger
 from ..common.drawing import Drawing
-from ..common.ui import UI_Document
+from ..common.ui_core import UI_Document
 
 if bversion() >= "2.80":
     import gpu

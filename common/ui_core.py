@@ -20,8 +20,9 @@ Created by Jonathan Denning, Jonathan Williamson
 '''
 
 import re
+from inspect import signature
 
-from .ui_styling import UI_Styling
+from .ui_styling import UI_Styling, ui_defaultstylings
 from .drawing import ScissorStack
 
 from .globals import Globals
@@ -97,22 +98,24 @@ class UI_Draw:
 
         def draw(left, top, width, height, style):
             nonlocal shader, batch, def_color
+            def set_uniform_float(shader_var, style_key, default_val):
+                shader.uniform_float(shader_var, style.get(style_key, default_val))
             shader.bind()
             shader.uniform_float('left',   left)
             shader.uniform_float('top',    top)
             shader.uniform_float('right',  left+width-1)
             shader.uniform_float('bottom', top-height+1)
-            shader.uniform_float('margin_left',   style.get('margin-left',   0))
-            shader.uniform_float('margin_right',  style.get('margin-right',  0))
-            shader.uniform_float('margin_top',    style.get('margin-top',    0))
-            shader.uniform_float('margin_bottom', style.get('margin-bottom', 0))
-            shader.uniform_float('border_width',        style.get('border-width',  0))
-            shader.uniform_float('border_radius',       style.get('border-radius', 0))
-            shader.uniform_float('border_left_color',   style.get('border-left-color',   def_color))
-            shader.uniform_float('border_right_color',  style.get('border-right-color',  def_color))
-            shader.uniform_float('border_top_color',    style.get('border-top-color',    def_color))
-            shader.uniform_float('border_bottom_color', style.get('border-bottom-color', def_color))
-            shader.uniform_float('background_color', style.get('background-color', def_color))
+            set_uniform_float('margin_left',         'margin-left',         0)
+            set_uniform_float('margin_right',        'margin-right',        0)
+            set_uniform_float('margin_top',          'margin-top',          0)
+            set_uniform_float('margin_bottom',       'margin-bottom',       0)
+            set_uniform_float('border_width',        'border-width',        0)
+            set_uniform_float('border_radius',       'border-radius',       0)
+            set_uniform_float('border_left_color',   'border-left-color',   def_color)
+            set_uniform_float('border_right_color',  'border-right-color',  def_color)
+            set_uniform_float('border_top_color',    'border-top-color',    def_color)
+            set_uniform_float('border_bottom_color', 'border-bottom-color', def_color)
+            set_uniform_float('background_color',    'background-color',    def_color)
             batch.draw(shader)
 
         UI_Draw._update = update
@@ -176,7 +179,7 @@ clean call order
 '''
 
 
-class UI_Core_Utils:
+class UI_Element_Utils:
     @staticmethod
     def defer_dirty(properties=None, parent=True, children=False):
         ''' prevents dirty propagation until the wrapped fn has finished '''
@@ -191,37 +194,109 @@ class UI_Core_Utils:
         return wrapper
 
 
-class UI_Core(UI_Core_Utils):
-    selector_type = ''  # filled in automatically by __init__
-    default_style = ''  # override this is subclass definition
+# https://www.w3schools.com/jsref/obj_event.asp
+# https://javascript.info/bubbling-and-capturing
+class UI_Event:
+    phases = [
+        'none',
+        'capturing',
+        'at target',
+        'bubbling',
+    ]
 
-    @classmethod
-    def init_default_style(cls):
-        s = cls.default_style
-        if type(s) is UI_Styling: return
-        if type(s) is dict: s = ['%s:%s' % (k,v) for (k,v) in s.items()]
-        if type(s) is list: s = ';'.join(s)
-        cls.default_style = UI_Styling('*{%s;}' % s)
+    def __init__(self):
+        self._eventPhase = 'none'
+        self._cancelBubble = False
+        self._cancelCapture = False
+        self._target = None
+        self._defaultPrevented = False
 
-    def __init__(self, parent=None, id=None, classes=None, style=None):
-        assert type(self) is not UI_Core, 'DO NOT INSTANTIATE DIRECTLY!'
+    def stop_propagation():
+        self.stop_bubbling()
+        self.stop_capturing()
+    def stop_bubbling():
+        self._cancelBubble = True
+    def stop_capturing():
+        self._cancelCapture = True
 
-        self.init_default_style()
+    def prevent_default():
+        self._defaultPrevented = True
 
-        tn = type(self).__name__.lower()
-        assert tn.startswith('ui_'), '%s has unhandled type name' % (type(self).__name__)
-        self.selector_type = tn[3:]     # remove 'UI_' at start
+    @property
+    def event_phase(self): return self._eventPhase
+    @event_phase.setter
+    def event_phase(self, v):
+        assert v in self.phases, "attempting to set event_phase to unknown value (%s)" % str(v)
+        self._eventPhase = v
 
-        self._parent = None             # set in parent.append_child(self) below
-        self._children = []             # list of all children
-        self._selector = None           # full selector of self, set in compute_style()
-        self._id = None                 # unique identifier for self
-        self._classes = set()           # TODO: should order matter here? (make list)
+    @property
+    def bubbling(self):
+        return self._eventPhase == 'bubbling' and not self._cancelBubble
+    @property
+    def capturing(self):
+        return self._eventPhase == 'capturing' and not self._cancelCapture
+    @property
+    def atTarget(self):
+        return self._eventPhase == 'at target'
+
+    @property
+    def target(self): return self._target
+
+    @property
+    def default_prevented(self): return self._defaultPrevented
+
+    @property
+    def eventPhase(self): return self._eventPhase
+
+
+
+class UI_Element(UI_Element_Utils):
+    def __init__(self, tagName, **kwargs):
+        # set to blank defaults, will be set again later in __init__()
+        self._tagName     = ''      # determines type of UI element
+        self._id          = ''      # unique identifier
+        self._classes_str = ''      # list of classes (space delimited string)
+        self._style_str   = ''      # custom style string
+        self._parent      = None    # set in parent.append_child(self) below
+        self._children    = []      # list of all children
+        self._scrollTop   = 0       # distance element is scrolled vertically
+        self._scrollLeft  = 0       # distance element is scrolled horizontally
+        self._innerText   = ''      # label, text to display, etc.
+
+        # all events with their respective callbacks
+        self._events = {
+            'on_focus':         [],     # focus is gained (:active is added)
+            'on_blur':          [],     # focus is lost (:active is removed)
+            'on_keydown':       [],     # key is pressed down
+            'on_keyup':         [],     # key is released
+            'on_keypress':      [],     # key is entered (down+up)
+            'on_mouseenter':    [],     # mouse enters self (:hover is added)
+            'on_mousemove':     [],     # mouse moves over self
+            'on_mousedown':     [],     # mouse left button is pressed down
+            'on_mouseup':       [],     # mouse left button is released
+            'on_mouseclick':    [],     # mouse left button is clicked (down+up while remaining on self)
+            'on_mousedblclick': [],     # mouse left button is pressed twice in quick succession
+            'on_mouseleave':    [],     # mouse leaves self (:hover is removed)
+            'on_scroll':        [],     # self is being scrolled
+        }
+
+        # updated by main ui system (hover, active, focus)
         self._pseudoclasses = set()     # TODO: should order matter here? (make list)
-        self._custom_style = None       # custom style UI_Style for self
-        self._style_str = ''            # custom style string for self
-        self._is_visible = False        # indicates if self is visible, set in compute_style()
+
+        # initialize styles in order: default, focus, active, hover
+        self._styling_default = UI_Styling()
+        self._styling_default.append(ui_defaultstylings.filter_styling(tagName))
+        self._styling_default.append(ui_defaultstylings.filter_styling(tagName, 'focus'))
+        self._styling_default.append(ui_defaultstylings.filter_styling(tagName, 'active'))
+        self._styling_default.append(ui_defaultstylings.filter_styling(tagName, 'hover'))
+        self._styling_default.append(ui_defaultstylings.filter_styling(tagName, ['hover','active']))
+
+        # cache
+        self._classes = []              # classes applied to element, set by self.classes, based on self._classes_str
+        self._selector = None           # full selector of self, built in compute_style()
+        self._styling_custom = None       # custom style UI_Style for self, set by self.style
         self._computed_styles = None    # computed style UI_Style after applying all styling
+        self._is_visible = False        # indicates if self is visible, set in compute_style(), based on self._computed_styles
 
         # TODO: REPLACE WITH BETTER PROPERTIES AND DELETE!!
         self._preferred_width, self._preferred_height = 0,0
@@ -247,11 +322,27 @@ class UI_Core(UI_Core_Utils):
         }
         self._defer_clean = False               # set to True to defer cleaning (useful when many changes are occurring)
 
-        self.style = style
-        self.id = id
-        self.classes = classes
-
-        if parent: parent.append_child(self)    # note: parent.append_child(self) will set self._parent
+        self.tagName = tagName
+        for (k,v) in kwargs.items():
+            if k in self._events or ('on_%s'%k) in self._events:
+                # key is an event; set callback
+                self.addEventListener(k, v)
+            elif hasattr(self, k):
+                # need to test that a setter exists for the property
+                class_attr = getattr(type(self), k, None)
+                if type(class_attr) is property:
+                    # this is a property
+                    if class_attr.fset is None:
+                        # read-only
+                        pass
+                    else:
+                        setattr(self, k, v)
+        if 'parent' in kwargs:
+            # note: parent.append_child(self) will set self._parent
+            kwargs['parent'].append_child(self)
+        if 'children' in kwargs:
+            for child in kwargs['children']:
+                self.append_child(child)
 
         self._defer_recalc = False
         self.dirty()
@@ -303,6 +394,9 @@ class UI_Core(UI_Core_Utils):
         self._compute_preferred_size()
 
     def _compute_style(self):
+        '''
+        rebuilds self._selector and computes the stylesheet, propagating computation to children
+        '''
         if self._defer_clean: return
         if 'style' not in self._dirty_properties: return
 
@@ -310,14 +404,16 @@ class UI_Core(UI_Core_Utils):
 
         # rebuild up full selector
         sel_parent = [] if not self._parent else self._parent._selector
-        sel_type = self.selector_type
+        sel_type = self._tagName
         sel_id = '#%s' % self._id if self._id else ''
         sel_cls = ''.join('.%s' % c for c in self._classes)
         sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
         self._selector = sel_parent + [sel_type + sel_id + sel_cls + sel_pseudo]
 
         # compute styles applied to self based on selector
-        self._computed_styles = self.default_style.compute_style(self._selector, ui_draw.stylesheet, self._custom_style)
+        if not self._styling_custom:
+            self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
+        self._computed_styles = self._styling_default.compute_style(self._selector, ui_draw.stylesheet, self._styling_custom)
         self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
 
         # tell children to recompute selector
@@ -360,15 +456,50 @@ class UI_Core(UI_Core_Utils):
 
 
     @property
+    def tagName(self):
+        return self._tagName
+    @tagName.setter
+    def tagName(self, ntagName):
+        errmsg = 'Tagname must contain only alpha and cannot be empty'
+        assert type(ntagName) is str, errmsg
+        ntagName = ntagName.lower()
+        assert ntagName, errmsg
+        assert len(set(ntagName) - set('abcdefghijklmnopqrstuvwxyz')) == 0, errmsg
+        if self._tagName == ntagName: return
+        self._tagName = ntagName
+        self.dirty(parent=True, children=True) # changing tagName can affect children styles!
+
+    @property
+    def innerText(self):
+        return self._innerText
+    @innerText.setter
+    def innerText(self, nText):
+        if self._innerText == nText: return
+        self._innerText = nText
+        self.dirty()
+
+    @property
+    def parent(self):
+        return self._parent
+    def get_pathToRoot(self):
+        l,cur = [],self
+        while cur: l,cur = l+[cur],cur._parent
+        return l
+
+    @property
     def children(self):
         return list(self._children)
     def append_child(self, child):
         assert child
-        assert child not in self._children, 'attempting to add existing child?'
+        if child in self._children:
+            # attempting to add existing child?
+            return
         if child._parent:
+            # detach child from prev parent
             child._parent.delete_child(child)
         self._children.append(child)
-        child.dirty()
+        child._parent = self
+        child.dirty(parent=False, children=True)
         self.dirty()
     def delete_child(self, child):
         assert child
@@ -377,21 +508,23 @@ class UI_Core(UI_Core_Utils):
         child._parent = None
         child.dirty()
         self.dirty('content')
-    @UI_Core_Utils.defer_dirty()
+    @UI_Element_Utils.defer_dirty()
     def clear_children(self):
         for child in list(self._children):
             self.delete_child(child)
 
     @property
     def style(self):
-        return self._style_str
+        return str(self._style_str)
     @style.setter
     def style(self, style):
         self._style_str = str(style or '')
-        self._custom_style = UI_Styling('*{%s;}' % self._style_str)
+        self._styling_custom = None
         self.dirty()
     def add_style(self, style):
-        self.style = '%s;%s' % (self.style, str(style or ''))
+        self._style_str = '%s;%s' % (self._style_str, str(style or ''))
+        self._styling_custom = None
+        self.dirty()
 
     @property
     def id(self):
@@ -400,25 +533,37 @@ class UI_Core(UI_Core_Utils):
     def id(self, nid):
         nid = '' if nid is None else nid.strip()
         if self._id == nid: return
-        self._id = id
+        self._id = nid
         self.dirty(parent=True, children=True) # changing id can affect children styles!
 
     @property
     def classes(self):
-        return ' '.join(self._classes)
+        return str(self._classes_str) # ' '.join(self._classes)
     @classes.setter
     def classes(self, classes):
-        classes = set(c for c in classes.split(' ') if c) if classes else set()
-        if classes == self._classes: return
+        classes = ' '.join(c for c in classes.split(' ') if c) if classes else ''
+        l = classes.split(' ')
+        pcount = { p:0 for p in l }
+        classes = []
+        for p in l:
+            pcount[p] += 1
+            if pcount[p] == 1: classes += [p]
+        classes_str = ' '.join(classes)
+        if self._classes_str == classes_str: return
+        self._classes_str = classes_str
         self._classes = classes
         self.dirty(parent=True, children=True) # changing classes can affect children styles!
     def add_class(self, cls):
+        assert ' ' not in cls, 'cannot add class "%s" to "%s" because it has a space in it' % (cls, self._tagName)
         if cls in self._classes: return
         self._classes.add(cls)
+        self._classes_str = '%s %s' (self._classes_str, cls)
         self.dirty(parent=True, children=True) # changing classes can affect children styles!
     def del_class(self, cls):
+        assert ' ' not in cls, 'cannot del class "%s" from "%s" because it has a space in it' % (cls, self._tagName)
         if cls not in self._classes: return
-        self._classes.discard(cls)
+        self._classes.remove(cls)
+        self._classes_str = ' '.join(self._classes)
         self.dirty(parent=True, children=True) # changing classes can affect children styles!
 
     @property
@@ -427,15 +572,37 @@ class UI_Core(UI_Core_Utils):
     def clear_pseudoclass(self):
         if not self._pseudoclasses: return
         self._pseudoclasses = set()
-        self.dirty(parent=True, children=True)
+        self.dirty(parent=True, children=True) # changing pseudoclasses can affect children styles!
     def add_pseudoclass(self, pseudo):
         if pseudo in self._pseudoclasses: return
         self._pseudoclasses.add(pseudo)
-        self.dirty(parent=True, children=True)
+        self.dirty(parent=True, children=True) # changing pseudoclasses can affect children styles!
     def del_pseudoclass(self, pseudo):
         if pseudo not in self._pseudoclasses: return
         self._pseudoclasses.discard(pseudo)
-        self.dirty(parent=True, children=True)
+        self.dirty(parent=True, children=True) # changing pseudoclasses can affect children styles!
+    @property
+    def is_active(self): return 'active' in self._pseudoclasses
+    @property
+    def is_hovered(self): return 'hover' in self._pseudoclasses
+    @property
+    def is_focused(self): return 'focus' in self._pseudoclasses
+
+    @property
+    def scrollTop(self):
+        return self._scrollTop
+    @scrollTop.setter
+    def scrollTop(self, v):
+        self._scrollTop = v
+        self.dirty()
+
+    @property
+    def scrollLeft(self):
+        return self._scrollLeft
+    @scrollLeft.setter
+    def scrollLeft(self, v):
+        self._scrollLeft = v
+        self.dirty()
 
     @property
     def is_visible(self):
@@ -464,7 +631,7 @@ class UI_Core(UI_Core_Utils):
         if display == 'flexbox': self.layout_flexbox()
         elif display == 'block': self.layout_block()
         elif display == 'inline': self.layout_inline()
-        else: pass
+        else: self.layout_none()
 
         min_width,  max_width  = self._get_style_num('min-width',  0), self._get_style_num('max-width',  float('inf'))
         min_height, max_height = self._get_style_num('min-height', 0), self._get_style_num('max-height', float('inf'))
@@ -537,6 +704,42 @@ class UI_Core(UI_Core_Utils):
 
 
     ################################################################################
+    # event-related functionality
+
+    def add_eventListener(self, event, callback, useCapture=False):
+        if not event.startswith('on_'): event = 'on_%s' % event
+        sig = signature(callback)
+        if len(sig.parameters) == 0:
+            old_callback = callback
+            callback = lambda e: old_callback()
+        self._events[event] += [(useCapture, callback)]
+
+    def remove_eventListener(self, event, callback):
+        if not event.startswith('on_'): event = 'on_%s' % event
+        self._events[event] = [(capture,cb) for (capture,cb) in self._events[event] if cb != callback]
+
+    def _fire_event(self, event, details):
+        ph = details.event_phase
+        cap, bub, df = details.capturing, details.bubbling, not details.default_prevented
+        if (cap and ph == 'capturing') or (df and ph == 'at target'):
+            for (cap,cb) in self._events[event]:
+                if cap: cb(details)
+        if (bub and ph == 'bubbling') or (df and ph == 'at target'):
+            for (cap,cb) in self._events[event]:
+                if not cap: cb(details)
+
+    def dispatch_event(self, event, details=None):
+        if not event.startswith('on_'): event = 'on_%s' % event
+        details = details or UI_Event()
+        path = self.get_pathToRoot()[1:] # skipping first item, which is self
+        details.event_phase = 'capturing'
+        for cur in path[::-1]: cur._fire_event(event, details)
+        details.event_phase = 'at target'
+        self._fire_event(event, details)
+        details.event_phase = 'bubbling'
+        for cur in path: cur._fireEvent(event, details)
+
+    ################################################################################
     # the following methods can be overridden to create different types of UI
 
     ## Layout, Positioning, and Drawing
@@ -549,25 +752,10 @@ class UI_Core(UI_Core_Utils):
     def position_children(self, left, top, width, height): pass
     def draw_children(self): pass
 
-    # Event Handling
-    def on_focus(self): pass             # self gains focus (:active is added)
-    def on_blur(self): pass              # self loses focus (:active is removed)
-    def on_keydown(self): pass           # key is pressed down
-    def on_keyup(self): pass             # key is released
-    def on_keypress(self): pass          # key is entered (down+up)
-    def on_mouseenter(self): pass        # mouse enters self (:hover is added)
-    def on_mousemove(self): pass         # mouse moves over self
-    def on_mousedown(self): pass         # mouse left button is pressed down
-    def on_mouseup(self): pass           # mouse left button is released
-    def on_mouseclick(self): pass        # mouse left button is clicked (down+up while remaining on self)
-    def on_mousedblclick(self): pass     # mouse left button is pressed twice in quick succession
-    def on_mouseleave(self): pass        # mouse leaves self (:hover is removed)
-    def on_scroll(self): pass            # self is being scrolled
-
 
     #####################################################################
-    # HELPER FUNCTIONS
-    # MUST BE CALLED AFTER `compute_stile()` METHOD IS CALLED!
+    # helper functions
+    # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
 
     def _get_style_num(self, k, def_v, min_v=None, max_v=None):
         v = self._computed_styles.get(k, 'auto')
@@ -582,3 +770,184 @@ class UI_Core(UI_Core_Utils):
         b = self._get_style_num('%s-bottom' % kb, 0)
         l = self._get_style_num('%s-left' % kb, 0)
         return (t,r,b,l)
+
+
+
+class UI_Document:
+    '''
+    This is the main manager of the UI system.
+    '''
+
+    def __init__(self, **kwargs):
+        self.drawing = Globals.drawing
+        self.windows = []
+        self.windows_unfocus = None
+        self.active = None
+        self.active_last = None
+        self.focus = None
+        self.focus_darken = True
+        self.focus_close_on_leave = True
+        self.focus_close_distance = self.drawing.scale(30)
+
+        self.tooltip_delay = 0.75
+        self.tooltip_value = None
+        self.tooltip_time = time.time()
+        self.tooltip_show = kwargs.get('show tooltips', True)
+        self.tooltip_window = UI_Dialog(None, {'bgcolor':(0,0,0,0.75), 'visible':False})
+        self.tooltip_label = self.tooltip_window.add(UI_Label('foo bar'))
+        self.tooltip_offset = Vec2D((15, -15))
+
+        self.interval_id = 0
+        self.intervals = {}
+
+    def set_show_tooltips(self, v):
+        self.tooltip_show = v
+        if not v: self.tooltip_window.visible = v
+    def set_tooltip_label(self, v):
+        if not v:
+            self.tooltip_window.visible = False
+            self.tooltip_value = None
+            return
+        if self.tooltip_value != v:
+            self.tooltip_window.visible = False
+            self.tooltip_value = v
+            self.tooltip_time = time.time()
+            self.tooltip_label.set_label(v)
+            return
+        if time.time() >= self.tooltip_time + self.tooltip_delay:
+            self.tooltip_window.visible = self.tooltip_show
+        # self.tooltip_window.fn_sticky.set(self.active.pos + self.active.size)
+        # self.tooltip_window.update_pos()
+
+    def create_window(self, title, options):
+        win = UI_Dialog(title, options)
+        self.windows.append(win)
+        return win
+
+    def delete_window(self, win):
+        if win.fn_event_handler: win.fn_event_handler(None, UI_Event('WINDOW', 'CLOSE'))
+        if win == self.focus: self.clear_focus()
+        if win == self.active: self.clear_active()
+        if win in self.windows: self.windows.remove(win)
+        win.delete()
+
+    def clear_active(self): self.active = None
+
+    def has_focus(self): return self.focus is not None
+    def set_focus(self, win, darken=True, close_on_leave=False):
+        self.clear_focus()
+        if win is None: return
+        win.visible = True
+        self.focus = win
+        self.focus_darken = darken
+        self.focus_close_on_leave = close_on_leave
+        self.active = win
+        self.windows_unfocus = [win for win in self.windows if win != self.focus]
+        self.windows = [self.focus]
+
+    def clear_focus(self):
+        if self.focus is None: return
+        self.windows += self.windows_unfocus
+        self.windows_unfocus = None
+        self.active = None
+        self.focus = None
+
+    def draw_darken(self):
+        bgl.glPushAttrib(bgl.GL_ALL_ATTRIB_BITS)
+        bgl.glMatrixMode(bgl.GL_PROJECTION)
+        bgl.glPushMatrix()
+        bgl.glLoadIdentity()
+        bgl.glColor4f(0,0,0,0.25)    # TODO: use window background color??
+        bgl.glEnable(bgl.GL_BLEND)
+        bgl.glDisable(bgl.GL_DEPTH_TEST)
+        bgl.glBegin(bgl.GL_QUADS)   # TODO: not use immediate mode
+        bgl.glVertex2f(-1, -1)
+        bgl.glVertex2f( 1, -1)
+        bgl.glVertex2f( 1,  1)
+        bgl.glVertex2f(-1,  1)
+        bgl.glEnd()
+        bgl.glPopMatrix()
+        bgl.glPopAttrib()
+
+    def draw_postpixel(self, context):
+        ScissorStack.start(context)
+        bgl.glEnable(bgl.GL_BLEND)
+        if self.focus:
+            for win in self.windows_unfocus:
+                win.draw_postpixel()
+            if self.focus_darken:
+                self.draw_darken()
+            self.focus.draw_postpixel()
+        else:
+            for win in self.windows:
+                win.draw_postpixel()
+        self.tooltip_window.draw_postpixel()
+        ScissorStack.end()
+
+    def register_interval_callback(self, fn_callback, interval):
+        self.interval_id += 1
+        self.intervals[self.interval_id] = {
+            'callback': fn_callback,
+            'interval': interval,
+            'next': 0,
+        }
+        return self.interval_id
+
+    def unregister_interval_callback(self, interval_id):
+        del self.intervals[self.interval_id]
+
+    def update(self):
+        cur_time = time.time()
+        for interval_id in self.intervals:
+            interval = self.intervals[interval_id]
+            if interval['next'] > cur_time: continue
+            interval['callback']()
+            interval['next'] = cur_time + interval['interval']
+
+    def modal(self, context, event):
+        if event.type == 'MOUSEMOVE':
+            mouse = Point2D((float(event.mouse_region_x), float(event.mouse_region_y)))
+            self.tooltip_window.fn_sticky.set(mouse + self.tooltip_offset)
+            self.tooltip_window.update_pos()
+            if self.focus and self.focus_close_on_leave:
+                d = self.focus.distance(mouse)
+                if d > self.focus_close_distance:
+                    self.delete_window(self.focus)
+
+        ret = {}
+
+        if self.active and self.active.state != 'main':
+            ret = self.active.modal(context, event)
+            if not ret: self.active = None
+        elif self.focus:
+            ret = self.focus.modal(context, event)
+        else:
+            self.active = None
+            for win in reversed(self.windows):
+                ret = win.modal(context, event)
+                if ret:
+                    self.active = win
+                    break
+
+        if self.active != self.active_last:
+            if self.active_last and self.active_last.fn_event_handler:
+                self.active_last.fn_event_handler(context, UI_Event('HOVER', 'LEAVE'))
+            if self.active and self.active.fn_event_handler:
+                self.active.fn_event_handler(context, UI_Event('HOVER', 'ENTER'))
+        self.active_last = self.active
+
+        if self.active:
+            if self.active.fn_event_handler:
+                self.active.fn_event_handler(context, event)
+            if self.active:
+                tooltip = self.active.get_tooltip()
+                self.set_tooltip_label(tooltip)
+        else:
+            self.set_tooltip_label(None)
+
+        return ret
+
+
+
+
+

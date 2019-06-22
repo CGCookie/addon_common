@@ -320,3 +320,12 @@ def convert_token_to_string(s):
 
 
 
+#####################################################################################
+# below are various helper functions for ui functions
+
+def helper_argtranslate(key_from, key_to, kwargs):
+    if key_from in kwargs:
+        kwargs[key_to] = kwargs[key_from]
+        del kwargs[key_from]
+
+

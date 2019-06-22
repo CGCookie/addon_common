@@ -85,7 +85,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Uti
             self.start()
         except Exception as e:
             print('Caught exception while trying to start')
-            print(e)
+            debugger.print_exception()
             raise e
 
         self.ui_start()
@@ -143,7 +143,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Uti
             self.update()
         except Exception as e:
             print('Caught exception while calling update')
-            print(e)
+            debugger.print_exception()
 
         if ret: return ret
 
