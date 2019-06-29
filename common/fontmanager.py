@@ -40,7 +40,7 @@ class FontManager:
         return int(dpi * ui_scale * pixel_size)
 
     @staticmethod
-    def load(val):
+    def load(val, load_callback=None):
         if val is None:
             fontid = FontManager._last_fontid
         elif type(val) is int:
@@ -53,6 +53,7 @@ class FontManager:
             fontid = blf.load(val)
             print('Loaded font "%s" as id %d' % (val, fontid))
             FontManager._cache[val] = fontid
+            if load_callback: load_callback(fontid)
         FontManager._last_fontid = fontid
         return fontid
 
@@ -85,6 +86,10 @@ class FontManager:
     @staticmethod
     def clipping(xymin, xymax, fontid=None):
         return blf.clipping(FontManager.load(fontid), *xymin, *xymax)
+
+    @staticmethod
+    def color(color, fontid=None):
+        blf.color(FontManager.load(fontid), *color)
 
     @staticmethod
     def dimensions(text, fontid=None):

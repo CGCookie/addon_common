@@ -231,7 +231,7 @@ class Actions:
         #     #dprint(context.space_data)
         #     return {'RUNNING_MODAL'}
 
-        t,pressed = event.type, event.value=='PRESS'
+        t, pressed = event.type, event.value=='PRESS'
 
         self.mousemove_prev = self.mousemove
         self.timer = (t in Actions.timer_actions)
@@ -242,7 +242,7 @@ class Actions:
         if t in self.ignore_actions: return
 
         if print_actions:
-            if t not in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE', 'TIMER'}:
+            if t not in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE', 'TIMER', 'TIMER_REPORT', 'TIMERREGION'}:
                 print((event.type, event.value))
 
         if self.timer:

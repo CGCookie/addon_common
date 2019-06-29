@@ -116,6 +116,7 @@ token_rules = [
         r'[-.:*>{},();]',
     ]),
     ('key', convert_token_to_string, [
+        r'color',
         r'display',
         r'background(-color)?',
         r'margin(-(left|right|top|bottom))?',
@@ -130,6 +131,7 @@ token_rules = [
         r'flex(-(direction|wrap|grow|shrink|basis))?',
         r'justify-content|align-content|align-items',
         r'font(-(style|weight|size|family))?',
+        r'white-space',
     ]),
     ('value', convert_token_to_string, [
         r'auto',
@@ -142,6 +144,7 @@ token_rules = [
         r'normal|italic',                       # font-style
         r'normal|bold',                         # font-weight
         r'serif|sans-serif|monospace',          # font-family
+        r'normal|nowrap|pre|pre-wrap|pre-line', # white-space
     ]),
     ('cursor', convert_token_to_cursor, [
         r'default|auto|initial',
@@ -192,7 +195,7 @@ token_rules = [
         #r'visited', # visited link
     ]),
     ('num', convert_token_to_number, [
-        r'-?((\d+)|(\d*\.\d+))',
+        r'(?P<num>-?((\d+)|(\d*\.\d+)))(?P<unit>px|vw|vh|pt|%|)',
     ]),
     ('id', convert_token_to_string, [
         r'[a-zA-Z_][a-zA-Z_-]*',
@@ -201,13 +204,13 @@ token_rules = [
 
 
 default_fonts = {
-    'default':       ('normal', 'normal', '12', 'serif'),
-    'caption':       ('normal', 'normal', '12', 'serif'),
-    'icon':          ('normal', 'normal', '12', 'serif'),
-    'menu':          ('normal', 'normal', '12', 'serif'),
-    'message-box':   ('normal', 'normal', '12', 'serif'),
-    'small-caption': ('normal', 'normal', '12', 'serif'),
-    'status-bar':    ('normal', 'normal', '12', 'serif'),
+    'default':       ('normal', 'normal', '12', 'sans-serif'),
+    'caption':       ('normal', 'normal', '12', 'sans-serif'),
+    'icon':          ('normal', 'normal', '12', 'sans-serif'),
+    'menu':          ('normal', 'normal', '12', 'sans-serif'),
+    'message-box':   ('normal', 'normal', '12', 'sans-serif'),
+    'small-caption': ('normal', 'normal', '12', 'sans-serif'),
+    'status-bar':    ('normal', 'normal', '12', 'sans-serif'),
 }
 
 
@@ -514,5 +517,5 @@ class UI_Styling:
     #     decllist.update(full_decllist)
     #     return decllist
 
-path = os.path.join(os.path.split(__file__)[0], 'ui_defaultstyles.css')
+path = os.path.join(os.path.dirname(__file__), 'config', 'ui_defaultstyles.css')
 ui_defaultstylings = UI_Styling.from_file(path) if os.path.exists(path) else UI_Styling()

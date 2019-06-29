@@ -20,6 +20,8 @@ Created by Jonathan Denning, Jonathan Williamson
 '''
 
 import re
+import random
+from functools import lru_cache
 
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
@@ -308,7 +310,7 @@ def convert_token_to_cursor(c):
     return cursorname_to_cursor[c]
 
 def convert_token_to_number(n):
-    if type(n) is re.Match: n = n.group(0)
+    if type(n) is re.Match: n = n.group('num')
     return float(n)
 
 def skip_token(n):
@@ -328,4 +330,25 @@ def helper_argtranslate(key_from, key_to, kwargs):
         kwargs[key_to] = kwargs[key_from]
         del kwargs[key_from]
 
+@lru_cache(maxsize=1024)
+def helper_wraptext(text='', width=0, fontid=0, fontsize=12, preserve_newlines=False, collapse_spaces=True, wrap_text=True):
+    tw = Globals.drawing.get_text_width
+    size_prev = Globals.drawing.set_font_size(fontsize, fontid=fontid, force=True)
 
+    if not preserve_newlines:
+        text = re.sub(r'\n', ' ', text)
+    if collapse_spaces:
+        text = re.sub(r' +', ' ', text)
+    if wrap_text:
+        cline,*ltext = text.split(' ')
+        nlines = []
+        for cword in ltext:
+            nline = '%s %s'%(cline,cword)
+            if tw(nline) <= width: cline = nline
+            else: nlines,cline = nlines+[cline],cword
+        nlines += [cline]
+        text = '\n'.join(nlines)
+
+    Globals.drawing.set_font_size(size_prev, fontid=fontid, force=True)
+    print('wrapped ' + str(random.random()))
+    return text

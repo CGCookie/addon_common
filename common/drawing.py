@@ -48,35 +48,24 @@ from .debug import dprint
 
 class Drawing:
     _instance = None
-    _dpi = 72
     _dpi_mult = 1
     _prefs = get_preferences()
 
     @staticmethod
     @blender_version_wrapper('<','2.79')
     def update_dpi():
-        Drawing._dpi = Drawing._prefs.system.dpi
-        if Drawing._prefs.system.virtual_pixel_mode == 'DOUBLE':
-            Drawing._dpi *= 2
-        Drawing._dpi *= Drawing._prefs.system.pixel_size
-        Drawing._dpi = int(Drawing._dpi)
-        Drawing._dpi_mult = Drawing._dpi / 72
+        dbl = 2 if Drawing._prefs.system.virtual_pixel_mode == 'DOUBLE' else 1
+        Drawing._dpi_mult = int(Drawing._prefs.system.dpi * Drawing._prefs.system.pixel_size * dbl) / 72
 
     @staticmethod
-    @blender_version_wrapper('>=','2.79')
+    @blender_version_wrapper('==','2.79')
     def update_dpi():
-        Drawing._ui_scale = Drawing._prefs.view.ui_scale
-        Drawing._pixel_size = Drawing._prefs.system.pixel_size
-        Drawing._sysdpi = Drawing._prefs.system.dpi
-        Drawing._dpi = 72 # Drawing._prefs.system.dpi
-        Drawing._dpi *= Drawing._ui_scale
-        Drawing._dpi *= Drawing._pixel_size
-        Drawing._dpi = int(Drawing._dpi)
-        Drawing._dpi_mult = Drawing._ui_scale * Drawing._pixel_size * Drawing._sysdpi / 72
-        s = 'DPI information: scale:%0.2f, pixel:%0.2f, dpi:%d' % (Drawing._ui_scale, Drawing._pixel_size, Drawing._sysdpi)
-        if s != getattr(Drawing, '_last_dpi_info', None):
-            Drawing._last_dpi_info = s
-            dprint(s)
+        Drawing._dpi_mult = Drawing._prefs.view.ui_scale * Drawing._prefs.system.pixel_size * Drawing._prefs.system.dpi / 72
+
+    @staticmethod
+    @blender_version_wrapper('>=','2.80')
+    def update_dpi():
+        Drawing._dpi_mult = Drawing._prefs.view.ui_scale * Drawing._prefs.system.pixel_size
 
     @staticmethod
     def initialize():
@@ -140,8 +129,6 @@ class Drawing:
             self.line_cache[key] = {
                 'line height': round(fm.dimensions(all_chars, fontid=fontid)[1] + self.scale(4)),
                 'line base': round(fm.dimensions(all_caps, fontid=fontid)[1]),
-                # 'line height': round(blf.dimensions(self.font_id, all_chars)[1] + self.scale(4)),
-                # 'line base': round(blf.dimensions(self.font_id, all_caps)[1]),
             }
         info = self.line_cache[key]
         self.line_height = info['line height']
@@ -168,8 +155,6 @@ class Drawing:
             else:
                 get_width = lambda t: math.ceil(fm.dimensions(t, fontid=fontid)[0])
                 get_height = lambda t: math.ceil(fm.dimensions(t, fontid=fontid)[1])
-                # get_width = lambda t: math.ceil(blf.dimensions(self.font_id, t)[0])
-                # get_height = lambda t: math.ceil(blf.dimensions(self.font_id, t)[1])
                 d['width'] = max(get_width(l) for l in lines)
                 d['height'] = get_height(text)
                 d['line height'] = self.line_height * len(lines)
@@ -204,6 +189,7 @@ class Drawing:
         if enable: self.enable_stipple()
         else: self.disable_stipple()
 
+    @blender_version_wrapper('<=','2.79')
     def text_draw2D(self, text, pos:Point2D, color, dropshadow=None, fontsize=None, fontid=None):
         if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
 
@@ -221,6 +207,26 @@ class Drawing:
             fm.draw(line, xyz=(l, t-lb, 0), fontid=fontid)
             # blf.position(self.font_id, l, t - lb, 0)
             # blf.draw(self.font_id, line)
+            t -= lh
+
+        if fontsize: self.set_font_size(size_prev, fontid=fontid)
+
+    @blender_version_wrapper('>=', '2.80')
+    def text_draw2D(self, text, pos:Point2D, color, dropshadow=None, fontsize=None, fontid=None):
+        if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
+
+        lines = str(text).splitlines()
+        l,t = round(pos[0]),round(pos[1])
+        lh = self.line_height
+        lb = self.line_base
+
+        if dropshadow: self.text_draw2D(text, (l+1,t-1), dropshadow, fontsize=fontsize)
+
+        bgl.glEnable(bgl.GL_BLEND)
+        fm.color(color, fontid=fontid)
+        for line in lines:
+            th = self.get_text_height(line)
+            fm.draw(line, xyz=(l, t-lb, 0), fontid=fontid)
             t -= lh
 
         if fontsize: self.set_font_size(size_prev, fontid=fontid)

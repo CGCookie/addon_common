@@ -75,7 +75,7 @@ class CookieCutter_UI:
             return run
 
     def ui_init(self):
-        #self.wm = UI_Document()
+        self.document = UI_Document(self.context)
         self.drawing = Globals.drawing
         self.drawing.set_region(bpy.context.space_data, bpy.context.region, bpy.context.space_data.region_3d, bpy.context.window)
         self.blenderui_init()
@@ -101,6 +101,7 @@ class CookieCutter_UI:
             self._draw_post2d()
 
             try:
+                self.document.draw(self.context)
                 #self.wm.draw_postpixel(self.context)
                 pass
             except Exception as e:
@@ -114,7 +115,9 @@ class CookieCutter_UI:
         self._area.tag_redraw()
 
     def ui_update(self):
+        self.drawing.update_dpi()
         self._area.tag_redraw()
+        self.document.update(self.context, self.event)
         ret = None #self.wm.modal(self.context, self.event)
         #if self.wm.has_focus(): return True
         if ret and 'hover' in ret: return True

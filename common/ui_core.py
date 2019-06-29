@@ -19,16 +19,66 @@ Created by Jonathan Denning, Jonathan Williamson
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+import os
 import re
+import bpy
 from inspect import signature
 
 from .ui_styling import UI_Styling, ui_defaultstylings
+from .ui_utilities import helper_wraptext
 from .drawing import ScissorStack
+
+from .useractions import Actions
 
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
-from .maths import Vec2D, Color, mid, Box2D, Size2D
+from .maths import Vec2D, Color, mid, Box2D, Size2D, Point2D
 from .shaders import Shader
+from .fontmanager import FontManager
+
+def get_font_path(fn, ext=None):
+    if ext: fn = '%s.%s' % (fn,ext)
+    paths = [
+        os.path.abspath(os.path.curdir),
+        os.path.join(os.path.abspath(os.path.curdir), 'fonts'),
+        os.path.join(os.path.dirname(__file__), 'fonts'),
+    ]
+    for path in paths:
+        p = os.path.join(path, fn)
+        if os.path.exists(p): return p
+    return None
+
+fontmap = {
+    'serif': {
+        'normal normal': 'DroidSerif-Regular.ttf',
+        'italic normal': 'DroidSerif-Italic.ttf',
+        'normal bold':   'DroidSerif-Bold.ttf',
+        'italic bold':   'DroidSerif-BoldItalic.ttf',
+    },
+    'sans-serif': {
+        'normal normal': 'DroidSans-Blender.ttf',
+        'italic normal': 'OpenSans-Italic.ttf',
+        'normal bold':   'OpenSans-Bold.ttf',
+        'italic bold':   'OpenSans-BoldItalic.ttf',
+    },
+    'monospace': {
+        'normal normal': 'DejaVuSansMono.ttf',
+        'italic normal': 'DejaVuSansMono.ttf',
+        'normal bold':   'DejaVuSansMono.ttf',
+        'italic bold':   'DejaVuSansMono.ttf',
+    },
+}
+def setup_font(fontid):
+    FontManager.aspect(1, fontid)
+    FontManager.enable_kerning_default(fontid)
+def get_font(fontfamily, fontstyle=None, fontweight=None):
+    if fontfamily in fontmap:
+        styleweight = '%s %s' % (fontstyle or 'normal', fontweight or 'normal')
+        fontfamily = fontmap[fontfamily][styleweight]
+    path = get_font_path(fontfamily)
+    assert path, 'could not find font "%s"' % fontfamily
+    fontid = FontManager.load(path, setup_font)
+    return fontid
 
 
 class UI_Draw:
@@ -96,21 +146,23 @@ class UI_Draw:
             shader.bind()
             shader.uniform_float("uMVPMatrix", get_pixel_matrix())
 
-        def draw(left, top, width, height, style):
+        def draw(left, top, width, height, dpi_mult, style):
             nonlocal shader, batch, def_color
             def set_uniform_float(shader_var, style_key, default_val):
                 shader.uniform_float(shader_var, style.get(style_key, default_val))
+            def set_uniform_float_mult(shader_var, style_key, default_val):
+                shader.uniform_float(shader_var, style.get(style_key, default_val) * dpi_mult)
             shader.bind()
             shader.uniform_float('left',   left)
             shader.uniform_float('top',    top)
             shader.uniform_float('right',  left+width-1)
             shader.uniform_float('bottom', top-height+1)
-            set_uniform_float('margin_left',         'margin-left',         0)
-            set_uniform_float('margin_right',        'margin-right',        0)
-            set_uniform_float('margin_top',          'margin-top',          0)
-            set_uniform_float('margin_bottom',       'margin-bottom',       0)
-            set_uniform_float('border_width',        'border-width',        0)
-            set_uniform_float('border_radius',       'border-radius',       0)
+            set_uniform_float_mult('margin_left',   'margin-left',   0)
+            set_uniform_float_mult('margin_right',  'margin-right',  0)
+            set_uniform_float_mult('margin_top',    'margin-top',    0)
+            set_uniform_float_mult('margin_bottom', 'margin-bottom', 0)
+            set_uniform_float_mult('border_width',  'border-width',  0)
+            set_uniform_float_mult('border_radius', 'border-radius', 0)
             set_uniform_float('border_left_color',   'border-left-color',   def_color)
             set_uniform_float('border_right_color',  'border-right-color',  def_color)
             set_uniform_float('border_top_color',    'border-top-color',    def_color)
@@ -137,8 +189,8 @@ class UI_Draw:
         ''' only need to call once every redraw '''
         UI_Draw._update()
 
-    def draw(self, left, top, width, height, style):
-        UI_Draw._draw(left, top, width, height, style)
+    def draw(self, left, top, width, height, dpi_mult, style):
+        UI_Draw._draw(left, top, width, height, dpi_mult, style)
 
 ui_draw = Globals.set(UI_Draw())
 
@@ -193,6 +245,20 @@ class UI_Element_Utils:
             return wrapped
         return wrapper
 
+    _option_callbacks = {}
+    @staticmethod
+    def add_option_callback(option):
+        def wrapper(fn):
+            def wrapped(self, *args, **kwargs):
+                ret = fn(self, *args, **kwargs)
+                return ret
+            UI_Element_Utils._option_callbacks[option] = wrapped
+            return wrapped
+        return wrapper
+
+    def call_option_callback(self, option, default, *args, **kwargs):
+        option = option if option not in UI_Element_Utils._option_callbacks else default
+        UI_Element_Utils._option_callbacks[option](self, *args, **kwargs)
 
 # https://www.w3schools.com/jsref/obj_event.asp
 # https://javascript.info/bubbling-and-capturing
@@ -294,9 +360,10 @@ class UI_Element(UI_Element_Utils):
         # cache
         self._classes = []              # classes applied to element, set by self.classes, based on self._classes_str
         self._selector = None           # full selector of self, built in compute_style()
-        self._styling_custom = None       # custom style UI_Style for self, set by self.style
+        self._styling_custom = None     # custom style UI_Style for self, set by self.style
         self._computed_styles = None    # computed style UI_Style after applying all styling
         self._is_visible = False        # indicates if self is visible, set in compute_style(), based on self._computed_styles
+        self._innerTextWrapped = None
 
         # TODO: REPLACE WITH BETTER PROPERTIES AND DELETE!!
         self._preferred_width, self._preferred_height = 0,0
@@ -346,6 +413,14 @@ class UI_Element(UI_Element_Utils):
 
         self._defer_recalc = False
         self.dirty()
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __str__(self):
+        info = [('tagname', self._tagName), ('id', self._id)]
+        info = ['%s="%s"' % (l,str(v)) for (l,v) in info if v]
+        return '<UI_Element %s>' % ' '.join(info)
 
     def dirty(self, properties=None, parent=True, children=False):
         if properties is None: properties = {'style', 'size', 'content'}
@@ -416,6 +491,15 @@ class UI_Element(UI_Element_Utils):
         self._computed_styles = self._styling_default.compute_style(self._selector, ui_draw.stylesheet, self._styling_custom)
         self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
 
+        fontfamily = self._computed_styles.get('font-family', 'sans-serif')
+        fontstyle = self._computed_styles.get('font-style', 'normal')
+        fontweight = self._computed_styles.get('font-weight', 'normal')
+        self._fontid = get_font(fontfamily, fontstyle, fontweight)
+        self._fontsize = float(self._computed_styles.get('font-size', 12))
+        self._fontcolor = self._computed_styles.get('color', (0,0,0,1))
+
+        self._whitespace = self._computed_styles.get('white-space', 'normal')
+
         # tell children to recompute selector
         for child in self._children: child._compute_style()
 
@@ -450,7 +534,7 @@ class UI_Element(UI_Element_Utils):
 
         self._content_width, self._content_height = 0, 0
         for child in self._children: child._compute_preferred_size()
-        self.compute_children_content_size()
+        # self.compute_children_content_size()
 
         self.defer_dirty_propagation = False
 
@@ -617,27 +701,29 @@ class UI_Element(UI_Element_Utils):
         return [child for child in self._children if child.is_visible]
 
 
-    def layout(self):
-        # recalculates width and height
+    def layout(self, **kwargs):
+        # through this function, we are calculating and committing to a certain width and height
+        # although the parent element might give us something different.  if we end up with a
+        # different width and height in self.position() below, we will need to improvise by
+        # adjusting margin (if bigger) or using scrolling (if smaller)
 
-        if not self._is_dirty: return
-        if self._defer_recalc: return
+        if not self.is_dirty: return
+        #if self._defer_recalc: return
         if not self.is_visible: return
 
-        # determine how much space we will need for all the content (children)
-        for child in self._children: child.layout()
-
+        dpi_mult = Globals.drawing.get_dpi_mult()
         display = self._computed_styles.get('display', 'block')
-        if display == 'flexbox': self.layout_flexbox()
-        elif display == 'block': self.layout_block()
-        elif display == 'inline': self.layout_inline()
-        else: self.layout_none()
-
         min_width,  max_width  = self._get_style_num('min-width',  0), self._get_style_num('max-width',  float('inf'))
         min_height, max_height = self._get_style_num('min-height', 0), self._get_style_num('max-height', float('inf'))
         margin_top,  margin_right,  margin_bottom,  margin_left  = self._get_style_trbl('margin')
         padding_top, padding_right, padding_bottom, padding_left = self._get_style_trbl('padding')
         border_width = self._get_style_num('border-width', 0)
+
+        # determine how much space we will need for all the content (children)
+        for child in self._children:
+            child.layout()
+
+        self.call_option_callback(('layout:%s' % display), 'layout:block')
 
         self._preferred_width = (
             margin_left + border_width + padding_left +
@@ -651,6 +737,7 @@ class UI_Element(UI_Element_Utils):
             padding_bottom + border_width + margin_bottom
         )
 
+    @UI_Element_Utils.add_option_callback('layout:flexbox')
     def layout_flexbox(self):
         style = self._computed_styles
         direction = style.get('flex-direction', 'row')
@@ -659,13 +746,30 @@ class UI_Element(UI_Element_Utils):
         align_items = style.get('align-items', 'flex-start')
         align_content = style.get('align-content', 'flex-start')
 
+    @UI_Element_Utils.add_option_callback('layout:block')
     def layout_block(self):
         pass
 
+    @UI_Element_Utils.add_option_callback('layout:inline')
     def layout_inline(self):
         pass
 
+    @UI_Element_Utils.add_option_callback('layout:none')
     def layout_none(self):
+        pass
+
+
+    @UI_Element_Utils.add_option_callback('position:flexbox')
+    def position_flexbox(self, left, top, width, height):
+        pass
+    @UI_Element_Utils.add_option_callback('position:block')
+    def position_flexbox(self, left, top, width, height):
+        pass
+    @UI_Element_Utils.add_option_callback('position:inline')
+    def position_flexbox(self, left, top, width, height):
+        pass
+    @UI_Element_Utils.add_option_callback('position:none')
+    def position_flexbox(self, left, top, width, height):
         pass
 
 
@@ -674,24 +778,54 @@ class UI_Element(UI_Element_Utils):
         self._l, self._t = left, top
         self._w, self._h = width, height
 
-        # might need to wrap text
-
+        dpi_mult = Globals.drawing.get_dpi_mult()
+        display = self._computed_styles.get('display', 'block')
         margin_top, margin_right, margin_bottom, margin_left = self._get_style_trbl('margin')
         padding_top, padding_right, padding_bottom, padding_left = self._get_style_trbl('padding')
         border_width = self._get_style_num('border-width', 0)
-        self.position_children(
-            left + margin_left + border_width + padding_left,
-            top - margin_top - border_width - padding_top,
-            width - margin_left - margin_right - border_width - border_width - padding_left - padding_right,
-            height - margin_top - margin_bottom - border_width - border_width - padding_top - padding_bottom,
-        )
 
-    def draw(self):
+        l = left   + dpi_mult*(margin_left + border_width  + padding_left)
+        t = top    - dpi_mult*(margin_top  + border_width  + padding_top)
+        w = width  - dpi_mult*(margin_left + margin_right  + border_width + border_width + padding_left + padding_right)
+        h = height - dpi_mult*(margin_top  + margin_bottom + border_width + border_width + padding_top  + padding_bottom)
+
+        self.call_option_callback(('position:%s' % display), 'position:block', left, top, width, height)
+
+        # wrap text
+        wrap_opts = {
+            'text':     self._innerText,
+            'width':    w,
+            'fontid':   self._fontid,
+            'fontsize': self._fontsize,
+            'preserve_newlines': (self._whitespace in {'pre', 'pre-line', 'pre-wrap'}),
+            'collapse_spaces':   (self._whitespace not in {'pre', 'pre-wrap'}),
+            'wrap_text':         (self._whitespace != 'pre'),
+        }
+        self._innerTextWrapped = helper_wraptext(**wrap_opts)
+
+    def draw(self, d=0):
+        # print(' '*d, self._l, self._t, self)
         ScissorStack.push(self._l, self._t, self._w, self._h)
-        #self.predraw()
+
+        dpi_mult = Globals.drawing.get_dpi_mult()
+        margin_top, margin_right, margin_bottom, margin_left = self._get_style_trbl('margin')
+        padding_top, padding_right, padding_bottom, padding_left = self._get_style_trbl('padding')
+        border_width = self._get_style_num('border-width', 0)
+
         if True or ScissorStack.is_visible() and ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
-            ui_draw.draw(self._l, self._t, self._w, self._h, self._computed_styles)
-            for child in self._children: child.draw()
+            ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._computed_styles)
+            if self._innerTextWrapped:
+                size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
+                Globals.drawing.text_draw2D(
+                    self._innerTextWrapped,
+                    Point2D((
+                        self._l + dpi_mult*(margin_left + border_width + padding_left),
+                        self._t - dpi_mult*(margin_top  + border_width + padding_top)
+                    )),
+                    self._fontcolor,
+                )
+                Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
+            for child in self._children: child.draw(d+1)
         ScissorStack.pop()
 
     def get_under_mouse(self, mx, my):
@@ -747,10 +881,10 @@ class UI_Element(UI_Element_Utils):
     def compute_content(self): pass
     def compute_preferred_size(self): pass
 
-    def compute_children_content_size(self): pass
-    def layout_children(self): pass
-    def position_children(self, left, top, width, height): pass
-    def draw_children(self): pass
+    # def compute_children_content_size(self): pass
+    # def layout_children(self): pass
+    # def position_children(self, left, top, width, height): pass
+    # def draw_children(self): pass
 
 
     #####################################################################
@@ -772,8 +906,63 @@ class UI_Element(UI_Element_Utils):
         return (t,r,b,l)
 
 
-
 class UI_Document:
+    default_keymap = {
+        'commit': {'RET',},
+        'cancel': {'ESC',},
+    }
+
+    def __init__(self, context, **kwargs):
+        self.actions = Actions(bpy.context, UI_Document.default_keymap)
+        self._body = UI_Element(tagName='body')
+        self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
+        self._under_mouse = None
+
+    @property
+    def body(self):
+        return self._body
+
+    def update(self, context, event):
+        self.actions.update(context, event, self._timer, print_actions=True)
+
+        mx,my = self.actions.mouse if self.actions.mouse else (0,0)
+        under_mouse = self._body.get_under_mouse(mx, my)
+        if self._under_mouse != under_mouse:
+            if self._under_mouse:
+                for e in self._under_mouse.get_pathToRoot():
+                    e.del_pseudoclass('hover')
+            self._under_mouse = under_mouse
+            if self._under_mouse:
+                for e in self._under_mouse.get_pathToRoot():
+                    e.add_pseudoclass('hover')
+        # if self.ui_elem.get_under_mouse(mx, my):
+        #     self.ui_elem.add_pseudoclass('hover')
+        #     if not self.ui_elem.is_active and self.actions.using('LEFTMOUSE'):
+        #         self.ui_elem.add_pseudoclass('active')
+        #         self.ui_elem.dispatch_event('mousedown')
+        # elif self.ui_elem.is_hovered:
+        #     self.ui_elem.del_pseudoclass('hover')
+        # if not self.actions.using('LEFTMOUSE') and self.ui_elem.is_active:
+        #     self.ui_elem.dispatch_event('mouseup')
+        #     self.ui_elem.del_pseudoclass('active')
+        #     if self.ui_elem.is_hovered: self.ui_elem.dispatch_event('mouseclick')
+
+    def draw(self, context):
+        w,h = context.region.width,context.region.height
+
+        ScissorStack.start(context)
+        Globals.ui_draw.update()
+
+        self._body.clean()
+        self._body.layout()
+        self._body.position(0, h, w, h)
+
+        # self._body.children[0].position(500, 300, 200, 200)
+        self._body.draw()
+
+        ScissorStack.end()
+
+class UI_Document_old:
     '''
     This is the main manager of the UI system.
     '''
