@@ -956,12 +956,40 @@ class BBox:
         return self.max_dim
 
 
+class Size1D:
+    def __init__(self, **kwargs):
+        self._length = kwargs.get('length', kwargs.get('l', None))
+        self._min = kwargs.get('min', None)
+        self._max = kwargs.get('max', None)
+
+    @property
+    def length(self):
+        if self._length is None: return None
+        v = self._length
+        if self._min is not None: v = max(v, self._min)
+        if self._max is not None: v = min(v, self._max)
+        return v
+    @length.setter
+    def length(self, l):
+        self._length = l
+
+    @property
+    def _min(self): return self.__min
+    @_min.setter
+    def _min(self, v): self.__min = v
+
+    @property
+    def max(self): return self._max
+    @max.setter
+    def max(self, v): self._max = v
+
+
 class Size2D:
     def __init__(self, **kwargs):
         self._width = kwargs.get('width', kwargs.get('w', None))
         self._height = kwargs.get('height', kwargs.get('h', None))
-        self._min_width = kwargs.get('min_width', None)
-        self._min_height = kwargs.get('min_height', None)
+        self._min_width = kwargs.get('min_width', 0)
+        self._min_height = kwargs.get('min_height', 0)
         self._max_width = kwargs.get('max_width', None)
         self._max_height = kwargs.get('max_height', None)
 
@@ -1008,10 +1036,38 @@ class Size2D:
     @max_height.setter
     def max_height(self, v): self._max_height = v
 
+    def set_all_widths(self, v):
+        self._width = self._min_width = self._max_width = v
+    def set_all_heights(self, v):
+        self._height = self._min_height = self._max_height = v
+
+    def update_min_width(self, v):
+        self._min_width = v if self._min_width is None else min(self._min_width, v)
+    def update_min_height(self, v):
+        self._min_height = v if self._min_height is None else min(self._min_height, v)
+    def update_max_width(self, v):
+        self._max_width = v if self._max_width is None else max(self._max_width, v)
+    def update_max_height(self, v):
+        self._max_height = v if self._max_height is None else max(self._max_height, v)
+
+    def add_width(self, v):
+        self._width = v if self._width is None else self._width + v
+    def add_height(self, v):
+        self._height = v if self._height is None else self._height + v
+    def add_min_width(self, v):
+        self._min_width = v if self._min_width is None else self._min_width + v
+    def add_min_height(self, v):
+        self._min_height = v if self._min_height is None else self._min_height + v
+    def add_max_width(self, v):
+        self._max_width = v if self._max_width is None else self._max_width + v
+    def add_max_height(self, v):
+        self._max_height = v if self._max_height is None else self._max_height + v
+
 
 class Box2D:
     '''
     WARNING: this class does not prevent right < left or top < bottom!
+    NOTE: y increases up and x increases left (matches OpenGL)
     '''
     def __init__(self, **kwargs):
         # gather position and size info from kwargs

@@ -56,3 +56,12 @@ button:hover {
 button:hover:active {
     background: rgb(160,160,160);
 }
+
+br {
+    display: block;
+    width: 0px;
+    height: 0px;
+    margin: 0px;
+    padding: 0px;
+    border-width: 0px;
+}

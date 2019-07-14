@@ -320,6 +320,11 @@ def convert_token_to_string(s):
     if type(s) is re.Match: s = s.group(0)
     return str(s)
 
+def get_converter_to_string(group):
+    def getter(s):
+        if type(s) is re.Match: s = s.group(group)
+        return str(s)
+    return getter
 
 
 #####################################################################################
@@ -331,9 +336,11 @@ def helper_argtranslate(key_from, key_to, kwargs):
         del kwargs[key_from]
 
 @lru_cache(maxsize=1024)
-def helper_wraptext(text='', width=0, fontid=0, fontsize=12, preserve_newlines=False, collapse_spaces=True, wrap_text=True):
-    tw = Globals.drawing.get_text_width
+def helper_wraptext(text='', width=None, fontid=0, fontsize=12, preserve_newlines=False, collapse_spaces=True, wrap_text=True):
+    # TODO: get textwidth of space and each word rather than rebuilding the string
     size_prev = Globals.drawing.set_font_size(fontsize, fontid=fontid, force=True)
+    tw = Globals.drawing.get_text_width
+    wrap_text &= width is not None
 
     if not preserve_newlines:
         text = re.sub(r'\n', ' ', text)
@@ -350,5 +357,5 @@ def helper_wraptext(text='', width=0, fontid=0, fontsize=12, preserve_newlines=F
         text = '\n'.join(nlines)
 
     Globals.drawing.set_font_size(size_prev, fontid=fontid, force=True)
-    print('wrapped ' + str(random.random()))
+    if False: print('wrapped ' + str(random.random()))
     return text

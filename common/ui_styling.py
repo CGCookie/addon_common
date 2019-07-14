@@ -40,6 +40,7 @@ from .parse import Parse_CharStream, Parse_Lexer
 from .ui_utilities import (
     convert_token_to_string, convert_token_to_cursor,
     convert_token_to_color, convert_token_to_number,
+    get_converter_to_string,
     skip_token,
 )
 
@@ -113,7 +114,7 @@ token_rules = [
         r'/[*][\s\S]*?[*]/',    # multi-line comments
     ]),
     ('special', convert_token_to_string, [
-        r'[-.:*>{},();]',
+        r'[-.*>{},();]|[:]+',
     ]),
     ('key', convert_token_to_string, [
         r'color',
@@ -132,19 +133,29 @@ token_rules = [
         r'justify-content|align-content|align-items',
         r'font(-(style|weight|size|family))?',
         r'white-space',
+        r'content',
+        r'object-fit',
     ]),
     ('value', convert_token_to_string, [
         r'auto',
-        r'inline|block|none|flexbox',           # display
-        r'visible|hidden|scroll|auto',          # overflow
-        r'static|fixed|sticky',                 # position
-        r'column|row',                          # flex-direction
-        r'nowrap|wrap',                         # flex-wrap
-        r'flex-start|flex-end|center|stretch',  # justify-content, align-content, align-items
-        r'normal|italic',                       # font-style
-        r'normal|bold',                         # font-weight
-        r'serif|sans-serif|monospace',          # font-family
-        r'normal|nowrap|pre|pre-wrap|pre-line', # white-space
+        r'inline|block|none|flexbox',               # display
+        r'visible|hidden|scroll|auto',              # overflow
+        r'static|absolute|relative|fixed|sticky',   # position
+        r'column|row',                              # flex-direction
+        r'nowrap|wrap',                             # flex-wrap
+        r'flex-start|flex-end|center|stretch',      # justify-content, align-content, align-items
+        r'normal|italic',                           # font-style
+        r'normal|bold',                             # font-weight
+        r'serif|sans-serif|monospace',              # font-family
+        r'normal|nowrap|pre|pre-wrap|pre-line',     # white-space
+        r'normal|none',                             # content (more in url and string below)
+        r'fill|contain|cover|none|scale-down',      # object-fit
+    ]),
+    ('url', get_converter_to_string('url'), [
+        r'url\((?P<url>[^)]*?)\)',
+    ]),
+    ('string', get_converter_to_string('string'), [
+        r'"(?P<string>[^"]*?)"',
     ]),
     ('cursor', convert_token_to_cursor, [
         r'default|auto|initial',
@@ -191,8 +202,15 @@ token_rules = [
         r'hover',   # applies when mouse is hovering over
         r'active',  # applies between mousedown and mouseup
         r'focus',   # applies if element has focus
-        #r'link',    # unvisited link
-        #r'visited', # visited link
+        # r'link',    # unvisited link
+        # r'visited', # visited link
+    ]),
+    ('pseudoelement', convert_token_to_string, [
+        r'before',  # inserts content before element
+        r'after',   # inserts content after element
+        # r'first-letter',
+        # r'first-line',
+        # r'selection',
     ]),
     ('num', convert_token_to_number, [
         r'(?P<num>-?((\d+)|(\d*\.\d+)))(?P<unit>px|vw|vh|pt|%|)',
@@ -211,6 +229,11 @@ default_fonts = {
     'message-box':   ('normal', 'normal', '12', 'sans-serif'),
     'small-caption': ('normal', 'normal', '12', 'sans-serif'),
     'status-bar':    ('normal', 'normal', '12', 'sans-serif'),
+}
+
+default_styling = {
+    'background': convert_token_to_color('transparent'),
+    'display': 'inline',
 }
 
 
@@ -268,19 +291,22 @@ class UI_Style_RuleSet:
         rs = UI_Style_RuleSet()
 
         def elem():
-            if lexer.peek_v() in {'.','#',':'}:
+            if lexer.peek_v() in {'.','#',':','::'}:
                 e = '*'
             elif lexer.peek_v() == '*':
                 e = lexer.match_v_v('*')
             else:
-                e = lexer.match_t_v('id') #{'id','*'})
-            while lexer.peek_v() in {'.','#',':'}:
+                e = lexer.match_t_v('id')
+            while lexer.peek_v() in {'.','#',':','::'}:
                 if lexer.peek_v() in {'.','#'}:
                     e += lexer.match_v_v({'.','#'})
                     e += lexer.match_t_v('id')
-                else:
+                elif lexer.peek_v() == ':':
                     e += lexer.match_v_v(':')
                     e += lexer.match_t_v('pseudoclass')
+                elif lexer.peek_v() == '::':
+                    e += lexer.match_v_v('::')
+                    e += lexer.match_t_v('')
             return e
 
         # get selector
@@ -468,28 +494,34 @@ class UI_Styling:
         decllist = { k:v for (k,v) in decllist.items() if v != 'initial' }
         return decllist
 
-    def compute_style(self, selector, *overriding_stylings):
-        # collect all the declarations that apply to selector
-        full = []
-        if False:
-            # Cascading not implemented correctly (only add prop+vals that are inherited)
-            # see: https://developer.mozilla.org/en-US/docs/Learn/CSS/Introduction_to_CSS/Cascade_and_inheritance
-            # see: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference
-            selector_parts = selector.split(' ')
-            for i in range(len(selector_parts)):
-                sub_selector = ' '.join(selector_parts[:i+1])
-                full += [d for rule in self.rules if rule.match(sub_selector) for d in rule.decllist]
-        else:
-            full += self.get_decllist(selector)
+    # def compute_style(self, selector, *overriding_stylings):
+    #     # collect all the declarations that apply to selector
+    #     full = []
+    #     if False:
+    #         # Cascading not implemented correctly (only add prop+vals that are inherited)
+    #         # see: https://developer.mozilla.org/en-US/docs/Learn/CSS/Introduction_to_CSS/Cascade_and_inheritance
+    #         # see: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference
+    #         selector_parts = selector.split(' ')
+    #         for i in range(len(selector_parts)):
+    #             sub_selector = ' '.join(selector_parts[:i+1])
+    #             full += [d for rule in self.rules if rule.match(sub_selector) for d in rule.decllist]
+    #     else:
+    #         full += self.get_decllist(selector)
 
-        for override in overriding_stylings:
-            full += override.get_decllist(selector)
+    #     for override in overriding_stylings:
+    #         full += override.get_decllist(selector)
 
-        return self._expand_declarations(full)
+    #     return self._expand_declarations(full)
+
+    @staticmethod
+    def compute_style(selector, *stylings):
+        stylings = [styling for styling in stylings if styling]
+        full_decllist = [dl for styling in stylings for dl in styling.get_decllist(selector)]
+        return UI_Styling._expand_declarations(full_decllist)
 
     def filter_styling(self, tagname, pseudoclass=None):
-        if type(pseudoclass) is list: pseudoclass = ':'.join(pseudoclass)
-        selector = [tagname + (':%s'%pseudoclass if pseudoclass else '')]
+        if type(pseudoclass) is list: pseudoclass = ':%s' % (':'.join(pseudoclass))
+        selector = [tagname + (pseudoclass or '')]
         decllist = self.compute_style(selector)
         return UI_Styling.from_decllist(decllist, tagname=tagname, pseudoclass=pseudoclass)
 
@@ -516,6 +548,12 @@ class UI_Styling:
     #     decllist = init_decllist
     #     decllist.update(full_decllist)
     #     return decllist
+
+# class UI_DeclList:
+#     def __init__(self, dict_decllist):
+#         self._dict_decllist = dict_decllist
+#     def __get__(self, k)
+
 
 path = os.path.join(os.path.dirname(__file__), 'config', 'ui_defaultstyles.css')
 ui_defaultstylings = UI_Styling.from_file(path) if os.path.exists(path) else UI_Styling()
