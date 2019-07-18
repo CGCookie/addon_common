@@ -340,8 +340,11 @@ class UI_Element_Utils:
     # helper functions
     # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
 
-    def _get_style_num(self, k, def_v, min_v=None, max_v=None):
+    re_percent = re.compile(r'(?P<v>\d+)%')
+    def _get_style_num(self, k, def_v, percent_of=None, min_v=None, max_v=None):
         v = self._computed_styles.get(k, 'auto')
+        m = UI_Element_Utils.re_percent.match(v)
+        if m: v = (percent_of if percent_of is not None else float(def_v)) * float(m.group('v')) / 100
         if v == 'auto': v = float(def_v)
         if min_v is not None: v = max(float(min_v), v)
         if max_v is not None: v = min(float(max_v), v)
@@ -410,7 +413,7 @@ class UI_Event:
     def eventPhase(self): return self._eventPhase
 
 
-class UI_Element_GetterSetters:
+class UI_Element_Properties:
     @property
     def tagName(self):
         return self._tagName
@@ -579,18 +582,22 @@ class UI_Element_GetterSetters:
 
     @property
     def scrollTop(self):
-        return self._scrollTop
+        # TODO: clamp value?
+        return self._content_box.y
     @scrollTop.setter
     def scrollTop(self, v):
-        self._scrollTop = v
+        # TODO: clamp value?
+        self._content_box.y = v
         self.dirty()
 
     @property
     def scrollLeft(self):
-        return self._scrollLeft
+        # TODO: clamp value?
+        return -self._content_box.x    # negated so that positive values of scrollLeft scroll content left
     @scrollLeft.setter
     def scrollLeft(self, v):
-        self._scrollLeft = v
+        # TODO: clamp value?
+        self._content_box.x = -v
         self.dirty()
 
     @property
@@ -604,6 +611,14 @@ class UI_Element_GetterSetters:
         #       does _NOT_ mean that the child is going to be drawn
         #       (might still be clipped with scissor or `visibility:hidden` style)
         return [child for child in self._children if child.is_visible]
+
+    @property
+    def content_width(self):
+        return self._content_size.width
+    @property
+    def content_height(self):
+        return self._content_size.height
+
 
 
 class UI_Element_Dirtiness:
@@ -655,34 +670,39 @@ class UI_Element_Dirtiness:
 
 
 class UI_SizeInfo:
-    def __init__(self, ui_element, default_val=None, **kwargs):
-        self._default_val = default_val
-        self._kwargs = dict(kwargs)
-        self.dpi_mult = Globals.drawing.get_dpi_mult()
-        self.styles = ui_element._computed_styles
-        self.display = self.styles.get('display', 'block')
+    def __init__(self, ui_element, **kwargs):
+        i = float('inf')
+        viewing_box = ui_element._viewing_box
+        self._kwargs      = dict(kwargs)
+        self.dpi_mult     = Globals.drawing.get_dpi_mult()
+        self.border_width = ui_element._get_style_num('border-width', 0)
+        self.styles       = ui_element._computed_styles
+        self.display      = self.styles.get('display', 'block')
         self.is_nonstatic = self.styles.get('position','static') in {'absolute','relative','fixed','sticky'}
-        self.min_width, self.min_height = ui_element._get_style_num('min-width', 0), ui_element._get_style_num('min-height', 0)
-        self.max_width, self.max_height = ui_element._get_style_num('max-width', 'inf'), ui_element._get_style_num('max-height', 'inf')
+        self.width        = self.styles.get('width',  'auto', percent_of=viewing_box.width)     # could be 'auto'
+        self.height       = self.styles.get('height', 'auto', percent_of=viewing_box.height)    # could be 'auto'
+        self.min_width    = ui_element._get_style_num('min-width',  0, percent_of=viewing_box.width)
+        self.min_height   = ui_element._get_style_num('min-height', 0, percent_of=viewing_box.height)
+        self.max_width    = ui_element._get_style_num('max-width',  i, percent_of=viewing_box.width)
+        self.max_height   = ui_element._get_style_num('max-height', i, percent_of=viewing_box.height)
         self.margin_top,  self.margin_right,  self.margin_bottom,  self.margin_left  = ui_element._get_style_trbl('margin')
         self.padding_top, self.padding_right, self.padding_bottom, self.padding_left = ui_element._get_style_trbl('padding')
-        self.border_width = ui_element._get_style_num('border-width', 0)
 
     def __getattr__(self, k):
         return self._kwargs.get(k, self._default_val)
 
 
-class UI_Block:
-    '''
-    UI_Block is similar to an HTML element with display:block style.
-    all children ...
-    '''
-    def __init__(self, children):
-        self._children = children
-    
+# class UI_Block:
+#     '''
+#     UI_Block is similar to an HTML element with display:block style.
+#     all children ...
+#     '''
+#     def __init__(self, children):
+#         self._children = children
 
 
-class UI_Element(UI_Element_Utils, UI_Element_GetterSetters, UI_Element_Dirtiness):
+
+class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def __init__(self, **kwargs):
         ################################################################
         # attributes of UI_Element that are settable
@@ -691,21 +711,31 @@ class UI_Element(UI_Element_Utils, UI_Element_GetterSetters, UI_Element_Dirtines
         self._id            = ''        # unique identifier
         self._classes_str   = ''        # list of classes (space delimited string)
         self._style_str     = ''        # custom style string
-        self._parent        = None      # set in parent.append_child(self) below
-        self._scrollTop     = 0         # distance element is scrolled vertically
-        self._scrollLeft    = 0         # distance element is scrolled horizontally
-        self._innerText     = ''        # text to display that might needing wrapping
-        self._children      = []        # list of all children
+        self._innerText     = ''        # text to display (converted to UI_Elements)
         self._src           = None      # path to resource, such as image
         self._title         = None      # tooltip
-        # updated by main ui system (hover, active, focus)
+
+        #################################################################
+        # read-only attributes of UI_Element
+        self._children      = []        # read-only list of all children; append_child, delete_child, clear_children
         self._pseudoclasses = set()     # TODO: should order matter here? (make list)
-        self._pseudoelement = ''        # TODO: only allow at most one pseudo-element?
+                                        # updated by main ui system (hover, active, focus)
+        self._pseudoelement = ''        # either ::before or ::after
+        self._parent        = None      # read-only property; set in parent.append_child(child)
+
+        #################################################################################
+        # boxes for viewing (wrt blender region) and content (wrt view)
+        # NOTE: content box is larger than viewing => scrolling, which is
+        #       managed by offsetting the content box up (y+1) or left (x-1)
+        self._viewing_box = Box2D(topleft=(0,0), size=(-1,-1))  # topleft+size: set by parent element
+        self._inside_box  = Box2D(topleft=(0,0), size=(-1,-1))  # inside area of viewing box (less margins, paddings, borders)
+        self._content_box = Box2D(topleft=(0,0), size=(-1,-1))  # topleft: set by scrollLeft, scrollTop properties
+                                                                # size: determined from children and style
 
         ##################################################################################
         # all events with their respective callbacks
         # NOTE: values of self._events are list of tuples, where:
-        #       - first item is True for capturing callbacks or False for bubbling, and
+        #       - first item is bool indicating type of callback, where True=capturing and False=bubbling
         #       - second item is the callback function
         self._events = {
             'on_focus':         [],     # focus is gained (:active is added)
@@ -726,11 +756,11 @@ class UI_Element(UI_Element_Utils, UI_Element_GetterSetters, UI_Element_Dirtines
         ####################################################################
         # cached properties
         # TODO: go back through these to make sure we've caught everything
-        self._classes          = []     # classes applied to element, set by self.classes, based on self._classes_str
-        self._styling_custom   = None   # custom style UI_Style for self, set by self.style
+        self._classes          = []     # classes applied to element, set by self.classes property, based on self._classes_str
+        self._styling_custom   = None   # custom style UI_Style, set by self.style property, based on self._style_str
         self._computed_styles  = None   # computed style UI_Style after applying all styling
         self._is_visible       = False  # indicates if self is visible, set in compute_style(), based on self._computed_styles
-        self._content_size     = None   #
+        self._content_size     = None   # min and max size of content, determined from children and style
         self._children_text    = []     # innerText as children
         self._child_before     = None   # ::before child
         self._child_after      = None   # ::after child
@@ -1046,29 +1076,52 @@ class UI_Element(UI_Element_Utils, UI_Element_GetterSetters, UI_Element_Dirtines
 
         self.defer_dirty_propagation = False
 
-    @property
-    def content_width(self):
-        return self._content_size.width
-    @property
-    def content_height(self):
-        return self._content_size.height
-    
+    def layout(self, viewing_pos:Point2D, viewing_size:Size2D, document_size:Size2D, positioned_element:"UI_Element"=None, **kwargs):
+        # viewing_pos: topleft position where the parent is trying to place self
+        # viewing_size: size information from parent (width and height could be given max, min, or exact value)
+        # document_size: size of whole document
+        # positioned_element: last non-static element
 
-    def layout(self, **kwargs):
+        # layout each block into lines.  if a content box of child element is too wide to fit in line and
+        # child is not only element on the current line, then end current line, start a new line, relayout the child.
+
+        # TODO: allow for horizontal growth rather than biasing for vertical
+        # TODO: handle other types of layouts (ex: table, flex)
+        # TODO: allow for different line alignments (top for now; bottom, baseline)
+
+        # NOTE: following comments no longer apply
         # through this function, we are calculating and committing to a certain width and height
         # although the parent element might give us something different.  if we end up with a
         # different width and height in self.position() below, we will need to improvise by
         # adjusting margin (if bigger) or using scrolling (if smaller)
 
+
         if not self.is_dirty: return
         #if self._defer_recalc: return
         if not self.is_visible: return
 
-        self._sz = UI_SizeInfo(self, **kwargs)
-        sz = self._sz
+        # compute inside box, where all children fit
+        l = viewing_box.left + sz.dpi_mult * (sz.margin_left + sz.border_width + sz.padding_left)
+        t = viewing_box.top  - sz.dpi_mult * (sz.margin_top  + sz.border_width + sz.padding_top)
+        w = viewing_box.width - sz.dpi_mult * (
+            sz.margin_left   + sz.border_width + sz.padding_left +      # left
+            sz.padding_right + sz.border_width + sz.margin_right        # right
+        )
+        h = viewing_box.height - sz.dpi_mult * (
+            sz.margin_top     + sz.border_width + sz.padding_top +      # top
+            sz.padding_bottom + sz.border_width + sz.margin_bottom      # bottom
+        )
+
+        self._inside_box.set(left=l, top=t, width=w, height=h)
+        self._viewing_box = viewing_box                 # <-- must happen before UI_SizeInfo object is created
+        sz = self._sz = UI_SizeInfo(self, **kwargs)
+
+        # need to layout all blocks according to inside box
+
+
+        ######################
 
         doc_size    = kwargs['doc_size']                        # size of whole document
-        parent_size = kwargs['parent_size']                     # view size of parent (different from actual size)
         pos_element = kwargs.get('positioned_element', None)    # last non-static element
         self_pos    = kwargs.get('position', None)              # is parent placing us somewhere?
 

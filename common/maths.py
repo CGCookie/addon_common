@@ -1070,6 +1070,9 @@ class Box2D:
     NOTE: y increases up and x increases left (matches OpenGL)
     '''
     def __init__(self, **kwargs):
+        self.set(**kwargs)
+
+    def set(self, **kwargs):
         # gather position and size info from kwargs
         left, right = kwargs.get('left', None), kwargs.get('right', None)
         top, bottom = kwargs.get('top', None), kwargs.get('bottom', None)
@@ -1203,6 +1206,10 @@ class Box2D:
     @property
     def height(self):
         return self._height
+
+    @property
+    def size(self):
+        return Size2D(width=self._width, height=self._height)
 
     def overlap(self, that:'Box2D'):
         ''' do self and that overlap? '''
