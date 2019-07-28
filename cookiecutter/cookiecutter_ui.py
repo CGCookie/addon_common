@@ -18,6 +18,7 @@ https://github.com/CGCookie/retopoflow
 '''
 
 import math
+import random
 
 import bpy
 import bgl
@@ -115,6 +116,7 @@ class CookieCutter_UI:
         self._area.tag_redraw()
 
     def ui_update(self):
+        # print('--------- ' + str(random.random()))
         self.drawing.update_dpi()
         self._area.tag_redraw()
         self.document.update(self.context, self.event)

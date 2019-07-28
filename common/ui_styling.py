@@ -39,7 +39,7 @@ from mathutils import Matrix
 from .parse import Parse_CharStream, Parse_Lexer
 from .ui_utilities import (
     convert_token_to_string, convert_token_to_cursor,
-    convert_token_to_color, convert_token_to_number,
+    convert_token_to_color, convert_token_to_numberunit,
     get_converter_to_string,
     skip_token,
 )
@@ -127,7 +127,7 @@ token_rules = [
         r'((min|max)-)?width',
         r'((min|max)-)?height',
         r'cursor',
-        r'overflow',
+        r'overflow(-x|-y)?',
         r'position',
         r'flex(-(direction|wrap|grow|shrink|basis))?',
         r'justify-content|align-content|align-items',
@@ -139,7 +139,7 @@ token_rules = [
     ('value', convert_token_to_string, [
         r'auto',
         r'inline|block|none|flexbox',               # display
-        r'visible|hidden|scroll|auto',              # overflow
+        r'visible|hidden|scroll|auto',              # overflow, overflow-x, overflow-y
         r'static|absolute|relative|fixed|sticky',   # position
         r'column|row',                              # flex-direction
         r'nowrap|wrap',                             # flex-wrap
@@ -212,7 +212,7 @@ token_rules = [
         # r'first-line',
         # r'selection',
     ]),
-    ('num', convert_token_to_number, [
+    ('num', convert_token_to_numberunit, [
         r'(?P<num>-?((\d+)|(\d*\.\d+)))(?P<unit>px|vw|vh|pt|%|)',
     ]),
     ('id', convert_token_to_string, [
@@ -355,13 +355,15 @@ class UI_Style_RuleSet:
     def __repr__(self): return self.__str__()
 
     def match(self, selector):
-        # returns true if self.selector matches passed selector
+        # returns true if passed selector matches any selector in self.selectors
         def splitsel(sel):
-            p = {'type':'', 'class':[], 'id':'', 'pseudo':[]}
-            transition = {'.':'class', '#':'id', ':':'pseudo'}
+            p = {'type':'', 'class':[], 'id':'', 'pseudoelement':[], 'pseudoclass':[]}
+            transition = {'.':'class', '#':'id', '::':'pseudoelement', ':':'pseudoclass'}
+            nsel = [p for c in sel for p in re.sub(r'([.]|#|::|:)', r' \1 ', c).split(' ')]
+            sel = nsel
             v,m = '','type'
             for c in sel:
-                if c in '.:#':
+                if c in {'.',':','::','#'}:
                     if type(p[m]) is list: p[m].append(v)
                     else: p[m] = v
                     v,m = '',transition[c]
@@ -370,21 +372,23 @@ class UI_Style_RuleSet:
             if type(p[m]) is list: p[m].append(v)
             else: p[m] = v
             return p
-        def msel(sa, sb, cont=True):
-            if len(sa) == 0: return True
-            if len(sb) == 0: return False
-            a0,b0 = sa[0],sb[0]
-            if b0 == '>': return msel(sa, sb[1:], cont=False)
+        def msel(sel_elem, sel_style, cont=True):
+            if len(sel_style) == 0: return True
+            if len(sel_elem) == 0: return False
+            a0,b0 = sel_elem[-1],sel_style[-1]
+            if b0 == '>': return msel(sel_elem, sel_style[:-1], cont=False)
             ap,bp = splitsel(a0),splitsel(b0)
             m = True
-            m &= bp['type'] == '*' or ap['type'] == bp['type']
+            m &= (bp['type'] == '*' and ap['type'] != '') or ap['type'] == bp['type']
             m &= bp['id'] == '' or ap['id'] == bp['id']
             m &= all(c in ap['class'] for c in bp['class'])
-            m &= all(c in ap['pseudo'] for c in bp['pseudo'])
-            if m and msel(sa[1:], sb[1:]): return True
-            if cont: return msel(sa, sb[1:])
-            return False
-        return any(msel(selector, sel) for sel in self.selectors)
+            m &= all(c in ap['pseudoelement'] for c in bp['pseudoelement'])
+            m &= all(c in ap['pseudoclass'] for c in bp['pseudoclass'])
+            if m and msel(sel_elem[:-1], sel_style[:-1]): return True
+            if not cont: return False
+            return msel(sel_elem[:-1], sel_style)
+        is_match = any(msel(selector, sel, cont=False) for sel in self.selectors)
+        return is_match
 
 
 class UI_Styling:
@@ -436,11 +440,24 @@ class UI_Styling:
 
     @staticmethod
     def _trbl_split(v):
-        if type(v) is not tuple: return (v, v, v, v)
-        if   len(v) == 1: return (v[0], v[0], v[0], v[0])
-        elif len(v) == 2: return (v[0], v[1], v[0], v[1])
-        elif len(v) == 3: return (v[0], v[1], v[2], v[1])
-        else:             return (v[0], v[1], v[2], v[3])
+        # NOTE: if v is a tuple, either: (scalar, unit) or ((scalar, unit), (scalar, unit), ...)
+        # TODO: IGNORING UNITS??
+        if type(v) is tuple and len(v) == 1:
+            v = v[0]
+        if type(v) is not tuple:
+            return (v, v, v, v)
+        if type(v[0]) is float:
+            # first case above: (scalar, unit)
+            return (v[0], v[0], v[0], v[0])
+        l = len(v)
+        if type(v[0]) is tuple:
+            if l == 2: return (v[0][0], v[1][0], v[0][0], v[1][0])
+            if l == 3: return (v[0][0], v[1][0], v[2][0], v[1][0])
+            return (v[0][0], v[1][0], v[2][0], v[3][0])
+        if l == 2: return (v[0], v[1], v[0], v[1])
+        if l == 3: return (v[0], v[1], v[2], v[1])
+        return (v[0], v[1], v[2], v[3])
+        
 
     @staticmethod
     def _font_split(vs):
@@ -483,11 +500,20 @@ class UI_Styling:
             elif p == 'background':
                 decllist['background-color'] = v
             elif p == 'width':
+                decllist['width'] = v
                 decllist['min-width'] = v
                 decllist['max-width'] = v
             elif p == 'height':
+                decllist['height'] = v
                 decllist['min-height'] = v
                 decllist['max-height'] = v
+            elif p == 'overflow':
+                if v == 'scroll':
+                    decllist['overflow-x'] = 'auto'
+                    decllist['overflow-y'] = 'scroll'
+                else:
+                    decllist['overflow-x'] = v
+                    decllist['overflow-y'] = v
             else:
                 decllist[p] = v
         # filter out properties with `initial` values
@@ -515,15 +541,20 @@ class UI_Styling:
 
     @staticmethod
     def compute_style(selector, *stylings):
+        if selector is None: return {}
         stylings = [styling for styling in stylings if styling]
         full_decllist = [dl for styling in stylings for dl in styling.get_decllist(selector)]
-        return UI_Styling._expand_declarations(full_decllist)
+        decllist = UI_Styling._expand_declarations(full_decllist)
+        return decllist
 
     def filter_styling(self, tagname, pseudoclass=None):
-        if type(pseudoclass) is list: pseudoclass = ':%s' % (':'.join(pseudoclass))
-        selector = [tagname + (pseudoclass or '')]
-        decllist = self.compute_style(selector)
-        return UI_Styling.from_decllist(decllist, tagname=tagname, pseudoclass=pseudoclass)
+        if pseudoclass:
+            if type(pseudoclass) is str: pseudoclass = '%s' % pseudoclass
+            elif type(pseudoclass) is list: pseudoclass = '%s' % (':'.join(pseudoclass))
+        selector = [tagname + (':%s'%pseudoclass if pseudoclass else '')]
+        decllist = self.compute_style(selector, self)
+        styling = UI_Styling.from_decllist(decllist, tagname=tagname, pseudoclass=pseudoclass)
+        return styling
 
     # def compute_style(self, selector, initial_styling, override_styling):
     #     # collect all the declarations that apply to selector

@@ -986,33 +986,56 @@ class Size1D:
 
 class Size2D:
     def __init__(self, **kwargs):
-        self._width = kwargs.get('width', kwargs.get('w', None))
-        self._height = kwargs.get('height', kwargs.get('h', None))
-        self._min_width = kwargs.get('min_width', 0)
+        self._width      = kwargs.get('width',      kwargs.get('w', None))
+        self._height     = kwargs.get('height',     kwargs.get('h', None))
+        self._min_width  = kwargs.get('min_width',  0)
         self._min_height = kwargs.get('min_height', 0)
-        self._max_width = kwargs.get('max_width', None)
+        self._max_width  = kwargs.get('max_width',  None)
         self._max_height = kwargs.get('max_height', None)
 
     def __iter__(self):
         return iter([self._width, self._height])
+    def __str__(self):
+        ret = '<Size2D'
+        if self._min_width  is not None: ret += ' min_width=%f'  % self._min_width
+        if self._width      is not None: ret += ' width=%f'      % self._width
+        if self._max_width  is not None: ret += ' max_width=%f'  % self._max_width
+        if self._min_height is not None: ret += ' min_height=%f' % self._min_height
+        if self._height     is not None: ret += ' height=%f'     % self._height
+        if self._max_height is not None: ret += ' max_height=%f' % self._max_height
+        ret += '>'
+        return ret
+    def __repr__(self):
+        return self.__str__()
+
+    def clone(self):
+        return Size2D(
+            width=self._width,   min_width=self._min_width,   max_width=self._max_width,
+            height=self._height, min_height=self._min_height, max_height=self._max_height,
+        )
+
+    def clamp_width(self, w):
+        if w is None: return None
+        if self._min_width is not None: w = max(w, self._min_width)
+        if self._max_width is not None: w = min(w, self._max_width)
+        return w
+
+    def clamp_height(self, h):
+        if h is None: return None
+        if self._min_height is not None: h = max(h, self._min_height)
+        if self._max_height is not None: h = min(h, self._max_height)
+        return h
+
+    def clamp_size(self, w, h):
+        return self.clamp_width(w), self.clamp_height(h)
 
     @property
-    def width(self):
-        if self._width is None: return None
-        v = self._width
-        if self._min_width is not None: v = max(v, self._min_width)
-        if self._max_width is not None: v = min(v, self._max_width)
-        return v
+    def width(self): return self.clamp_width(self._width)
     @width.setter
     def width(self, v): self._width = v
 
     @property
-    def height(self):
-        if self._height is None: return None
-        v = self._height
-        if self._min_height is not None: v = max(v, self._min_height)
-        if self._max_height is not None: v = min(v, self._max_height)
-        return v
+    def height(self): return self.clamp_height(self._height)
     @height.setter
     def height(self, v): self._height = v
 
@@ -1035,6 +1058,15 @@ class Size2D:
     def max_height(self): return self._max_height
     @max_height.setter
     def max_height(self, v): self._max_height = v
+
+    def biggest_width(self):
+        if self._max_width is not None: return self._max_width
+        if self._width is not None: return self._width
+        return self._min_width
+    def biggest_height(self):
+        if self._max_height is not None: return self._max_height
+        if self._height is not None: return self._height
+        return self._min_height
 
     def set_all_widths(self, v):
         self._width = self._min_width = self._max_width = v
@@ -1062,6 +1094,15 @@ class Size2D:
         self._max_width = v if self._max_width is None else self._max_width + v
     def add_max_height(self, v):
         self._max_height = v if self._max_height is None else self._max_height + v
+
+    def sub_all_widths(self, v):
+        if self._width is not None:     self._width     = max(0, self._width - v)
+        if self._min_width is not None: self._min_width = max(0, self._min_width - v)
+        if self._max_width is not None: self._max_width = max(0, self._max_width - v)
+    def sub_all_heights(self, v):
+        if self._height is not None:     self._height     = max(0, self._height - v)
+        if self._min_height is not None: self._min_height = max(0, self._min_height - v)
+        if self._max_height is not None: self._max_height = max(0, self._max_height - v)
 
 
 class Box2D:

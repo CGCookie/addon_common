@@ -1,5 +1,5 @@
 * {
-    margin:     2px 4px;
+    margin:     4px 4px;
     padding:    4px;
 
     width:      auto;
@@ -13,17 +13,20 @@
 
     border-width:   1px;
     border-color:   rgba(0, 0, 0, 0.75);
-    border-radius:  5px;
+    border-radius:  0px;
 
     overflow: hidden;
     font: normal normal 12pt sans-serif;
 }
 
 body {
+    position: fixed;
+    width: 100%;
+    height: 100%;
     margin: 0;
     padding: 0;
     border: 5px rgba(255,0,0,0.25);
-    border-radius: 10px;
+    border-radius: 0px;
     cursor: crosshair;
 }
 
@@ -31,8 +34,9 @@ button {
     white-space: normal;
     cursor: pointer;
     display: inline;
-    border-width: 2px;
-    border-color: white rgb(64,64,64) rgb(64,64,64) white;
+    border-width: 5px;
+    border-radius: 5px;
+    border-color: white rgb(96,96,96) rgb(32,32,32) rgb(224,224,224);
     background: rgb(160,160,160);
     color: black;
 }

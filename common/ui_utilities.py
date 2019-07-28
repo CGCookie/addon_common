@@ -313,6 +313,12 @@ def convert_token_to_number(n):
     if type(n) is re.Match: n = n.group('num')
     return float(n)
 
+def convert_token_to_numberunit(n):
+    assert type(n) is re.Match
+    v = n.group('num')
+    u = n.group('unit')
+    return (float(v), u)
+
 def skip_token(n):
     return None
 
