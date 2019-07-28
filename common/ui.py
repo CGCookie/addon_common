@@ -85,7 +85,8 @@ def button(**kwargs):
     helper_argtranslate('label', 'innerText', kwargs)
     return UI_Element(tagName='button', **kwargs)
 
-
+def p(**kwargs):
+    return UI_Element(tagName='p', **kwargs)
 
 
 # class UI_Flexbox(UI_Core):

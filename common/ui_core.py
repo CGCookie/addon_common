@@ -21,8 +21,11 @@ Created by Jonathan Denning, Jonathan Williamson
 
 import os
 import re
-import bpy
 from inspect import signature
+import traceback
+
+import bpy
+import bgl
 
 from .ui_styling import UI_Styling, ui_defaultstylings
 from .ui_utilities import helper_wraptext
@@ -325,6 +328,7 @@ class UI_Element_Utils:
     #     return wrapper
 
     def call_cleaning_callbacks(self, *args, **kwargs):
+        print('cleaning %s' % str(self))
         g = UI_Element_Utils._cleaning_graph
         working = set(UI_Element_Utils._cleaning_graph_roots)
         done = set()
@@ -332,7 +336,9 @@ class UI_Element_Utils:
             current = working.pop()
             assert current not in done, 'cycle detected in cleaning callbacks (%s)' % current
             if not all(p in done for p in g[current]['parents']): continue
-            if current in self._dirty_properties: g[current]['fn'](self, *args, **kwargs)
+            if current in self._dirty_properties:
+                print('  calling on %s' % current)
+                g[current]['fn'](self, *args, **kwargs)
             working.update(g[current]['children'])
             done.add(current)
         # keys = sorted(_cleaning_callbacks.keys())
@@ -446,7 +452,7 @@ class UI_Element_Properties:
         if self._tagName == ntagName: return
         self._tagName = ntagName
         self._styling_default = None
-        self.dirty(parent=True, children=True) # changing tagName can affect children styles!
+        self.dirty('changing tagName can affect children styles', parent=True, children=True)
 
     @property
     def innerText(self):
@@ -455,7 +461,7 @@ class UI_Element_Properties:
     def innerText(self, nText):
         if self._innerText == nText: return
         self._innerText = nText
-        self.dirty('content')
+        self.dirty('changing innerText changes content', 'content')
 
     @property
     def innerTextAsIs(self):
@@ -465,7 +471,7 @@ class UI_Element_Properties:
         v = str(v) if v is not None else None
         if self._innerTextAsIs == v: return
         self._innerTextAsIs = v
-        self.dirty('content')
+        self.dirty('changing innerTextAsIs changes content', 'content')
 
     @property
     def parent(self):
@@ -491,8 +497,8 @@ class UI_Element_Properties:
             child._parent.delete_child(child)
         self._children.append(child)
         child._parent = self
-        child.dirty(parent=False, children=True)
-        self.dirty('content')
+        child.dirty('appending new child', parent=False, children=True)
+        self.dirty('appending new child changes content', 'content')  ######## adding causes to all dirty calls
     def delete_child(self, child):
         assert child
         assert child in self._children, 'attempting to delete child that does not exist?'
@@ -651,7 +657,11 @@ class UI_Element_Properties:
 
 
 class UI_Element_Dirtiness:
-    def dirty(self, properties=None, parent=True, children=False):
+    def dirty(self, cause, properties=None, parent=True, children=False):
+        if self._tagName == 'body':
+            print(self, "dirty", properties, parent, children)
+            for line in traceback.format_stack():
+                print('  ' + line.strip())
         if properties is None: properties = {'style', 'size', 'blocks', 'content'}
         elif type(properties) is str: properties = {properties}
         elif type(properties) is list: properties = set(properties)
@@ -668,11 +678,11 @@ class UI_Element_Dirtiness:
         if self._dirty_propagation['defer']: return
         if self._dirty_propagation['parent']:
             if self._parent:
-                self._parent.dirty(self._dirty_propagation['parent'], parent=True, children=False)
+                self._parent.dirty('propagating dirtiness to parent', self._dirty_propagation['parent'], parent=True, children=False)
             self._dirty_propagation['parent'].clear()
         if self._dirty_propagation['children']:
             for child in self._children:
-                child.dirty(self._dirty_propagation['children'], parent=False, children=True)
+                child.dirty('propagating dirtiness to child', self._dirty_propagation['children'], parent=False, children=True)
             self._dirty_propagation['children'].clear()
 
     @property
@@ -875,7 +885,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             else:
                 print('Unhandled pair (%s,%s)' % (k,str(v)))
         self._defer_clean = False
-        self.dirty()
+        self.dirty('initially dirty')
 
     def __repr__(self):
         return self.__str__()
@@ -921,22 +931,22 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if self._styling_default is None:
             self._styling_default = UI_Styling()
             for pseudoclasses in [None, 'focus', 'active', 'hover', ['hover','active']]:
-                self._styling_default.append(ui_defaultstylings.filter_styling(self._tagName, self._pseudoclasses))
+                filtered_decllist = ui_defaultstylings.filter_styling(self._tagName, pseudoclasses)
+                self._styling_default.append(filtered_decllist)
 
         # compute styles applied to self based on selector
         styling_list = [self._styling_default, ui_draw.stylesheet, self._styling_custom]
         if not self._styling_custom:
             self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
         self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
-        if not self._pseudoelement:
+        self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
+        if self._is_visible and not self._pseudoelement:
+            # need to compute ::before and ::after styles to know whether there is content to compute and render
             self._computed_styles_before = UI_Styling.compute_style(self._selector_before, *styling_list)
             self._computed_styles_after  = UI_Styling.compute_style(self._selector_after,  *styling_list)
         else:
             self._computed_styles_before = None
             self._computed_styles_after = None
-        self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
-        if self._pseudoclasses:
-            print(self, self._selector, self._computed_styles)
 
         fontfamily = self._computed_styles.get('font-family', 'sans-serif')
         fontstyle = self._computed_styles.get('font-style', 'normal')
@@ -950,9 +960,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # tell children to recompute selector
         for child in self._children: child._compute_style()
 
-        # style changes might have changed size
-        self.dirty('content')
-        self.dirty('size')
+        self.dirty('content', 'style change might have changed content (::before / ::after)')
+        self.dirty('size', 'style change might have changed size')
         self._dirty_flow = True
         self._dirty_properties.discard('style')
 
@@ -968,6 +977,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if self._computed_styles_before and self._computed_styles_before.get('content', ''):
             # TODO: cache this!!
+            print('%s::before = %s' % (str(self), self._compute_style_before.get('content', '')))
             self._child_before = UI_Element(tagName=self._tagName, pseudoelement='before')
             self._child_before.clean()
         else:
@@ -975,6 +985,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if self._computed_styles_after and self._computed_styles_after.get('content', ''):
             # TODO: cache this!!
+            print('%s::after = %s' % (str(self), self._compute_style_after.get('content', '')))
             self._child_after = UI_Element(tagName=self._tagName, pseudoelement='after')
             self._child_after.clean()
         else:
@@ -1498,7 +1509,7 @@ class UI_Document:
         mx,my = self.actions.mouse if self.actions.mouse else (0,0)
         under_mouse = self._body.get_under_mouse(mx, my)
         if self._under_mouse != under_mouse:
-            print(mx,my,under_mouse)
+            # print(mx,my,under_mouse)
             if self._under_mouse:
                 for e in self._under_mouse.get_pathToRoot():
                     e.del_pseudoclass('hover')
@@ -1524,6 +1535,7 @@ class UI_Document:
 
         ScissorStack.start(context)
         Globals.ui_draw.update()
+        bgl.glEnable(bgl.GL_BLEND)
 
         self._body.clean()
         self._body.layout(fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)

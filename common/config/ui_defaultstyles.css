@@ -54,12 +54,23 @@ button:active {
 button:hover {
     font-style: italic;
     color: rgb(64,64,64);
-    background: rgb(192,192,192);
+    background: rgb(192,192,224);
 }
 
 button:hover:active {
     background: rgb(160,160,160);
 }
+
+p {
+    display: block;
+    width: 100%;
+    margin: 2px 0px;
+    padding: 2px;
+    background-color: rgba(255,255,255,0);
+    color: black;
+}
+
+
 
 br {
     display: block;

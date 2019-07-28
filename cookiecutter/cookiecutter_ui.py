@@ -116,7 +116,10 @@ class CookieCutter_UI:
         self._area.tag_redraw()
 
     def ui_update(self):
-        # print('--------- ' + str(random.random()))
+        # print('\x1b[2J', end='')
+        # print('\033c', end='')
+        print('\n' * 2, end='')
+        print('--------- ' + str(random.random()))
         self.drawing.update_dpi()
         self._area.tag_redraw()
         self.document.update(self.context, self.event)

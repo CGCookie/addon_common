@@ -359,7 +359,7 @@ class UI_Style_RuleSet:
         def splitsel(sel):
             p = {'type':'', 'class':[], 'id':'', 'pseudoelement':[], 'pseudoclass':[]}
             transition = {'.':'class', '#':'id', '::':'pseudoelement', ':':'pseudoclass'}
-            nsel = [p for c in sel for p in re.sub(r'([.]|#|::|:)', r' \1 ', c).split(' ')]
+            nsel = re.sub(r'([.]|#|::|:)', r' \1 ', sel).split(' ')
             sel = nsel
             v,m = '','type'
             for c in sel:
@@ -372,12 +372,17 @@ class UI_Style_RuleSet:
             if type(p[m]) is list: p[m].append(v)
             else: p[m] = v
             return p
+
+        # ex:
+        #   sel_elem  = ['body:hover', 'button:hover']
+        #   sel_style = ['button:hover']
         def msel(sel_elem, sel_style, cont=True):
             if len(sel_style) == 0: return True
             if len(sel_elem) == 0: return False
             a0,b0 = sel_elem[-1],sel_style[-1]
             if b0 == '>': return msel(sel_elem, sel_style[:-1], cont=False)
             ap,bp = splitsel(a0),splitsel(b0)
+            # if ap['type'] == 'button' and 'hover' in ap['pseudoclass'] and not ap['pseudoelement'] and bp['type'] == 'button': print(ap, bp)
             m = True
             m &= (bp['type'] == '*' and ap['type'] != '') or ap['type'] == bp['type']
             m &= bp['id'] == '' or ap['id'] == bp['id']
@@ -387,8 +392,14 @@ class UI_Style_RuleSet:
             if m and msel(sel_elem[:-1], sel_style[:-1]): return True
             if not cont: return False
             return msel(sel_elem[:-1], sel_style)
-        is_match = any(msel(selector, sel, cont=False) for sel in self.selectors)
-        return is_match
+        # is_match = any(msel(selector, sel, cont=False) for sel in self.selectors)
+        # return is_match
+        for sel in self.selectors:
+            is_match = msel(selector, sel, cont=False)
+            if is_match:
+                # print('elem:%s matched style:%s' % (selector, sel))
+                return True
+        return False
 
 
 class UI_Styling:
@@ -431,7 +442,10 @@ class UI_Styling:
         return '<UI_Styling\n%s\n>' % ('\n'.join('  '+l for r in self.rules for l in str(r).splitlines()))
 
     def get_decllist(self, selector):
-        return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+        # return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+        matchingrules = [rule for rule in self.rules if rule.match(selector)]
+        decllist = [d for rule in matchingrules for d in rule.decllist]
+        return decllist
 
     def append(self, other_styling):
         self.rules += other_styling.rules
@@ -457,7 +471,6 @@ class UI_Styling:
         if l == 2: return (v[0], v[1], v[0], v[1])
         if l == 3: return (v[0], v[1], v[2], v[1])
         return (v[0], v[1], v[2], v[3])
-        
 
     @staticmethod
     def _font_split(vs):
@@ -549,9 +562,9 @@ class UI_Styling:
 
     def filter_styling(self, tagname, pseudoclass=None):
         if pseudoclass:
-            if type(pseudoclass) is str: pseudoclass = '%s' % pseudoclass
-            elif type(pseudoclass) is list: pseudoclass = '%s' % (':'.join(pseudoclass))
-        selector = [tagname + (':%s'%pseudoclass if pseudoclass else '')]
+            if type(pseudoclass) is str: _pseudoclass = '%s' % pseudoclass
+            elif type(pseudoclass) is list: _pseudoclass = '%s' % (':'.join(pseudoclass))
+        selector = [tagname + (':%s'%_pseudoclass if pseudoclass else '')]
         decllist = self.compute_style(selector, self)
         styling = UI_Styling.from_decllist(decllist, tagname=tagname, pseudoclass=pseudoclass)
         return styling
