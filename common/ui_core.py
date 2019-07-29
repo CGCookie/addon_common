@@ -261,14 +261,14 @@ clean call order
 
 class UI_Element_Utils:
     @staticmethod
-    def defer_dirty(properties=None, parent=True, children=False):
+    def defer_dirty(cause, properties=None, parent=True, children=False):
         ''' prevents dirty propagation until the wrapped fn has finished '''
         def wrapper(fn):
             def wrapped(self, *args, **kwargs):
                 self._defer_dirty = True
                 ret = fn(self, *args, **kwargs)
                 self._defer_dirty = False
-                self.dirty(properties, parent=parent, children=children)
+                self.dirty('dirtying deferred dirtied properties now: '+cause, properties, parent=parent, children=children)
                 return ret
             return wrapped
         return wrapper
@@ -328,7 +328,7 @@ class UI_Element_Utils:
     #     return wrapper
 
     def call_cleaning_callbacks(self, *args, **kwargs):
-        print('cleaning %s' % str(self))
+        # print('cleaning %s' % str(self))
         g = UI_Element_Utils._cleaning_graph
         working = set(UI_Element_Utils._cleaning_graph_roots)
         done = set()
@@ -337,10 +337,20 @@ class UI_Element_Utils:
             assert current not in done, 'cycle detected in cleaning callbacks (%s)' % current
             if not all(p in done for p in g[current]['parents']): continue
             if current in self._dirty_properties:
-                print('  calling on %s' % current)
+                # print('  calling on %s' % current)
                 g[current]['fn'](self, *args, **kwargs)
-            working.update(g[current]['children'])
-            done.add(current)
+            redirtied = [d for d in self._dirty_properties if d in done]
+            if redirtied:
+                # restarting
+                working = set(UI_Element_Utils._cleaning_graph_roots)
+                done = set()
+                # assert False, "Redirtied %s after cleaning %s" % (
+                #     str(redirtied),
+                #     current
+                # )
+            else:
+                working.update(g[current]['children'])
+                done.add(current)
         # keys = sorted(_cleaning_callbacks.keys())
         # for k in keys:
         #     for cb in UI_Element_Utils._cleaning_callbacks[k]:
@@ -497,16 +507,16 @@ class UI_Element_Properties:
             child._parent.delete_child(child)
         self._children.append(child)
         child._parent = self
-        child.dirty('appending new child', parent=False, children=True)
-        self.dirty('appending new child changes content', 'content')  ######## adding causes to all dirty calls
+        child.dirty('appending child to parent', parent=False, children=True)
+        self.dirty('appending new child changes content', 'content')
     def delete_child(self, child):
         assert child
         assert child in self._children, 'attempting to delete child that does not exist?'
         self._children.remove(child)
         child._parent = None
-        child.dirty()
-        self.dirty('content')
-    @UI_Element_Utils.defer_dirty()
+        child.dirty('deleting child from parent')
+        self.dirty('deleting child changes content', 'content')
+    @UI_Element_Utils.defer_dirty('clearing children')
     def clear_children(self):
         for child in list(self._children):
             self.delete_child(child)
@@ -518,11 +528,11 @@ class UI_Element_Properties:
     def style(self, style):
         self._style_str = str(style or '')
         self._styling_custom = None
-        self.dirty('style')
+        self.dirty('style changed', 'style')
     def add_style(self, style):
         self._style_str = '%s;%s' % (self._style_str, str(style or ''))
         self._styling_custom = None
-        self.dirty('style')
+        self.dirty('style changed', 'style')
 
     @property
     def id(self):
@@ -532,7 +542,7 @@ class UI_Element_Properties:
         nid = '' if nid is None else nid.strip()
         if self._id == nid: return
         self._id = nid
-        self.dirty(parent=True, children=True) # changing id can affect children styles!
+        self.dirty('changing id can affect styles', parent=True, children=True)
 
     @property
     def classes(self):
@@ -550,19 +560,19 @@ class UI_Element_Properties:
         if self._classes_str == classes_str: return
         self._classes_str = classes_str
         self._classes = classes
-        self.dirty(parent=True, children=True) # changing classes can affect children styles!
+        self.dirty('changing classes can affect styles', parent=True, children=True)
     def add_class(self, cls):
         assert ' ' not in cls, 'cannot add class "%s" to "%s" because it has a space in it' % (cls, self._tagName)
         if cls in self._classes: return
         self._classes.add(cls)
         self._classes_str = '%s %s' (self._classes_str, cls)
-        self.dirty(parent=True, children=True) # changing classes can affect children styles!
+        self.dirty('adding classes can affect styles', parent=True, children=True)
     def del_class(self, cls):
         assert ' ' not in cls, 'cannot del class "%s" from "%s" because it has a space in it' % (cls, self._tagName)
         if cls not in self._classes: return
         self._classes.remove(cls)
         self._classes_str = ' '.join(self._classes)
-        self.dirty(parent=True, children=True) # changing classes can affect children styles!
+        self.dirty('deleting classes can affect styles', parent=True, children=True)
 
     @property
     def pseudoclasses(self):
@@ -570,15 +580,15 @@ class UI_Element_Properties:
     def clear_pseudoclass(self):
         if not self._pseudoclasses: return
         self._pseudoclasses = set()
-        self.dirty(parent=True, children=True) # changing pseudoclasses can affect children styles!
+        self.dirty('clearing psuedoclasses affects style', parent=True, children=True)
     def add_pseudoclass(self, pseudo):
         if pseudo in self._pseudoclasses: return
         self._pseudoclasses.add(pseudo)
-        self.dirty(parent=True, children=True) # changing pseudoclasses can affect children styles!
+        self.dirty('adding psuedoclasses affects style', parent=True, children=True)
     def del_pseudoclass(self, pseudo):
         if pseudo not in self._pseudoclasses: return
         self._pseudoclasses.discard(pseudo)
-        self.dirty(parent=True, children=True) # changing pseudoclasses can affect children styles!
+        self.dirty('deleting psuedoclasses affects style', parent=True, children=True)
     @property
     def is_active(self): return 'active' in self._pseudoclasses
     @property
@@ -594,7 +604,7 @@ class UI_Element_Properties:
         v = v or ''
         if self._pseudoelement == v: return
         self._pseudoelement = v
-        self.dirty(parent=True, children=False)
+        self.dirty('changing psuedoelement affects style', parent=True, children=False)
 
     @property
     def src(self):
@@ -603,7 +613,7 @@ class UI_Element_Properties:
     def src(self, v):
         # TODO: load the resource and do something with it!!
         self._src = v
-        self.dirty(parent=True, children=False)
+        self.dirty('changing src affects content', parent=True, children=False)
 
     @property
     def title(self):
@@ -611,7 +621,7 @@ class UI_Element_Properties:
     @title.setter
     def title(self, v):
         self._title = v
-        self.dirty(parent=True, children=False)
+        self.dirty('title changed', parent=True, children=False)
 
     @property
     def scrollTop(self):
@@ -622,7 +632,6 @@ class UI_Element_Properties:
         # TODO: clamp value?
         if self._content_box.y == v: return
         self._content_box.y = v
-        # self.dirty()
 
     @property
     def scrollLeft(self):
@@ -633,7 +642,6 @@ class UI_Element_Properties:
         # TODO: clamp value?
         if self._content_box.x == -v: return
         self._content_box.x = -v
-        # self.dirty()
 
     @property
     def is_visible(self):
@@ -658,10 +666,7 @@ class UI_Element_Properties:
 
 class UI_Element_Dirtiness:
     def dirty(self, cause, properties=None, parent=True, children=False):
-        if self._tagName == 'body':
-            print(self, "dirty", properties, parent, children)
-            for line in traceback.format_stack():
-                print('  ' + line.strip())
+        parent &= self._parent is not None
         if properties is None: properties = {'style', 'size', 'blocks', 'content'}
         elif type(properties) is str: properties = {properties}
         elif type(properties) is list: properties = set(properties)
@@ -678,11 +683,11 @@ class UI_Element_Dirtiness:
         if self._dirty_propagation['defer']: return
         if self._dirty_propagation['parent']:
             if self._parent:
-                self._parent.dirty('propagating dirtiness to parent', self._dirty_propagation['parent'], parent=True, children=False)
+                self._parent.dirty('propagating dirtiness (%s) from %s to parent %s' % (str(self._dirty_propagation['parent']), str(self), str(self._parent)), self._dirty_propagation['parent'], parent=True, children=False)
             self._dirty_propagation['parent'].clear()
         if self._dirty_propagation['children']:
             for child in self._children:
-                child.dirty('propagating dirtiness to child', self._dirty_propagation['children'], parent=False, children=True)
+                child.dirty('propagating dirtiness (%s) from %s to child %s' % (str(self._dirty_propagation['children']), str(self), str(child)), self._dirty_propagation['children'], parent=False, children=True)
             self._dirty_propagation['children'].clear()
 
     @property
@@ -960,8 +965,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # tell children to recompute selector
         for child in self._children: child._compute_style()
 
-        self.dirty('content', 'style change might have changed content (::before / ::after)')
-        self.dirty('size', 'style change might have changed size')
+        self.dirty('style change might have changed content (::before / ::after)', 'content')
+        self.dirty('style change might have changed size', 'size')
         self._dirty_flow = True
         self._dirty_properties.discard('style')
 
@@ -971,13 +976,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _compute_content(self):
         if self._defer_clean: return
         if 'content' not in self._dirty_properties: return
-        if not self.is_visible: return
+        if not self.is_visible:
+            self._dirty_properties.discard('content')
+            return
 
         self.defer_dirty_propagation = True
 
         if self._computed_styles_before and self._computed_styles_before.get('content', ''):
             # TODO: cache this!!
-            print('%s::before = %s' % (str(self), self._compute_style_before.get('content', '')))
+            # print('%s::before = %s' % (str(self), self._compute_style_before.get('content', '')))
             self._child_before = UI_Element(tagName=self._tagName, pseudoelement='before')
             self._child_before.clean()
         else:
@@ -985,7 +992,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if self._computed_styles_after and self._computed_styles_after.get('content', ''):
             # TODO: cache this!!
-            print('%s::after = %s' % (str(self), self._compute_style_after.get('content', '')))
+            # print('%s::after = %s' % (str(self), self._compute_style_after.get('content', '')))
             self._child_after = UI_Element(tagName=self._tagName, pseudoelement='after')
             self._child_after.clean()
         else:
@@ -1001,19 +1008,22 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 'collapse_spaces':   self._whitespace not in {'pre', 'pre-wrap'},
                 'wrap_text':         self._whitespace != 'pre',
             }
-            self._innerTextWrapped = helper_wraptext(**self._textwrap_opts)
-            self._children_text = []
-            for l in self._innerTextWrapped.splitlines():
-                if self._children_text: self._children_text.append(UI_Element(tagName='br'))
-                self._children_text += [UI_Element(innerTextAsIs=w, _parent=self) for w in l.split()]
-            self._children_text_min_size = Size2D(width=0, height=0)
-            for child in self._children_text:
-                child.clean()
-                self._children_text_min_size.width = max(self._children_text_min_size.width, child._static_content_size.width)
-                self._children_text_min_size.height = max(self._children_text_min_size.height, child._static_content_size.height)
+            innerTextWrapped = helper_wraptext(**self._textwrap_opts)
+            if self._innerTextWrapped != innerTextWrapped:
+                self._innerTextWrapped = innerTextWrapped
+                self._children_text = []
+                for l in self._innerTextWrapped.splitlines():
+                    if self._children_text: self._children_text.append(UI_Element(tagName='br'))
+                    self._children_text += [UI_Element(innerTextAsIs=w, _parent=self) for w in l.split()]
+                self._children_text_min_size = Size2D(width=0, height=0)
+                for child in self._children_text:
+                    child.clean()
+                    self._children_text_min_size.width = max(self._children_text_min_size.width, child._static_content_size.width)
+                    self._children_text_min_size.height = max(self._children_text_min_size.height, child._static_content_size.height)
         else:
             self._children_text = None
             self._children_text_min_size = None
+            self._innerTextWrapped = None
 
         # collect all children indo self._children_all
         # TODO: cache this!!
@@ -1027,7 +1037,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         for child in self._children_all: child._compute_content()
 
         # content changes might have changed size
-        self.dirty('blocks')
+        self.dirty('content changes might have affected blocks', 'blocks')
         self._dirty_flow = True
         self._dirty_properties.discard('content')
 
@@ -1039,7 +1049,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if self._defer_clean: return
         if 'blocks' not in self._dirty_properties: return
-        if not self.is_visible: return
+        if not self.is_visible:
+            self._dirty_properties.discard('blocks')
+            return
 
         self.defer_dirty_propagation = True
 
@@ -1065,7 +1077,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             child._compute_blocks()
 
         # content changes might have changed size
-        self.dirty('size')
+        self.dirty('block changes might have changed size', 'size')
         self._dirty_flow = True
         self._dirty_properties.discard('blocks')
 
@@ -1078,7 +1090,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _compute_static_content_size(self):
         if self._defer_clean: return
         if 'size' not in self._dirty_properties: return
-        if not self.is_visible: return
+        if not self.is_visible:
+            self._dirty_properties.discard('size')
+            return
 
         self.defer_dirty_propagation = True
 
@@ -1156,6 +1170,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         #     ))
 
         self._dirty_properties.discard('size')
+        self._dirty_flow = True
         self.defer_dirty_propagation = False
 
     def layout(self, **kwargs):
@@ -1498,6 +1513,7 @@ class UI_Document:
         self._body = UI_Element(tagName='body')
         self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
         self._under_mouse = None
+        self._sz = None
 
     @property
     def body(self):
@@ -1537,6 +1553,9 @@ class UI_Document:
         Globals.ui_draw.update()
         bgl.glEnable(bgl.GL_BLEND)
 
+        if (w,h) != self._sz:
+            self._sz = (w,h)
+            self._body.dirty('region size changed', 'size', children=True)
         self._body.clean()
         self._body.layout(fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
         self._body.set_view_size(sz)
