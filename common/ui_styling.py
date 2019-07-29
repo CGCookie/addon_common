@@ -202,6 +202,7 @@ token_rules = [
         r'hover',   # applies when mouse is hovering over
         r'active',  # applies between mousedown and mouseup
         r'focus',   # applies if element has focus
+        r'disabled',    # applies if element is disabled
         # r'link',    # unvisited link
         # r'visited', # visited link
     ]),
@@ -338,6 +339,8 @@ class UI_Style_RuleSet:
 
     @staticmethod
     def from_decllist(decllist, tagname, pseudoclass=None):
+        t = type(pseudoclass)
+        if t is list or t is set: pseudoclass = ':'.join(pseudoclass)
         rs = UI_Style_RuleSet()
         rs.selectors = [[tagname + (':%s'%pseudoclass if pseudoclass else '')]]
         for k,v in decllist.items():
@@ -557,14 +560,18 @@ class UI_Styling:
         if selector is None: return {}
         stylings = [styling for styling in stylings if styling]
         full_decllist = [dl for styling in stylings for dl in styling.get_decllist(selector)]
+        #decllists = [(styling if type(styling) is dict else styling.get_decllist(selector)) for styling in stylings]
+        #full_decllist = [dl for decllist in decllists for dl in decllist]
+        #print(full_decllist)
         decllist = UI_Styling._expand_declarations(full_decllist)
         return decllist
 
     def filter_styling(self, tagname, pseudoclass=None):
         if pseudoclass:
-            if type(pseudoclass) is str: _pseudoclass = '%s' % pseudoclass
-            elif type(pseudoclass) is list: _pseudoclass = '%s' % (':'.join(pseudoclass))
-        selector = [tagname + (':%s'%_pseudoclass if pseudoclass else '')]
+            t = type(pseudoclass)
+            if t is list or t is set: _pseudoclass = ''.join(':%s' % p for p in pseudoclass)
+            else: _pseudoclass = ':%s' % str(pseudoclass)
+        selector = [tagname + (_pseudoclass if pseudoclass else '')]
         decllist = self.compute_style(selector, self)
         styling = UI_Styling.from_decllist(decllist, tagname=tagname, pseudoclass=pseudoclass)
         return styling

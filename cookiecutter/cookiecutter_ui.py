@@ -122,8 +122,8 @@ class CookieCutter_UI:
         # print('--------- ' + str(random.random()))
         self.drawing.update_dpi()
         self._area.tag_redraw()
-        self.document.update(self.context, self.event)
-        ret = None #self.wm.modal(self.context, self.event)
+        ret = self.document.update(self.context, self.event)
+        # ret = self.wm.modal(self.context, self.event)
         #if self.wm.has_focus(): return True
         if ret and 'hover' in ret: return True
         return False

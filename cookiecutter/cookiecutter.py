@@ -123,21 +123,22 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Uti
 
         self.actions_update()
 
-        if self.ui_update(): ret = {'RUNNING_MODAL'}
+        if self.ui_update():
+            ret = {'RUNNING_MODAL'}
+        else:
+            # allow window actions to pass through to Blender
+            if self.actions.using('window actions'): ret = {'PASS_THROUGH'}
 
-        # allow window actions to pass through to Blender
-        if self.actions.using('window actions'): ret = {'PASS_THROUGH'}
-
-        # allow navigation actions to pass through to Blender
-        if self.actions.navigating() or (self.actions.timer and self._nav):
-            # let Blender handle navigation
-            self.actions.unuse('navigate')  # pass-through commands do not receive a release event
-            self._nav = True
-            if not self.actions.trackpad: self.drawing.set_cursor('HAND')
-            ret = {'PASS_THROUGH'}
-        elif self._nav:
-            self._nav = False
-            self._nav_time = time.time()
+            # allow navigation actions to pass through to Blender
+            if self.actions.navigating() or (self.actions.timer and self._nav):
+                # let Blender handle navigation
+                self.actions.unuse('navigate')  # pass-through commands do not receive a release event
+                self._nav = True
+                if not self.actions.trackpad: self.drawing.set_cursor('HAND')
+                ret = {'PASS_THROUGH'}
+            elif self._nav:
+                self._nav = False
+                self._nav_time = time.time()
 
         try:
             self.update()

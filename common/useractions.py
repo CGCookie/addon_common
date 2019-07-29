@@ -176,6 +176,7 @@ class Actions:
         self.region = context.region
         self.size = (context.region.width,context.region.height)
         self.r3d = context.space_data.region_3d
+        self.window = context.window
 
         self.actions_using = set()
         self.actions_pressed = set()

@@ -159,6 +159,14 @@ class Drawing:
                 d['height'] = get_height(text)
                 d['line height'] = self.line_height * len(lines)
             self.size_cache[key] = d
+            if False:
+                print('')
+                print('--------------------------------------')
+                print('> computed new size')
+                print('>   key: %s' % str(key))
+                print('>   size: %s' % str(d))
+                print('--------------------------------------')
+                print('')
         if fontsize: self.set_font_size(size_prev, fontid=fontid)
         return self.size_cache[key][item]
 

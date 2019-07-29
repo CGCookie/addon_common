@@ -88,6 +88,10 @@ def button(**kwargs):
 def p(**kwargs):
     return UI_Element(tagName='p', **kwargs)
 
+def dialog(**kwargs):
+    return UI_Element(tagName='dialog', **kwargs)
+
+
 
 # class UI_Flexbox(UI_Core):
 #     '''

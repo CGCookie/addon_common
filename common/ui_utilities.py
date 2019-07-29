@@ -306,8 +306,9 @@ def convert_token_to_color(c):
 
 def convert_token_to_cursor(c):
     if type(c) is re.Match: c = c.group(0)
-    assert c in cursorname_to_cursor, 'could not convert "%s" to cursor' % c
-    return cursorname_to_cursor[c]
+    if c in cursorname_to_cursor: return cursorname_to_cursor[c]
+    if c in cursorname_to_cursor.values(): return c
+    assert False, 'could not convert "%s" to cursor' % c
 
 def convert_token_to_number(n):
     if type(n) is re.Match: n = n.group('num')
@@ -353,6 +354,7 @@ def helper_wraptext(text='', width=None, fontid=0, fontsize=12, preserve_newline
     if collapse_spaces:
         text = re.sub(r' +', ' ', text)
     if wrap_text:
+        if width is None: width = float('inf')
         cline,*ltext = text.split(' ')
         nlines = []
         for cword in ltext:

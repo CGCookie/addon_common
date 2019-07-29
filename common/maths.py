@@ -145,6 +145,8 @@ class Point2D(Vector, Entity2D):
             return Point2D((self.x + other.x, self.y + other.y))
         if t is Vector or t is Vec2D:
             return Point2D((self.x + other.x, self.y + other.y))
+        if t is RelPoint2D:
+            return Point2D((self.x + other.x, self.y + other.y))
         assert False, "unhandled type of other: %s (%s)" % (str(other), str(t))
 
     def __radd__(self, other):
@@ -155,6 +157,78 @@ class Point2D(Vector, Entity2D):
         if t is Vector or t is Vec2D:
             return Point2D((self.x - other.x, self.y - other.y))
         elif t is Point2D:
+            return Vec2D((self.x - other.x, self.y - other.y))
+        assert False, "unhandled type of other: %s (%s)" % (str(other), str(t))
+
+    def distance_squared_to(self, other) -> float:
+        return (self.x - other.x)**2 + (self.y - other.y)**2
+
+    def distance_to(self, other) -> float:
+        return sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
+
+    def as_vector(self):
+        return Vector(self)
+
+    def from_vector(self, v):
+        self.x, self.y = v
+
+    @staticmethod
+    def average(points):
+        x, y, c = 0, 0, 0
+        for p in points:
+            x += p.x
+            y += p.y
+            c += 1
+        if c == 0:
+            return Point2D((0, 0))
+        return Point2D((x / c, y / c))
+
+    @staticmethod
+    def weighted_average(weight_points):
+        x, y, c = 0, 0, 0
+        for w, p in weight_points:
+            x += p.x * w
+            y += p.y * w
+            c += w
+        if c == 0:
+            return Point2D((0, 0))
+        return Point2D((x / c, y / c))
+
+
+class RelPoint2D(Vector, Entity2D):
+    @stats_wrapper
+    def __init__(self, *args, **kwargs):
+        Vector.__init__(*args, **kwargs)
+
+    def __str__(self):
+        return '<RelPoint2D (%0.4f, %0.4f)>' % (self.x, self.y)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __iter__(self):
+        return iter([self.x, self.y])
+
+    def __add__(self, other):
+        t = type(other)
+        if t is Direction2D:
+            return RelPoint2D((self.x + other.x, self.y + other.y))
+        if t is Vector or t is Vec2D:
+            return RelPoint2D((self.x + other.x, self.y + other.y))
+        if t is RelPoint2D:
+            return RelPoint2D((self.x + other.x, self.y, + other.y))
+        if t is Point2D:
+            return Point2D((self.x + other.x, self.y + other.y))
+        assert False, "unhandled type of other: %s (%s)" % (str(other), str(t))
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __sub__(self, other):
+        t = type(other)
+        if t is Vector or t is Vec2D:
+            return RelPoint2D((self.x - other.x, self.y - other.y))
+        elif t is Point2D or t is RelPoint2D:
             return Vec2D((self.x - other.x, self.y - other.y))
         assert False, "unhandled type of other: %s (%s)" % (str(other), str(t))
 

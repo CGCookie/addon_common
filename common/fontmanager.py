@@ -33,6 +33,10 @@ class FontManager:
     _prefs = get_preferences()
 
     @staticmethod
+    @property
+    def last_fontid(): return FontManager._last_fontid
+
+    @staticmethod
     def get_dpi():
         ui_scale = FontManager._prefs.view.ui_scale
         pixel_size = FontManager._prefs.system.pixel_size

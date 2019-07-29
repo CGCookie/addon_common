@@ -27,17 +27,18 @@ body {
     padding: 0;
     border: 5px rgba(255,0,0,0.25);
     border-radius: 0px;
-    cursor: crosshair;
+    cursor: default;
+    overflow: hidden;
 }
 
 button {
     white-space: normal;
     cursor: pointer;
     display: inline;
-    border-width: 5px;
+    border-width: 2px;
     border-radius: 5px;
     border-color: white rgb(96,96,96) rgb(32,32,32) rgb(224,224,224);
-    background: rgba(160,160,160, 0.25);
+    background: rgba(160,160,160, 0.50);
     color: black;
 }
 
@@ -46,19 +47,26 @@ button:focus {
 }
 
 button:active {
-    font-weight: bold;
-    border-color: rgb(64,64,64) white white rgb(64,64,64);
-    background: rgb(128,128,128);
+    background: rgb(192,128,128);
 }
 
 button:hover {
-    font-style: italic;
     color: rgb(64,64,64);
     background: rgb(192,192,224);
 }
 
-button:hover:active {
-    background: rgb(160,160,160);
+button:active:hover {
+    border-color: rgb(64,64,64) white white rgb(64,64,64);
+    background: white;
+    color: black;
+}
+
+button:disabled {
+    background-color: rgb(128,128,128);
+    color: rgb(192,192,192);
+    border-width: 1px;
+    border-color: rgb(96,96,96);
+    cursor: default;
 }
 
 p {
@@ -66,11 +74,10 @@ p {
     width: 100%;
     margin: 2px 0px;
     padding: 2px;
-    background-color: rgba(255,255,255,0);
+    background-color: rgba(255,255,255,0.9);
     color: black;
+    cursor: text;
 }
-
-
 
 br {
     display: block;
@@ -79,4 +86,13 @@ br {
     margin: 0px;
     padding: 0px;
     border-width: 0px;
+}
+
+dialog {
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: black;
+    background: rgba(32, 32, 32, 0.5);
+    overflow-x: scroll;
+    overflow-y: scroll;
 }
