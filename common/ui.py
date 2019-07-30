@@ -113,12 +113,9 @@ def framed_dialog(label=None, **kwargs):
             if t is None or t == 'auto': t = 0
             if type(t) is tuple: t = t[0]
             original_pos = Point2D((float(l), float(t)))
-
-            print('down!!')
         def mouseup(e):
             nonlocal is_dragging
             is_dragging = False
-            print('up!!')
         def mousemove(e):
             nonlocal is_dragging, mousedown_pos, original_pos
             if not is_dragging: return
