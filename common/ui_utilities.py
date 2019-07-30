@@ -283,7 +283,7 @@ def convert_token_to_color(c):
         # https://gist.github.com/mjackson/5311256
         # TODO: use equations on https://www.rapidtables.com/convert/color/hsl-to-rgb.html
         if s <= 0.00001:
-            r,g,b = 255
+            r = g = b = l*255
         else:
             def hue2rgb(p, q, t):
                 t %= 1

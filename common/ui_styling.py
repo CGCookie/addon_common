@@ -428,25 +428,34 @@ class UI_Styling:
         lines = open(filename, 'rt').read()
         return UI_Styling(lines)
 
+    def load_from_file(self, filename):
+        text = open(filename, 'rt').read()
+        self.load_from_text(text)
+
+    def load_from_text(self, text):
+        self.rules = []
+        if not text: return
+        charstream = Parse_CharStream(text)             # convert input into character stream
+        lexer = Parse_Lexer(charstream, token_rules)    # tokenize the character stream
+        while lexer.peek_t() != 'eof':
+            self.rules.append(UI_Style_RuleSet.from_lexer(lexer))
+
     @staticmethod
-    def from_decllist(decllist, selector=None): # tagname='*', pseudoclass=None):
+    def from_decllist(decllist, selector=None, var=None): # tagname='*', pseudoclass=None):
         if selector is None: selector = ['*']
-        var = UI_Styling()
+        if var is None: var = UI_Styling()
         var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector)]
         # var.rules = [UI_Style_RuleSet.from_decllist(decllist, tagname, pseudoclass)]
         return var
 
     def __init__(self, lines=''):
-        self.rules = []
-        if lines:
-            charstream = Parse_CharStream(lines)            # convert input into character stream
-            lexer = Parse_Lexer(charstream, token_rules)    # tokenize the character stream
-            while lexer.peek_t() != 'eof':
-                self.rules.append(UI_Style_RuleSet.from_lexer(lexer))
+        self.load_from_text(lines)
 
     def __str__(self):
         if not self.rules: return '<UI_Styling>'
         return '<UI_Styling\n%s\n>' % ('\n'.join('  '+l for r in self.rules for l in str(r).splitlines()))
+
+    def __repr__(self): return self.__str__()
 
     def get_decllist(self, selector):
         # return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
@@ -556,5 +565,10 @@ class UI_Styling:
         return styling
 
 
-path = os.path.join(os.path.dirname(__file__), 'config', 'ui_defaultstyles.css')
-ui_defaultstylings = UI_Styling.from_file(path) if os.path.exists(path) else UI_Styling()
+ui_defaultstylings = UI_Styling()
+def load_defaultstylings():
+    global ui_defaultstylings
+    path = os.path.join(os.path.dirname(__file__), 'config', 'ui_defaultstyles.css')
+    if os.path.exists(path): ui_defaultstylings.load_from_file(path)
+    else: ui_defaultstylings.rules = []
+load_defaultstylings()

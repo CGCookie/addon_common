@@ -596,6 +596,7 @@ class UI_Element_Properties:
     def add_pseudoclass(self, pseudo):
         if pseudo in self._pseudoclasses: return
         self._pseudoclasses.add(pseudo)
+
         if pseudo == 'disabled':
             self.del_pseudoclass('active')
             self.del_pseudoclass('focus')
@@ -607,6 +608,7 @@ class UI_Element_Properties:
     def del_pseudoclass(self, pseudo):
         if pseudo not in self._pseudoclasses: return
         self._pseudoclasses.discard(pseudo)
+
         self.dirty('deleting psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=True)
         if self._parent:
             self.dirty('deleting psuedoclass %s for %s affects parent content' % (pseudo, str(self)), 'content', parent=True, children=False)
@@ -757,7 +759,8 @@ class UI_Element_Properties:
 
 
 class UI_Element_Dirtiness:
-    def dirty(self, cause, properties=None, parent=True, children=False):
+    def dirty(self, cause=None, properties=None, parent=True, children=False):
+        if cause is None: cause = 'Unknown cause'
         parent &= self._parent is not None
         if properties is None: properties = set(UI_Element_Utils._cleaning_graph_nodes)
         elif type(properties) is str: properties = {properties}
@@ -767,6 +770,15 @@ class UI_Element_Dirtiness:
         if parent: self._dirty_propagation['parent'] |= properties
         if children: self._dirty_propagation['children'] |= properties
         self.propagate_dirtiness()
+
+    def dirty_styling(self):
+        self._computed_styles = {}
+        self._styling_default = None
+        self._styling_parent = None
+        self._styling_custom = None
+        for child in self._children_all: child.dirty_styling()
+        if self._parent is None:
+            self.dirty('Dirtying style cache', children=True)
 
     def add_dirty_callback(self, child, properties):
         if type(properties) is str: properties = [properties]
@@ -908,7 +920,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # cached properties
         # TODO: go back through these to make sure we've caught everything
         self._classes          = []     # classes applied to element, set by self.classes property, based on self._classes_str
-        self._styling_custom   = None   # custom style UI_Style, set by self.style property, based on self._style_str
         self._computed_styles  = {}     # computed style UI_Style after applying all styling
         self._is_visible       = False  # indicates if self is visible, set in compute_style(), based on self._computed_styles
         self._is_scrollable_x  = False  # indicates is self is scrollable along x, set in compute_style(), based on self._computed_styles
@@ -924,6 +935,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._selector_after   = None   # full selector of ::after pseudoelement for self
         self._styling_default  = None   # default styling for element (depends on tagName)
         self._styling_custom   = None   #
+        self._styling_parent   = None
         self._innerTextAsIs    = None   # text to display as-is (no wrapping)
         self._textwrap_opts    = {}
         self._l, self._t, self._w, self._h = 0,0,0,0    # scissor position
@@ -1037,31 +1049,37 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
 
         # initialize styles in order: default, focus, active, hover, hover+active
-        if self._parent and self._innerTextAsIs:
-            keep = {
-                'font-family', 'font-style', 'font-weight', 'font-size',
-                'color',
-            }
-            # remove = {
-            #     'width','height','min-width','min-height','max-width','max-height',
-            #     'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
-            #     'padding-left','padding-right','padding-top','padding-bottom',
-            #     'border-width', 'border-radius',
-            #     'border-left-color', 'border-right-color', 'border-top-color', 'border-bottom-color',
-            #     'display','position','white-space',
-            #     'background-color',
-            #     'overflow-x', 'overflow-y',
-            # }
-            decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
-            self._styling_parent = UI_Styling.from_decllist(decllist)
-            # self._styling_parent = UI_Styling()
-        else:
-            self._styling_parent = UI_Styling()
+        # TODO: inherit parent styles with other elements (not just *text*)
+        if self._styling_parent is None:
+            if self._parent and self._innerTextAsIs:
+                keep = {
+                    'font-family', 'font-style', 'font-weight', 'font-size',
+                    'color',
+                }
+                # remove = {
+                #     'width','height','min-width','min-height','max-width','max-height',
+                #     'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
+                #     'padding-left','padding-right','padding-top','padding-bottom',
+                #     'border-width', 'border-radius',
+                #     'border-left-color', 'border-right-color', 'border-top-color', 'border-bottom-color',
+                #     'display','position','white-space',
+                #     'background-color',
+                #     'overflow-x', 'overflow-y',
+                # }
+                decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
+                self._styling_parent = UI_Styling.from_decllist(decllist)
+                # self._styling_parent = UI_Styling()
+            else:
+                self._styling_parent = UI_Styling()
+
+        # computed default styling
         if self._styling_default is None:
             self._styling_default = UI_Styling()
             if not self._innerTextAsIs:
+                # strip off all pseudoclasses
+                sel_base = [re.sub(r'(?<!:):[^:.#]+', r'', s) for s in self._selector]
                 for pseudoclasses in [None, 'focus', 'hover', 'active', ['hover','active'], 'disabled']:
-                    sel = list(self._selector)
+                    sel = list(sel_base)
                     if pseudoclasses:
                         if type(pseudoclasses) is str: pseudoclasses = [pseudoclasses]
                         pseudoclasses = ''.join(':%s'%p for p in pseudoclasses)
@@ -1070,8 +1088,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     filtered_decllist = ui_defaultstylings.filter_styling(sel)
                     self._styling_default.append(filtered_decllist)
 
-        # compute styles applied to self based on selector
-        if not self._styling_custom:
+        # compute custom styles
+        if self._styling_custom is None:
             style_list = [self._style_str]
             if self._style_left is not None: style_list.append('left:'+str(self._style_left)+'px')
             if self._style_top is not None: style_list.append('top:'+str(self._style_top)+'px')
@@ -1079,8 +1097,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if self._style_bottom is not None: style_list.append('bottom:'+str(self._style_bottom)+'px')
             style_str = ';'.join(style_list)
             self._styling_custom = UI_Styling('*{%s;}' % style_str)
+
         styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
         self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
+
         self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
         if self._is_visible and not self._pseudoelement:
             # need to compute ::before and ::after styles to know whether there is content to compute and render
@@ -1105,8 +1125,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # NOTE: self._children_all has not been constructed, yet!
         for child in self._children: child._compute_style()
         for child in self._children_text: child._compute_style()
-        if self._child_before: self._child_before._computed_styles()
-        if self._child_after: self._child_after._computed_styles()
+        if self._child_before: self._child_before._compute_styles()
+        if self._child_after: self._child_after._compute_styles()
 
         self.dirty('style change might have changed content (::before / ::after)', 'content')
         self.dirty('style change might have changed size', 'size')
@@ -1578,9 +1598,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if ScissorStack.is_visible() and ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
             if self._innerTextAsIs:
                 pos = Point2D((self._l + self._content_offset, self._t))
-                size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
-                Globals.drawing.text_draw2D(self._innerTextAsIs, pos, self._fontcolor)
-                Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
+                size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
+                Globals.drawing.text_draw2D(self._innerTextAsIs, pos, self._parent._fontcolor)
+                Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
             else:
                 ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._computed_styles)
 
@@ -1670,6 +1690,12 @@ class UI_Document(UI_Document_FSM):
         self.actions = Actions(bpy.context, UI_Document.default_keymap)
         self._body = UI_Element(tagName='body')
         self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
+        self.fsm.init(self, start='main')
+
+        self._under_mouse = None
+        self._under_down = None
+        self._focus = None
+
         self._last_mx = -1
         self._last_my = -1
         self._last_mouse = Point2D((-1, -1))
@@ -1679,16 +1705,7 @@ class UI_Document(UI_Document_FSM):
         self._last_under_mouse = None
         self._last_under_click = None
         self._last_click_time = 0
-        self._under_mouse = None
-        self._under_down = None
-        self._focus = None
-        self._sz = None
-        self._dblclick = None
-        self._dblclick_time = None
-        self._mmb_down = None
-        self._mmb_point = None
-        self._last_mmb = False
-        self.fsm.init(self, start='main')
+        self._last_sz = None
 
     @property
     def body(self):
@@ -1725,6 +1742,7 @@ class UI_Document(UI_Document_FSM):
         if change_cursor and self._under_mouse:
             cursor = convert_token_to_cursor(self._under_mouse._computed_styles.get('cursor', 'default'))
             Globals.drawing.set_cursor(cursor)
+
         if self._under_mouse == self._last_under_mouse: return
 
         rem = set(self._last_under_mouse.get_pathToRoot()) if self._last_under_mouse else set()
@@ -1732,9 +1750,7 @@ class UI_Document(UI_Document_FSM):
         for e in rem - add: e.del_pseudoclass('hover')
         for e in add - rem: e.add_pseudoclass('hover')
         if self._last_under_mouse: self._last_under_mouse.dispatch_event('on_mouseleave')
-
-        if self._under_mouse:
-            self._under_mouse.dispatch_event('on_mouseenter')
+        if self._under_mouse: self._under_mouse.dispatch_event('on_mouseenter')
 
     def handle_mousemove(self, ui_element=None):
         if ui_element is None: ui_element = self._under_mouse
@@ -1749,9 +1765,6 @@ class UI_Document(UI_Document_FSM):
 
     @UI_Document_FSM.FSM_State('main')
     def modal_main(self):
-        if self._dblclick and time.time() >= self._dblclick_time:
-            self._dblclick = None
-
         if self._mmb and not self._last_mmb:
             return 'scroll'
 
@@ -1861,8 +1874,8 @@ class UI_Document(UI_Document_FSM):
         Globals.ui_draw.update()
         bgl.glEnable(bgl.GL_BLEND)
 
-        if (w,h) != self._sz:
-            self._sz = (w,h)
+        if (w,h) != self._last_sz:
+            self._last_sz = (w,h)
             self._body.dirty('region size changed', 'size', children=True)
         self._body.clean()
         self._body.layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
