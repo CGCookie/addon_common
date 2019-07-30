@@ -30,6 +30,7 @@ from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger
 from ..common.drawing import Drawing
 from ..common.ui_core import UI_Document
+from ..common.utils import find_fns
 
 if bversion() >= "2.80":
     import gpu
@@ -76,12 +77,13 @@ class CookieCutter_UI:
             return run
 
     def ui_init(self):
-        self.document = UI_Document(self.context)
+        self.document = Globals.ui_document # UI_Document(self.context)
+        self.document.init(self.context)
         self.drawing = Globals.drawing
         self.drawing.set_region(bpy.context.space_data, bpy.context.region, bpy.context.space_data.region_3d, bpy.context.window)
         self.blenderui_init()
         fns = {'pre3d':[], 'post3d':[], 'post2d':[]}
-        for m,fn in self.find_fns('drawmode'): fns[m].append(fn)
+        for m,fn in find_fns(self, 'drawmode'): fns[m].append(fn)
         def draw(fns):
             for fn in fns: fn(self)
         self._draw_pre3d  = lambda:draw(fns['pre3d'])

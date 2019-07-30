@@ -65,11 +65,16 @@ int get_region() {
     float radwid2 = radwid * radwid, rad2 = rad * rad;
     float r2;
 
+    // outside
     if(dist_left < 0 || dist_right < 0 || dist_bottom < 0 || dist_top < 0) return 0;
+
+    // within top and bottom, might be left or right side
     if(dist_bottom > radwid && dist_top > radwid) {
         if(dist_left > border_width && dist_right > border_width) return 5;
         return (dist_left < dist_right) ? 4 : 2;
     }
+
+    // within left and right, might be bottom or top
     if(dist_left > radwid && dist_right > radwid) {
         if(dist_bottom > border_width && dist_top > border_width) return 5;
         return (dist_bottom < dist_top) ? 3 : 1;

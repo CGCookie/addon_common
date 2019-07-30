@@ -88,9 +88,49 @@ def button(**kwargs):
 def p(**kwargs):
     return UI_Element(tagName='p', **kwargs)
 
+def textarea(**kwargs):
+    return UI_Element(tagName='textarea', **kwargs)
+
 def dialog(**kwargs):
     return UI_Element(tagName='dialog', **kwargs)
 
+def framed_dialog(label=None, **kwargs):
+    ui_dialog = UI_Element(tagName='dialog', classes='framed', **kwargs)
+    if label is not None:
+        ui_label = ui_dialog.append_child(UI_Element(tagName='div', classes='header', innerText=label))
+        is_dragging = False
+        mousedown_pos = None
+        original_pos = None
+        def mousedown(e):
+            nonlocal is_dragging, mousedown_pos, original_pos
+            is_dragging = True
+            mousedown_pos = e.mouse
+
+            l = ui_dialog.left
+            if l is None or l == 'auto': l = 0
+            if type(l) is tuple: l = l[0]
+            t = ui_dialog.top
+            if t is None or t == 'auto': t = 0
+            if type(t) is tuple: t = t[0]
+            original_pos = Point2D((float(l), float(t)))
+
+            print('down!!')
+        def mouseup(e):
+            nonlocal is_dragging
+            is_dragging = False
+            print('up!!')
+        def mousemove(e):
+            nonlocal is_dragging, mousedown_pos, original_pos
+            if not is_dragging: return
+            delta = e.mouse - mousedown_pos
+            new_pos = original_pos + delta
+            ui_dialog.left = new_pos.x
+            ui_dialog.top = new_pos.y
+        ui_label.add_eventListener('on_mousedown', mousedown)
+        ui_label.add_eventListener('on_mouseup', mouseup)
+        ui_label.add_eventListener('on_mousemove', mousemove)
+    ui_inside = ui_dialog.append_child(UI_Element(tagName='div', classes='inside', style='overflow-y:scroll'))
+    return {'dialog':ui_dialog, 'inside':ui_inside}
 
 
 # class UI_Flexbox(UI_Core):

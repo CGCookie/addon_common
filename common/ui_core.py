@@ -31,6 +31,7 @@ import bgl
 from .ui_styling import UI_Styling, ui_defaultstylings
 from .ui_utilities import helper_wraptext, convert_token_to_cursor
 from .drawing import ScissorStack
+from .fsm import FSM
 
 from .useractions import Actions
 
@@ -388,11 +389,12 @@ class UI_Event:
         'bubbling',
     ]
 
-    def __init__(self, target=None):
+    def __init__(self, target=None, mouse=None):
         self._eventPhase = 'none'
         self._cancelBubble = False
         self._cancelCapture = False
         self._target = target
+        self._mouse = mouse
         self._defaultPrevented = False
 
     def stop_propagation():
@@ -425,6 +427,9 @@ class UI_Event:
 
     @property
     def target(self): return self._target
+
+    @property
+    def mouse(self): return self._mouse
 
     @property
     def default_prevented(self): return self._defaultPrevented
@@ -591,6 +596,10 @@ class UI_Element_Properties:
     def add_pseudoclass(self, pseudo):
         if pseudo in self._pseudoclasses: return
         self._pseudoclasses.add(pseudo)
+        if pseudo == 'disabled':
+            self.del_pseudoclass('active')
+            self.del_pseudoclass('focus')
+            # TODO: on_blur?
         self.dirty('adding psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=True)
         if self._parent:
             self.dirty('adding pseudoclass %s for %s affects parent content' % (pseudo, str(self)), 'content', parent=True, children=False)
@@ -639,6 +648,59 @@ class UI_Element_Properties:
     def title(self, v):
         self._title = v
         self.dirty('title changed', parent=True, children=False)
+
+    @property
+    def left(self):
+        return self._computed_styles.get('left', 'auto')
+        return self._style_left
+    @left.setter
+    def left(self, v):
+        self._style_left = v
+        self._styling_custom = None
+        self.dirty('changing left affects style', 'style', parent=False, children=False)
+        if self._parent:
+            self.dirty('changing left for %s affects parent content' % str(self), 'content', parent=True, children=False)
+            self._parent.add_dirty_callback(self, 'style')
+
+    @property
+    def top(self):
+        return self._computed_styles.get('top', 'auto')
+        return self._style_top
+    @top.setter
+    def top(self, v):
+        self._style_top = v
+        self._styling_custom = None
+        self.dirty('changing top affects style', 'style', parent=False, children=False)
+        if self._parent:
+            self.dirty('changing top for %s affects parent content' % str(self), 'content', parent=True, children=False)
+            self._parent.add_dirty_callback(self, 'style')
+
+    @property
+    def right(self):
+        return self._computed_styles.get('right', 'auto')
+        return self._style_right
+    @right.setter
+    def right(self, v):
+        self._style_right = v
+        self._styling_custom = None
+        self.dirty('changing right affects style', 'style', parent=False, children=False)
+        if self._parent:
+            self.dirty('changing right for %s affects parent content' % str(self), 'content', parent=True, children=False)
+            self._parent.add_dirty_callback(self, 'style')
+
+    @property
+    def bottom(self):
+        return self._computed_styles.get('bottom', 'auto')
+        return self._style_bottom
+    @bottom.setter
+    def bottom(self, v):
+        self._style_bottom = v
+        self._styling_custom = None
+        self.dirty('changing bottom affects style', 'style', parent=False, children=False)
+        if self._parent:
+            self.dirty('changing bottom for %s affects parent content' % str(self), 'content', parent=True, children=False)
+            self._parent.add_dirty_callback(self, 'style')
+
 
     @property
     def scrollTop(self):
@@ -793,6 +855,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._pseudoclasses = set()     # TODO: should order matter here? (make list)
                                         # updated by main ui system (hover, active, focus)
         self._pseudoelement = ''        # set only if element is a pseudoelement ('::before' or '::after')
+
+        self._style_left    = None
+        self._style_top     = None
+        self._style_right   = None
+        self._style_bottom  = None
 
         #################################################################################
         # boxes for viewing (wrt blender region) and content (wrt view)
@@ -971,27 +1038,47 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         # initialize styles in order: default, focus, active, hover, hover+active
         if self._parent and self._innerTextAsIs:
-            remove = {
-                'width','height','min-width','min-height','max-width','max-height',
-                'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
-                'padding-left','padding-right','padding-top','padding-bottom',
-                'border-width',
-                'display','position','white-space',
+            keep = {
+                'font-family', 'font-style', 'font-weight', 'font-size',
+                'color',
             }
-            decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k not in remove}
+            # remove = {
+            #     'width','height','min-width','min-height','max-width','max-height',
+            #     'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
+            #     'padding-left','padding-right','padding-top','padding-bottom',
+            #     'border-width', 'border-radius',
+            #     'border-left-color', 'border-right-color', 'border-top-color', 'border-bottom-color',
+            #     'display','position','white-space',
+            #     'background-color',
+            #     'overflow-x', 'overflow-y',
+            # }
+            decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
             self._styling_parent = UI_Styling.from_decllist(decllist)
             # self._styling_parent = UI_Styling()
         else:
             self._styling_parent = UI_Styling()
         if self._styling_default is None:
             self._styling_default = UI_Styling()
-            for pseudoclasses in [None, 'focus', 'hover', 'active', ['hover','active'], 'disabled']:
-                filtered_decllist = ui_defaultstylings.filter_styling(self._tagName, pseudoclasses)
-                self._styling_default.append(filtered_decllist)
+            if not self._innerTextAsIs:
+                for pseudoclasses in [None, 'focus', 'hover', 'active', ['hover','active'], 'disabled']:
+                    sel = list(self._selector)
+                    if pseudoclasses:
+                        if type(pseudoclasses) is str: pseudoclasses = [pseudoclasses]
+                        pseudoclasses = ''.join(':%s'%p for p in pseudoclasses)
+                        sel[-1] = sel[-1] + pseudoclasses
+                    # filtered_decllist = ui_defaultstylings.filter_styling(self._tagName, pseudoclasses)
+                    filtered_decllist = ui_defaultstylings.filter_styling(sel)
+                    self._styling_default.append(filtered_decllist)
 
         # compute styles applied to self based on selector
         if not self._styling_custom:
-            self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
+            style_list = [self._style_str]
+            if self._style_left is not None: style_list.append('left:'+str(self._style_left)+'px')
+            if self._style_top is not None: style_list.append('top:'+str(self._style_top)+'px')
+            if self._style_right is not None: style_list.append('right:'+str(self._style_right)+'px')
+            if self._style_bottom is not None: style_list.append('bottom:'+str(self._style_bottom)+'px')
+            style_str = ';'.join(style_list)
+            self._styling_custom = UI_Styling('*{%s;}' % style_str)
         styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
         self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
         self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
@@ -1128,17 +1215,17 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         else:
             # collect children into blocks
             self._blocks = []
-            blocking = False
+            blocked_inlines = None
             for child in self._children_all:
                 d = child._computed_styles.get('display', 'inline')
                 if d == 'inline':
-                    if not blocking:
-                        self._blocks.append([])
-                        blocking = True
-                    self._blocks[-1] += [child]
+                    if not blocked_inlines:
+                        blocked_inlines = []
+                        self._blocks.append(blocked_inlines)
+                    blocked_inlines.append(child)
                 else:
                     self._blocks.append([child])
-                    blocking = False
+                    blocked_inlines = None
 
         for child in self._children_all:
             child._compute_blocks()
@@ -1239,13 +1326,21 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._absolute_pos = None
         self._content_offset = 0 if not self._static_content_size or first_on_line else self._static_content_space
 
+        if style_pos in {'fixed', 'absolute'}:
+            pl = self._computed_styles.get('left', 'auto')
+            if type(pl) is tuple: pl = pl[0]
+            if pl == 'auto': pl = 0
+            pt = self._computed_styles.get('top', 'auto')
+            if type(pt) is tuple: pt = pt[0]
+            if pt == 'auto': pt = 0
+
         if style_pos == 'fixed':
             self._relative_element = document_elem
-            self._relative_pos = RelPoint2D((0, 0))
+            self._relative_pos = RelPoint2D((pl, pt))
 
         elif style_pos == 'absolute':
             self._relative_element = nonstatic_elem
-            self._relative_pos = RelPoint2D((0, 0))
+            self._relative_pos = RelPoint2D((pl, pt))
 
         else:
             self._relative_element = self._parent
@@ -1304,6 +1399,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 line_height = 0
                 for element in block:
                     processed = False
+                    position = element._computed_styles.get('position', 'static')
+                    c = position not in {'absolute', 'fixed'}
+                    sx = element._computed_styles.get('overflow-x', 'visible')
+                    sy = element._computed_styles.get('overflow-y', 'visible')
                     while not processed:
                         rw = float('inf') if inside_size.max_width  is None else (inside_size.max_width  - line_width)
                         rh = float('inf') if inside_size.max_height is None else (inside_size.max_height - accum_height)
@@ -1322,16 +1421,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         )
                         w = element._dynamic_full_size.width
                         h = element._dynamic_full_size.height
-                        c = element._computed_styles.get('position', 'static') not in {'absolute', 'fixed'}
                         is_good = False
                         is_good |= first_child                  # always add child to an empty line
                         is_good |= c and w<=rw and h<=rh        # child fits on current line
                         is_good |= not c                        # child does not contribute to our size
                         if is_good:
                             cur_line.append(element)
-                            # TODO: clamp only if not scrolling!!
-                            if c:
-                                w,h = remaining.clamp_size(w,h)
+                            # clamp width and height only if scrolling (respectively)
+                            if sx == 'scroll': w = remaining.clamp_width(w)
+                            if sy == 'scroll': h = remaining.clamp_height(h)
                             sz = Size2D(width=w, height=h)
                             element.set_view_size(sz)
                             line_width += w
@@ -1374,6 +1472,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._dynamic_full_size = Size2D(width=dw, height=dh)
         self._mbp_width = mbp_width
         self._mbp_height = mbp_height
+
+        self._tmp_max_width = max_width
 
         self._dirty_flow = False
 
@@ -1533,7 +1633,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 if not cap: cb(details)
 
     def dispatch_event(self, event, details=None):
-        details = details or UI_Event(target=self)
+        details = details or UI_Event(target=self, mouse=ui_document.actions.mouse)
         path = self.get_pathToRoot()[1:] # skipping first item, which is self
         details.event_phase = 'capturing'
         for cur in path[::-1]: cur._fire_event(event, details)
@@ -1551,18 +1651,34 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def compute_preferred_size(self): pass
 
 
+class UI_Document_FSM:
+    fsm = FSM()
+    FSM_State = fsm.wrapper
 
-class UI_Document:
+class UI_Document(UI_Document_FSM):
     default_keymap = {
         'commit': {'RET',},
         'cancel': {'ESC',},
     }
 
-    def __init__(self, context, **kwargs):
+    doubleclick_time = 0.25
+
+    def __init__(self):
+        pass
+
+    def init(self, context, **kwargs):
         self.actions = Actions(bpy.context, UI_Document.default_keymap)
         self._body = UI_Element(tagName='body')
         self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
+        self._last_mx = -1
+        self._last_my = -1
+        self._last_mouse = Point2D((-1, -1))
         self._last_lmb = False
+        self._last_mmb = False
+        self._last_rmb = False
+        self._last_under_mouse = None
+        self._last_under_click = None
+        self._last_click_time = 0
         self._under_mouse = None
         self._under_down = None
         self._focus = None
@@ -1572,6 +1688,7 @@ class UI_Document:
         self._mmb_down = None
         self._mmb_point = None
         self._last_mmb = False
+        self.fsm.init(self, start='main')
 
     @property
     def body(self):
@@ -1580,71 +1697,69 @@ class UI_Document:
     def update(self, context, event):
         self.actions.update(context, event, self._timer, print_actions=False)
 
+        self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
+        self._mouse = Point2D((self._mx, self._my))
+        self._under_mouse = self._body.get_under_mouse(self._mx, self._my)
+        self._lmb = self.actions.using('LEFTMOUSE')
+        self._mmb = self.actions.using('MIDDLEMOUSE')
+        self._rmb = self.actions.using('RIGHTMOUSE')
+
+        self.fsm.update()
+
+        self._last_mx = self._mx
+        self._last_my = self._my
+        self._last_mouse = self._mouse
+        self._last_lmb = self._lmb
+        self._last_mmb = self._mmb
+        self._last_rmb = self._rmb
+        self._last_under_mouse = self._under_mouse
+
+        uictrld = False
+        uictrld |= self._under_mouse is not None and self._under_mouse != self._body
+        uictrld |= self.fsm.state != 'main'
+        return {'hover'} if uictrld else None
+
+
+    def handle_hover(self, change_cursor=True):
+        # handle :hover, on_mouseenter, on_mouseleave
+        if change_cursor and self._under_mouse:
+            cursor = convert_token_to_cursor(self._under_mouse._computed_styles.get('cursor', 'default'))
+            Globals.drawing.set_cursor(cursor)
+        if self._under_mouse == self._last_under_mouse: return
+
+        rem = set(self._last_under_mouse.get_pathToRoot()) if self._last_under_mouse else set()
+        add = set(self._under_mouse.get_pathToRoot()) if self._under_mouse else set()
+        for e in rem - add: e.del_pseudoclass('hover')
+        for e in add - rem: e.add_pseudoclass('hover')
+        if self._last_under_mouse: self._last_under_mouse.dispatch_event('on_mouseleave')
+
+        if self._under_mouse:
+            self._under_mouse.dispatch_event('on_mouseenter')
+
+    def handle_mousemove(self, ui_element=None):
+        if ui_element is None: ui_element = self._under_mouse
+        if ui_element is None: return
+        if self._last_mouse.x == self._mouse.x and self._last_mouse.y == self._mouse.y: return
+        ui_element.dispatch_event('on_mousemove')
+
+
+    @UI_Document_FSM.FSM_State('main', 'enter')
+    def modal_main_enter(self):
+        Globals.drawing.set_cursor('DEFAULT')
+
+    @UI_Document_FSM.FSM_State('main')
+    def modal_main(self):
         if self._dblclick and time.time() >= self._dblclick_time:
             self._dblclick = None
 
-        mx,my = self.actions.mouse if self.actions.mouse else (0,0)
-        under_mouse = self._body.get_under_mouse(mx, my)
-        lmb = self.actions.using('LEFTMOUSE')
-        mmb = self.actions.using('MIDDLEMOUSE')
+        if self._mmb and not self._last_mmb:
+            return 'scroll'
 
-        if mmb and not self._last_mmb and under_mouse:
-            # find first along root to path that can scroll
-            scrollable = [e for e in under_mouse.get_pathToRoot() if e.is_scrollable]
-            if scrollable:
-                e = scrollable[0]
-                self._mmb_down = e
-                self._mmb_point = Point2D((mx, my))
-                self._mmb_last = RelPoint2D((e.scrollLeft, e.scrollTop))
-        if mmb and self._mmb_down:
-            nx = self._mmb_down.scrollLeft + (self._mmb_point.x - mx)
-            ny = self._mmb_down.scrollTop - (self._mmb_point.y - my)
-            self._mmb_down.scrollLeft = nx
-            self._mmb_down.scrollTop = ny
-            self._mmb_point = Point2D((mx, my))
-        else:
-            self._mmb_down = None
+        if self._lmb and not self._last_lmb:
+            return 'mousedown'
 
-        if self._under_mouse != under_mouse:
-            rem = set(self._under_mouse.get_pathToRoot()) if self._under_mouse else set()
-            add = set(under_mouse.get_pathToRoot()) if under_mouse else set()
-            for e in rem - add: e.del_pseudoclass('hover')
-            for e in add - rem: e.add_pseudoclass('hover')
-            if self._under_mouse: self._under_mouse.dispatch_event('on_mouseleave')
-            self._under_mouse = under_mouse
-            if self._under_mouse:
-                self._under_mouse.dispatch_event('on_mouseenter')
-                cursor = convert_token_to_cursor(self._under_mouse._computed_styles.get('cursor', 'default'))
-                Globals.drawing.set_cursor(cursor)
-
-        if lmb and not self._last_lmb and under_mouse and not under_mouse.is_disabled:
-            self._under_down = under_mouse
-            self._under_down.add_pseudoclass('active')
-            if self._focus != under_mouse:
-                if self._focus:
-                    self._focus.del_pseudoclass('focus')
-                    self._focus.dispatch_event('on_blur')
-                self._focus = under_mouse
-                if self._focus:
-                    self._focus.add_pseudoclass('focus')
-                    self._focus.dispatch_event('on_focus')
-            self._focus.dispatch_event('on_mousedown')
-
-        if not lmb and self._last_lmb and self._under_down:
-            self._under_down.dispatch_event('on_mouseup')
-            if under_mouse == self._under_down:
-                # CLICK!
-                if self._dblclick == self._under_down:
-                    self._dblclick.dispatch_event('on_mousedblclick')
-                else:
-                    self._dblclick = self._under_down
-                    self._dblclick_time = time.time() + 0.25
-                    self._under_down.dispatch_event('on_mouseclick')
-            self._under_down.del_pseudoclass('active')
-            self._under_down = None
-
-        self._last_lmb = lmb
-        self._last_mmb = mmb
+        self.handle_hover()
+        self.handle_mousemove()
 
         if False:
             print('---------------------------')
@@ -1655,10 +1770,88 @@ class UI_Document:
             if under_mouse:      print('UNDER', under_mouse, under_mouse.pseudoclasses)
             else: print('UNDER', None)
 
-        ui = False
-        ui |= under_mouse is not None and under_mouse != self._body
-        ui |= self._mmb_down is not None
-        return {'hover'} if ui else None
+
+    @UI_Document_FSM.FSM_State('scroll', 'can enter')
+    def modal_scroll_canenter(self):
+        # find first along root to path that can scroll
+        if not self._under_mouse: return False
+        self._scrollable = [e for e in self._under_mouse.get_pathToRoot() if e.is_scrollable]
+        if not self._scrollable: return False
+
+    @UI_Document_FSM.FSM_State('scroll', 'enter')
+    def modal_scroll_enter(self):
+        e = self._scrollable[0]
+        self._scroll_element = e
+        self._scroll_point = self._mouse
+        self._scroll_last = RelPoint2D((e.scrollLeft, e.scrollTop))
+        Globals.drawing.set_cursor('SCROLL_Y')
+
+    @UI_Document_FSM.FSM_State('scroll')
+    def modal_scroll(self):
+        if not self._mmb:
+            # done scrolling
+            return 'main'
+        nx = self._scroll_element.scrollLeft + (self._scroll_point.x - self._mx)
+        ny = self._scroll_element.scrollTop - (self._scroll_point.y - self._my)
+        self._scroll_element.scrollLeft = nx
+        self._scroll_element.scrollTop = ny
+        self._scroll_point = self._mouse
+
+
+    @UI_Document_FSM.FSM_State('mousedown', 'can enter')
+    def modal_mousedown_canenter(self):
+        can_enter = True
+        can_enter &= self._under_mouse is not None
+        can_enter &= not self._under_mouse.is_disabled
+        if not can_enter:
+            if self._focus:
+                # blur previous
+                self._focus.del_pseudoclass('focus')
+                self._focus.dispatch_event('on_blur')
+                self._focus = None
+        return can_enter
+
+    @UI_Document_FSM.FSM_State('mousedown', 'enter')
+    def modal_mousedown_enter(self):
+        change_focus = self._focus != self._under_mouse
+        if change_focus:
+            if self._focus:
+                self._focus.del_pseudoclass('focus')
+                self._focus.dispatch_event('on_blur')
+            self._focus = self._under_mouse
+            self._focus.add_pseudoclass('focus')
+            self._focus.dispatch_event('on_focus')
+
+        self._under_mousedown = self._under_mouse
+        self._under_mousedown.add_pseudoclass('active')
+        self._under_mousedown.dispatch_event('on_mousedown')
+
+    @UI_Document_FSM.FSM_State('mousedown')
+    def modal_mousedown(self):
+        if not self._lmb: return 'main'     # done with mousedown
+        self.handle_hover(change_cursor=False)
+        self.handle_mousemove(ui_element=self._under_mousedown)
+
+    @UI_Document_FSM.FSM_State('mousedown', 'exit')
+    def modal_mousedown_exit(self):
+        self._under_mousedown.dispatch_event('on_mouseup')
+        if self._under_mouse == self._under_mousedown:
+            # CLICK!
+            dblclick = True
+            dblclick &= self._under_mousedown == self._last_under_click
+            dblclick &= time.time() < self._last_click_time + self.doubleclick_time
+            if dblclick:
+                self._under_mousedown.dispatch_event('on_mousedblclick')
+                self._last_under_click = None
+            else:
+                self._under_mousedown.dispatch_event('on_mouseclick')
+                self._last_under_click = self._under_mousedown
+            self._last_click_time = time.time()
+        else:
+            self._last_under_click = None
+            self._last_click_time = 0
+        self._under_mousedown.del_pseudoclass('active')
+
 
     def draw(self, context):
         w,h = context.region.width, context.region.height
@@ -1677,6 +1870,9 @@ class UI_Document:
         self._body.draw()
 
         ScissorStack.end()
+
+ui_document = Globals.set(UI_Document())
+
 
 class UI_Document_old:
     '''

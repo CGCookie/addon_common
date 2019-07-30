@@ -42,6 +42,10 @@ button {
     color: black;
 }
 
+button button {
+    background: rgba(224, 160, 160, 0.90);
+}
+
 button:focus {
     background: lightcyan;
 }
@@ -74,9 +78,28 @@ p {
     width: 100%;
     margin: 2px 0px;
     padding: 2px;
+    border-width: 0px;
+    color: white;
+}
+
+textarea {
+    display: block;
+    width: 100%;
+    margin: 2px 0px;
+    padding: 2px;
     background-color: rgba(255,255,255,0.9);
+    border-width: 1px;
+    border-color: black;
     color: black;
     cursor: text;
+}
+
+div {
+    background-color: rgba(0,0,0,0.25);
+    display: block;
+    width: 100%;
+    margin: 2px 0px;
+    padding: 2px;
 }
 
 br {
@@ -89,10 +112,36 @@ br {
 }
 
 dialog {
+    position: fixed;
+    left: 0px;
+    top: 0px;
     border-radius: 5px;
     border-width: 1px;
     border-color: black;
     background: rgba(32, 32, 32, 0.5);
-    overflow-x: scroll;
+    /*overflow-x: scroll;*/
     overflow-y: scroll;
+    color: white;
+}
+
+dialog.framed {
+    border-width: 5px;
+    overflow: hidden;
+    padding: 0px;
+    margin: 5px;
+}
+
+dialog.framed > div.header {
+    background: rgba(0, 0, 0, 0.75);
+    color: white;
+    font-weight: bold;
+    margin: 0px;
+    padding: 2px 15px 5px 15px;
+    border-width: 0px;
+}
+
+dialog.framed > div.inside {
+    margin: 0px;
+    border-width: 0px;
+    padding: 5px 2px 2px 2px;
 }

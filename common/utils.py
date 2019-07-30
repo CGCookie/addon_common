@@ -42,6 +42,18 @@ from .maths import (
 
 ##################################################
 
+
+# find functions of object that has key attribute
+def find_fns(obj, key):
+    c = type(obj)
+    objs = [getattr(c,k) for k in dir(c)]
+    fns = [fn for fn in objs if inspect.isfunction(fn)]
+    return [(getattr(fn,key),fn) for fn in fns if hasattr(fn,key)]
+
+
+
+##################################################
+
 StructRNA = bpy.types.bpy_struct
 def still_registered(self, oplist):
     if getattr(still_registered, 'is_broken', False): return False

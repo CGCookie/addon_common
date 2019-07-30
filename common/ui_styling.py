@@ -126,6 +126,7 @@ token_rules = [
         r'border(-(left|right|top|bottom))?-color',
         r'((min|max)-)?width',
         r'((min|max)-)?height',
+        r'left|top|right|bottom',
         r'cursor',
         r'overflow(-x|-y)?',
         r'position',
@@ -214,7 +215,7 @@ token_rules = [
         # r'selection',
     ]),
     ('num', convert_token_to_numberunit, [
-        r'(?P<num>-?((\d+)|(\d*\.\d+)))(?P<unit>px|vw|vh|pt|%|)',
+        r'(?P<num>-?((\d*[.]\d+)|\d+))(?P<unit>px|vw|vh|pt|%|)',
     ]),
     ('id', convert_token_to_string, [
         r'[a-zA-Z_][a-zA-Z_-]*',
@@ -338,11 +339,12 @@ class UI_Style_RuleSet:
         return rs
 
     @staticmethod
-    def from_decllist(decllist, tagname, pseudoclass=None):
-        t = type(pseudoclass)
-        if t is list or t is set: pseudoclass = ':'.join(pseudoclass)
+    def from_decllist(decllist, selector): # tagname, pseudoclass=None):
+        # t = type(pseudoclass)
+        # if t is list or t is set: pseudoclass = ':'.join(pseudoclass)
         rs = UI_Style_RuleSet()
-        rs.selectors = [[tagname + (':%s'%pseudoclass if pseudoclass else '')]]
+        # rs.selectors = [[tagname + (':%s'%pseudoclass if pseudoclass else '')]]
+        rs.selectors = [selector]
         for k,v in decllist.items():
             rs.decllist.append(UI_Style_Declaration(k,v))
         return rs
@@ -400,7 +402,7 @@ class UI_Style_RuleSet:
         for sel in self.selectors:
             is_match = msel(selector, sel, cont=False)
             if is_match:
-                # print('elem:%s matched style:%s' % (selector, sel))
+                # if '*text*' in selector[-1]: print('elem:%s matched style:%s' % (selector, sel))
                 return True
         return False
 
@@ -427,9 +429,11 @@ class UI_Styling:
         return UI_Styling(lines)
 
     @staticmethod
-    def from_decllist(decllist, tagname='*', pseudoclass=None):
+    def from_decllist(decllist, selector=None): # tagname='*', pseudoclass=None):
+        if selector is None: selector = ['*']
         var = UI_Styling()
-        var.rules = [UI_Style_RuleSet.from_decllist(decllist, tagname, pseudoclass)]
+        var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector)]
+        # var.rules = [UI_Style_RuleSet.from_decllist(decllist, tagname, pseudoclass)]
         return var
 
     def __init__(self, lines=''):
@@ -447,6 +451,8 @@ class UI_Styling:
     def get_decllist(self, selector):
         # return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
         matchingrules = [rule for rule in self.rules if rule.match(selector)]
+        # if '*text*' in selector[-1]: print('elem:%s matched %s' % (selector, str(matchingrules)))
+        # print('elem:%s matched %s' % (selector, str(matchingrules)))
         decllist = [d for rule in matchingrules for d in rule.decllist]
         return decllist
 
@@ -536,74 +542,18 @@ class UI_Styling:
         decllist = { k:v for (k,v) in decllist.items() if v != 'initial' }
         return decllist
 
-    # def compute_style(self, selector, *overriding_stylings):
-    #     # collect all the declarations that apply to selector
-    #     full = []
-    #     if False:
-    #         # Cascading not implemented correctly (only add prop+vals that are inherited)
-    #         # see: https://developer.mozilla.org/en-US/docs/Learn/CSS/Introduction_to_CSS/Cascade_and_inheritance
-    #         # see: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference
-    #         selector_parts = selector.split(' ')
-    #         for i in range(len(selector_parts)):
-    #             sub_selector = ' '.join(selector_parts[:i+1])
-    #             full += [d for rule in self.rules if rule.match(sub_selector) for d in rule.decllist]
-    #     else:
-    #         full += self.get_decllist(selector)
-
-    #     for override in overriding_stylings:
-    #         full += override.get_decllist(selector)
-
-    #     return self._expand_declarations(full)
-
     @staticmethod
     def compute_style(selector, *stylings):
         if selector is None: return {}
         stylings = [styling for styling in stylings if styling]
         full_decllist = [dl for styling in stylings for dl in styling.get_decllist(selector)]
-        #decllists = [(styling if type(styling) is dict else styling.get_decllist(selector)) for styling in stylings]
-        #full_decllist = [dl for decllist in decllists for dl in decllist]
-        #print(full_decllist)
         decllist = UI_Styling._expand_declarations(full_decllist)
         return decllist
 
-    def filter_styling(self, tagname, pseudoclass=None):
-        if pseudoclass:
-            t = type(pseudoclass)
-            if t is list or t is set: _pseudoclass = ''.join(':%s' % p for p in pseudoclass)
-            else: _pseudoclass = ':%s' % str(pseudoclass)
-        selector = [tagname + (_pseudoclass if pseudoclass else '')]
+    def filter_styling(self, selector):
         decllist = self.compute_style(selector, self)
-        styling = UI_Styling.from_decllist(decllist, tagname=tagname, pseudoclass=pseudoclass)
+        styling = UI_Styling.from_decllist(decllist, selector=selector)
         return styling
-
-    # def compute_style(self, selector, initial_styling, override_styling):
-    #     # collect all the declarations that apply to selector
-    #     full = []
-    #     if False:
-    #         # Cascading not implemented correctly (only add prop+vals that are inherited)
-    #         # see: https://developer.mozilla.org/en-US/docs/Learn/CSS/Introduction_to_CSS/Cascade_and_inheritance
-    #         # see: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference
-    #         selector_parts = selector.split(' ')
-    #         for i in range(len(selector_parts)):
-    #             sub_selector = ' '.join(selector_parts[:i+1])
-    #             full += [d for rule in self.rules if rule.match(sub_selector) for d in rule.decllist]
-    #     else:
-    #         full += self.get_decllist(selector)
-    #     if override_styling: full += override_styling.get_decllist(selector)
-
-    #     # expand and override declarations
-    #     init_decllist = self._expand_declarations(initial_styling.get_decllist(selector)) if initial_styling else {}
-    #     full_decllist = self._expand_declarations(full)
-
-    #     # apply initial
-    #     decllist = init_decllist
-    #     decllist.update(full_decllist)
-    #     return decllist
-
-# class UI_DeclList:
-#     def __init__(self, dict_decllist):
-#         self._dict_decllist = dict_decllist
-#     def __get__(self, k)
 
 
 path = os.path.join(os.path.dirname(__file__), 'config', 'ui_defaultstyles.css')

@@ -22,8 +22,9 @@ import inspect
 import bpy
 
 class CookieCutter_Utils:
-    def find_fns(self, key):
-        c = type(self)
-        objs = [getattr(c,k) for k in dir(c)]
-        fns = [fn for fn in objs if inspect.isfunction(fn)]
-        return [(getattr(fn,key),fn) for fn in fns if hasattr(fn,key)]
+    pass
+    # def find_fns(self, key):
+    #     c = type(self)
+    #     objs = [getattr(c,k) for k in dir(c)]
+    #     fns = [fn for fn in objs if inspect.isfunction(fn)]
+    #     return [(getattr(fn,key),fn) for fn in fns if hasattr(fn,key)]
