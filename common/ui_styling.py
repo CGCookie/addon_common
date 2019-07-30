@@ -401,9 +401,7 @@ class UI_Style_RuleSet:
         # return is_match
         for sel in self.selectors:
             is_match = msel(selector, sel, cont=False)
-            if is_match:
-                # if '*text*' in selector[-1]: print('elem:%s matched style:%s' % (selector, sel))
-                return True
+            if is_match: return True
         return False
 
 

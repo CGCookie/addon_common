@@ -88,6 +88,9 @@ def button(**kwargs):
 def p(**kwargs):
     return UI_Element(tagName='p', **kwargs)
 
+def img(**kwargs):
+    return UI_Element(tagName='img', **kwargs)
+
 def textarea(**kwargs):
     return UI_Element(tagName='textarea', **kwargs)
 
@@ -128,6 +131,8 @@ def framed_dialog(label=None, **kwargs):
         ui_label.add_eventListener('on_mousemove', mousemove)
     ui_inside = ui_dialog.append_child(UI_Element(tagName='div', classes='inside', style='overflow-y:scroll'))
     return {'dialog':ui_dialog, 'inside':ui_inside}
+
+
 
 
 # class UI_Flexbox(UI_Core):

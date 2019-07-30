@@ -40,6 +40,9 @@ from .decorators import debug_test_call, blender_version_wrapper
 from .maths import Vec2D, Color, mid, Box2D, Size1D, Size2D, Point2D, RelPoint2D
 from .shaders import Shader
 from .fontmanager import FontManager
+from .utils import iter_head
+
+from ..ext import png
 
 def get_font_path(fn, ext=None):
     if ext: fn = '%s.%s' % (fn,ext)
@@ -161,7 +164,7 @@ class UI_Draw:
         from gpu_extras.batch import batch_for_shader
 
         vertex_positions = [(0,0),(1,0),(1,1),  (1,1),(0,1),(0,0)]
-        vertex_shader, fragment_shader = Shader.parse_file('uielement.glsl', includeVersion=False)
+        vertex_shader, fragment_shader = Shader.parse_file('ui_element.glsl', includeVersion=False)
         shader = gpu.types.GPUShader(vertex_shader, fragment_shader)
         batch = batch_for_shader(shader, 'TRIS', {"pos": vertex_positions})
         get_pixel_matrix = Globals.drawing.get_pixel_matrix
@@ -172,7 +175,7 @@ class UI_Draw:
             shader.bind()
             shader.uniform_float("uMVPMatrix", get_pixel_matrix())
 
-        def draw(left, top, width, height, dpi_mult, style):
+        def draw(left, top, width, height, dpi_mult, style, texture_id):
             nonlocal shader, batch, def_color
             def set_uniform_float(shader_var, style_key, default_val):
                 v = style.get(style_key, (default_val, ''))
@@ -187,17 +190,30 @@ class UI_Draw:
             shader.uniform_float('top',    top)
             shader.uniform_float('right',  left+width-1)
             shader.uniform_float('bottom', top-height+1)
-            set_uniform_float_mult('margin_left',    'margin-left',   0)
-            set_uniform_float_mult('margin_right',   'margin-right',  0)
-            set_uniform_float_mult('margin_top',     'margin-top',    0)
-            set_uniform_float_mult('margin_bottom',  'margin-bottom', 0)
-            set_uniform_float_mult('border_width',   'border-width',  0)
-            set_uniform_float_mult('border_radius',  'border-radius', 0)
+            set_uniform_float_mult('margin_left',    'margin-left',    0)
+            set_uniform_float_mult('margin_right',   'margin-right',   0)
+            set_uniform_float_mult('margin_top',     'margin-top',     0)
+            set_uniform_float_mult('margin_bottom',  'margin-bottom',  0)
+            set_uniform_float_mult('padding_left',   'padding-left',   0)
+            set_uniform_float_mult('padding_right',  'padding-right',  0)
+            set_uniform_float_mult('padding_top',    'padding-top',    0)
+            set_uniform_float_mult('padding_bottom', 'padding-bottom', 0)
+            set_uniform_float_mult('border_width',   'border-width',   0)
+            set_uniform_float_mult('border_radius',  'border-radius',  0)
             set_uniform_float('border_left_color',   'border-left-color',   def_color)
             set_uniform_float('border_right_color',  'border-right-color',  def_color)
             set_uniform_float('border_top_color',    'border-top-color',    def_color)
             set_uniform_float('border_bottom_color', 'border-bottom-color', def_color)
             set_uniform_float('background_color',    'background-color',    def_color)
+            if texture_id == -1:
+                shader.uniform_float('using_image', 0)
+            else:
+                # bgl.glBlendEquation(bgl.GL_FUNC_ADD)
+                # bgl.glBlendFunc(bgl.GL_ONE, bgl.GL_ONE_MINUS_SRC_ALPHA)
+                bgl.glActiveTexture(bgl.GL_TEXTURE0)
+                bgl.glBindTexture(bgl.GL_TEXTURE_2D, texture_id)
+                shader.uniform_float('using_image', 1)
+                shader.uniform_int('image', 0)
             batch.draw(shader)
 
         UI_Draw._update = update
@@ -219,8 +235,9 @@ class UI_Draw:
         ''' only need to call once every redraw '''
         UI_Draw._update()
 
-    def draw(self, left, top, width, height, dpi_mult, style):
-        UI_Draw._draw(left, top, width, height, dpi_mult, style)
+    def draw(self, left, top, width, height, dpi_mult, style, texture_id=-1):
+        UI_Draw._draw(left, top, width, height, dpi_mult, style, texture_id)
+
 
 ui_draw = Globals.set(UI_Draw())
 
@@ -636,12 +653,13 @@ class UI_Element_Properties:
 
     @property
     def src(self):
-        return self._src
+        return self._src_str
     @src.setter
     def src(self, v):
         # TODO: load the resource and do something with it!!
-        self._src = v
-        self.dirty('changing src affects content', parent=True, children=False)
+        self._src_str = v
+        self._src = None
+        self.dirty('changing src affects content', 'content', parent=True, children=False)
 
     @property
     def title(self):
@@ -857,7 +875,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._classes_str   = ''        # list of classes (space delimited string)
         self._style_str     = ''        # custom style string
         self._innerText     = ''        # text to display (converted to UI_Elements)
-        self._src           = None      # path to resource, such as image
+        self._src_str       = ''        # path to resource, such as image
         self._title         = None      # tooltip
 
         #################################################################
@@ -937,6 +955,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._styling_custom   = None   #
         self._styling_parent   = None
         self._innerTextAsIs    = None   # text to display as-is (no wrapping)
+        self._src              = None
         self._textwrap_opts    = {}
         self._l, self._t, self._w, self._h = 0,0,0,0    # scissor position
 
@@ -1190,6 +1209,30 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     child.clean()
                     self._children_text_min_size.width = max(self._children_text_min_size.width, child._static_content_size.width)
                     self._children_text_min_size.height = max(self._children_text_min_size.height, child._static_content_size.height)
+        elif self._src_str and not self._src:
+            image = load_image_png(self._src_str)
+            self._image_height,self._image_width,self._image_depth = len(image),len(image[0]),len(image[0][0])
+            assert self._image_depth == 4
+            self._image_flat = [d for r in image for c in r for d in c]
+            self._src = 'image'
+
+            self._image_texbuffer = bgl.Buffer(bgl.GL_INT, [1])
+            bgl.glGenTextures(1, self._image_texbuffer)
+            self._image_textureid = self._image_texbuffer[0]
+            bgl.glBindTexture(bgl.GL_TEXTURE_2D, self._image_textureid)
+            # bgl.glTexEnv(bgl.GL_TEXTURE_ENV, bgl.GL_TEXTURE_ENV_MODE, bgl.GL_MODULATE)
+            bgl.glTexParameterf(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MAG_FILTER, bgl.GL_NEAREST)
+            bgl.glTexParameterf(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MIN_FILTER, bgl.GL_LINEAR)
+            # texbuffer = bgl.Buffer(bgl.GL_BYTE, [self.width,self.height,self.depth], image_data)
+            image_size = self._image_width * self._image_height * self._image_depth
+            texbuffer = bgl.Buffer(bgl.GL_BYTE, [image_size], self._image_flat)
+            bgl.glTexImage2D(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, self._image_width, self._image_height, 0, bgl.GL_RGBA, bgl.GL_UNSIGNED_BYTE, texbuffer)
+            del texbuffer
+            bgl.glBindTexture(bgl.GL_TEXTURE_2D, 0)
+
+            self._children_text = []
+            self._children_text_min_size = None
+            self._innerTextWrapped = None
         else:
             self._children_text = []
             self._children_text_min_size = None
@@ -1283,20 +1326,20 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if self._innerTextAsIs:
             # TODO: allow word breaking?
             # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
-            size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
+            size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
             self._static_content_size = Size2D()
             self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs))
             self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs))
             self._static_content_space = Globals.drawing.get_text_width(' ')
             # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
-            Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
+            Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
 
-        elif self._src:
+        elif self._src == 'image':
             # TODO: set to image size?
             dpi_mult = Globals.drawing.get_dpi_mult()
             self._static_content_size = Size2D()
-            self._static_content_size.set_all_widths(10 * dpi_mult)
-            self._static_content_size.set_all_heights(10 * dpi_mult)
+            self._static_content_size.set_all_widths(self._image_width * dpi_mult)
+            self._static_content_size.set_all_heights(self._image_height * dpi_mult)
             self._static_content_space = 0
             pass
 
@@ -1602,14 +1645,17 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 Globals.drawing.text_draw2D(self._innerTextAsIs, pos, self._parent._fontcolor)
                 Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
             else:
-                ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._computed_styles)
+                if self._src == 'image':
+                    # ui_draw.draw(il, it, iw, ih, dpi_mult, self._image_textureid)
+                    ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._computed_styles, self._image_textureid)
+                else:
+                    ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._computed_styles)
 
-            ScissorStack.push(
-                int(self._l + margin_left + border_width + padding_left),
-                int(self._t - margin_top - border_width - padding_top),
-                int(self._w - (margin_left + border_width + padding_left + padding_right + border_width + margin_right)),
-                int(self._h - (margin_top + border_width + padding_top + padding_bottom + border_width + margin_bottom)),
-            )
+            il = int(self._l + margin_left + border_width + padding_left)
+            it = int(self._t - margin_top - border_width - padding_top)
+            iw = int(self._w - (margin_left + border_width + padding_left + padding_right + border_width + margin_right))
+            ih = int(self._h - (margin_top + border_width + padding_top + padding_bottom + border_width + margin_bottom))
+            ScissorStack.push(il, it, iw, ih)
             for child in self._children_all: child.draw(depth+1)
             ScissorStack.pop()
 
@@ -1814,8 +1860,7 @@ class UI_Document(UI_Document_FSM):
     @UI_Document_FSM.FSM_State('mousedown', 'can enter')
     def modal_mousedown_canenter(self):
         can_enter = True
-        can_enter &= self._under_mouse is not None
-        can_enter &= not self._under_mouse.is_disabled
+        can_enter &= bool(self._under_mouse) and not self._under_mouse.is_disabled
         if not can_enter:
             if self._focus:
                 # blur previous

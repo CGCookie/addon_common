@@ -1,4 +1,4 @@
-uniform mat4  uMVPMatrix;
+uniform mat4 uMVPMatrix;
 uniform vec2 screen_size;
 
 uniform float left;
@@ -11,6 +11,11 @@ uniform float margin_right;
 uniform float margin_top;
 uniform float margin_bottom;
 
+uniform float padding_left;
+uniform float padding_right;
+uniform float padding_top;
+uniform float padding_bottom;
+
 uniform float border_width;
 uniform float border_radius;
 uniform vec4  border_left_color;
@@ -19,6 +24,9 @@ uniform vec4  border_top_color;
 uniform vec4  border_bottom_color;
 
 uniform vec4  background_color;
+
+uniform float using_image;
+uniform sampler2D image;
 
 attribute vec2 pos;
 
@@ -113,9 +121,28 @@ int get_region() {
     return -1;
 }
 
+vec2 get_texcoord() {
+    float w = (right - left) - (margin_left + border_width + padding_left + padding_right + border_width + margin_right);
+    float h = (top - bottom) - (margin_top + border_width + padding_top + padding_bottom + border_width + margin_bottom);
+    float tx = (screen_pos.x - (left + margin_left + border_width + padding_left)) / w;
+    float ty = (screen_pos.y - (bottom + margin_bottom + border_width + padding_bottom)) / h;
+    return vec2(tx, ty);
+}
+
 void main() {
     int region = get_region();
-    if(region == 5) gl_FragColor = background_color;
+    if(region == 5) {
+        vec4 c = background_color;
+        if(using_image > 0.5) {
+            vec2 texcoord = get_texcoord();
+            if(texcoord.x >= 0 && texcoord.x <= 1 && texcoord.y >= 0 && texcoord.y <= 1) {
+                vec4 t = texture(image, texcoord);
+                float a = t.a + c.a * (1.0 - t.a);
+                c = vec4((t.rgb * t.a + c.rgb * c.a * (1.0 - t.a)) / a, a);
+            }
+        }
+        gl_FragColor = c;
+    }
     else if(region == 1) gl_FragColor = border_top_color;
     else if(region == 2) gl_FragColor = border_right_color;
     else if(region == 3) gl_FragColor = border_bottom_color;
