@@ -123,7 +123,7 @@ class CookieCutter_UI:
         # print('\n' * 2, end='')
         # print('--------- ' + str(random.random()))
         self.drawing.update_dpi()
-        self._area.tag_redraw()
+        #self._area.tag_redraw()
         ret = self.document.update(self.context, self.event)
         # ret = self.wm.modal(self.context, self.event)
         #if self.wm.has_focus(): return True
@@ -183,23 +183,24 @@ class CookieCutter_UI:
         spaces = [getattr(bpy.types, s) for s in dir(bpy.types) if s.startswith('Space') and s != 'SpaceView3D']
         spaces = [s for s in spaces if hasattr(s, 'draw_handler_add')]
 
-        # ('WINDOW', 'HEADER', 'CHANNELS', 'TEMPORARY', 'UI', 'TOOLS', 'TOOL_PROPS', 'PREVIEW')
         # https://docs.blender.org/api/blender2.8/bpy.types.Region.html#bpy.types.Region.type
         #     ['WINDOW', 'HEADER', 'CHANNELS', 'TEMPORARY', 'UI', 'TOOLS', 'TOOL_PROPS', 'PREVIEW', 'NAVIGATION_BAR', 'EXECUTE']
         # NOTE: b280 has no TOOL_PROPS region for SpaceView3D!
-        areas  = ['WINDOW', 'HEADER', 'CHANNELS', 'TEMPORARY', 'UI', 'TOOLS', 'TOOL_PROPS', 'PREVIEW', 'NAVIGATION_BAR', 'EXECUTE'] #['WINDOW', 'HEADER', 'UI', 'TOOLS', 'NAVIGATION_BAR']
+        areas  = ['WINDOW', 'HEADER', 'CHANNELS', 'TEMPORARY', 'UI', 'TOOLS', 'TOOL_PROPS', 'PREVIEW', 'HUD', 'NAVIGATION_BAR', 'EXECUTE', 'FOOTER', 'TOOL_HEADER'] #['WINDOW', 'HEADER', 'UI', 'TOOLS', 'NAVIGATION_BAR']
 
-        self._handle_pp_tools  = SpaceView3D.draw_handler_add(self.region_draw_cover, tuple(), 'TOOLS',      'POST_PIXEL')
-        self._handle_pp_props  = SpaceView3D.draw_handler_add(self.region_draw_cover, tuple(), 'TOOL_PROPS', 'POST_PIXEL') if bversion() <= '2.79' else None
-        self._handle_pp_ui     = SpaceView3D.draw_handler_add(self.region_draw_cover, tuple(), 'UI',         'POST_PIXEL')
-        self._handle_pp_header = SpaceView3D.draw_handler_add(self.region_draw_cover, tuple(), 'HEADER',     'POST_PIXEL')
-        self._handle_pp_other  = []
-
+        self._postpixel_callbacks = []
+        s = SpaceView3D
+        for a in ['TOOLS', 'UI', 'HEADER', 'TOOL_PROPS']:
+            try:
+                cb = s.draw_handler_add(self.region_draw_cover, tuple(), a, 'POST_PIXEL')
+                self._postpixel_callbacks += [(s, a, cb)]
+            except:
+                pass
         for s in spaces:
             for a in areas:
                 try:
                     cb = s.draw_handler_add(self.region_draw_cover, tuple(), a, 'POST_PIXEL')
-                    self._handle_pp_other += [(s, a, cb)]
+                    self._postpixel_callbacks += [(s, a, cb)]
                 except:
                     pass
 
@@ -207,23 +208,10 @@ class CookieCutter_UI:
 
     def region_restore(self):
         # remove callback handlers
-        if hasattr(self, '_handle_pp_tools'):
-            SpaceView3D.draw_handler_remove(self._handle_pp_tools, "TOOLS")
-            del self._handle_pp_tools
-        if hasattr(self, '_handle_pp_props'):
-            if self._handle_pp_props:
-                SpaceView3D.draw_handler_remove(self._handle_pp_props, "TOOL_PROPS")
-            del self._handle_pp_props
-        if hasattr(self, '_handle_pp_ui'):
-            SpaceView3D.draw_handler_remove(self._handle_pp_ui, "UI")
-            del self._handle_pp_ui
-        if hasattr(self, '_handle_pp_header'):
-            SpaceView3D.draw_handler_remove(self._handle_pp_header, "HEADER")
-            del self._handle_pp_header
-        if hasattr(self, '_handle_pp_other'):
-            for s,a,cb in self._handle_pp_other: s.draw_handler_remove(cb, a)
-            del self._handle_pp_other
-        if hasattr(self, '_darkened'):
+        if hasattr(self, '_postpixel_callbacks'):
+            for (s,a,cb) in self._postpixel_callbacks: s.draw_handler_remove(cb, a)
+            del self._postpixel_callbacks
+        if hasattr(self, '_region_darkened'):
             del self._region_darkened
 
 

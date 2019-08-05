@@ -919,6 +919,7 @@ class UI_Element_Dirtiness:
         if children: self._dirty_propagation['children'] |= properties
         self.propagate_dirtiness()
         # print('%s had %s dirtied, because %s' % (str(self), str(properties), str(cause)))
+        ui_document.tag_redraw_all()
 
     def dirty_styling(self):
         self._computed_styles = {}
@@ -928,6 +929,7 @@ class UI_Element_Dirtiness:
         for child in self._children_all: child.dirty_styling()
         if self._parent is None:
             self.dirty('Dirtying style cache', children=True)
+        ui_document.tag_redraw_all()
 
     def add_dirty_callback(self, child, properties):
         if type(properties) is str: properties = [properties]
@@ -945,6 +947,7 @@ class UI_Element_Dirtiness:
         if children:
             for child in self._children_all:
                 child.dirty_flow()
+        ui_document.tag_redraw_all()
 
     @property
     def is_dirty(self):
@@ -2088,6 +2091,12 @@ class UI_Document(UI_Document_FSM):
         self._body.draw()
 
         ScissorStack.end()
+
+    def tag_redraw_all(self):
+        for wm in bpy.data.window_managers:
+            for win in wm.windows:
+                for ar in win.screen.areas:
+                    ar.tag_redraw()
 
 ui_document = Globals.set(UI_Document())
 

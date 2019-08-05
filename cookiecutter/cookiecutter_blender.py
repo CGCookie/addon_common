@@ -142,9 +142,9 @@ class CookieCutter_Blender:
     @blender_version_wrapper("<=", "2.79")
     def overlays_set(self, v): pass
 
-    @blender_version_wrapper("<=", "2.80")
+    @blender_version_wrapper(">=", "2.80")
     def overlays_get(self): return self._space.overlay.show_overlays
-    @blender_version_wrapper("<=", "2.80")
+    @blender_version_wrapper(">=", "2.80")
     def overlays_set(self, v): self._space.overlay.show_overlays = v
 
     @blender_version_wrapper("<=", "2.79")
