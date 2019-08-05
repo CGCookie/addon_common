@@ -170,7 +170,7 @@ token_rules = [
         r'rgb\( *(?P<red>\d+) *, *(?P<green>\d+) *, *(?P<blue>\d+) *\)',
         r'rgba\( *(?P<red>\d+) *, *(?P<green>\d+) *, *(?P<blue>\d+) *, *(?P<alpha>\d+(\.\d+)?) *\)',
         r'hsl\( *(?P<hue>\d+) *, *(?P<saturation>\d+)% *, *(?P<lightness>\d+)% *\)',
-        r'hsla\( *(?P<hue>\d+) *, *(?P<saturation>\d+)% *, *(?P<lightness>\d+)% *, *(?P<alpha>\d+(\.\d+)?) *\)',
+        r'hsla\( *(?P<hue>\d+([.]\d*)?) *, *(?P<saturation>\d+([.]\d*)?)% *, *(?P<lightness>\d+([.]\d*)?)% *, *(?P<alpha>\d+([.]\d+)?) *\)',
         r'#[a-fA-F0-9]{6}',
 
         r'transparent',

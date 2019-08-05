@@ -88,6 +88,15 @@ def button(**kwargs):
 def p(**kwargs):
     return UI_Element(tagName='p', **kwargs)
 
+def div(**kwargs):
+    return UI_Element(tagName='div', **kwargs)
+
+def span(**kwargs):
+    return UI_Element(tagName='span', **kwargs)
+
+def br(**kwargs):
+    return UI_Element(tagName='br', **kwargs)
+
 def img(**kwargs):
     return UI_Element(tagName='img', **kwargs)
 
@@ -97,7 +106,7 @@ def textarea(**kwargs):
 def dialog(**kwargs):
     return UI_Element(tagName='dialog', **kwargs)
 
-def framed_dialog(label=None, **kwargs):
+def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, **kwargs):
     ui_dialog = UI_Element(tagName='dialog', classes='framed', **kwargs)
     if label is not None:
         ui_label = ui_dialog.append_child(UI_Element(tagName='div', classes='header', innerText=label))
@@ -105,32 +114,86 @@ def framed_dialog(label=None, **kwargs):
         mousedown_pos = None
         original_pos = None
         def mousedown(e):
-            nonlocal is_dragging, mousedown_pos, original_pos
+            nonlocal is_dragging, mousedown_pos, original_pos, ui_dialog
             is_dragging = True
             mousedown_pos = e.mouse
 
-            l = ui_dialog.left
+            l = ui_dialog.left_pixels
             if l is None or l == 'auto': l = 0
-            if type(l) is tuple: l = l[0]
-            t = ui_dialog.top
+            t = ui_dialog.top_pixels
             if t is None or t == 'auto': t = 0
-            if type(t) is tuple: t = t[0]
             original_pos = Point2D((float(l), float(t)))
         def mouseup(e):
             nonlocal is_dragging
             is_dragging = False
         def mousemove(e):
-            nonlocal is_dragging, mousedown_pos, original_pos
+            nonlocal is_dragging, mousedown_pos, original_pos, ui_dialog
             if not is_dragging: return
             delta = e.mouse - mousedown_pos
             new_pos = original_pos + delta
-            ui_dialog.left = new_pos.x
-            ui_dialog.top = new_pos.y
+            w,h = ui_dialog.width_pixels,ui_dialog.height_pixels
+            rw,rh = ui_dialog._relative_element.width_pixels,ui_dialog._relative_element.height_pixels
+            ui_dialog.left = clamp(new_pos.x, 0, rw - w)
+            ui_dialog.top  = clamp(new_pos.y, -rh + h, 0)
         ui_label.add_eventListener('on_mousedown', mousedown)
         ui_label.add_eventListener('on_mouseup', mouseup)
         ui_label.add_eventListener('on_mousemove', mousemove)
+    if resizable is not None: resizable_x = resizable_y = resizable
+    if resizable_x or resizable_y:
+        is_resizing = False
+        mousedown_pos = None
+        original_size = None
+        def resizing(e):
+            nonlocal ui_dialog
+            dpi_mult = Globals.drawing.get_dpi_mult()
+            l,t,w,h = ui_dialog.left_pixels, ui_dialog.top_pixels, ui_dialog.width_pixels, ui_dialog.height_pixels
+            mt,mr,mb,ml = ui_dialog._get_style_trbl('margin', scale=dpi_mult)
+            bw = ui_dialog._get_style_num('border-width', 0, scale=dpi_mult)
+            gl = l + w - mr - bw
+            gb = t - h + mb + bw
+            rx = resizable_x and gl <= e.mouse.x < gl + bw
+            ry = resizable_y and gb >= e.mouse.y > gl - bw
+            if rx and ry: return 'both'
+            if rx: return 'width'
+            if ry: return 'height'
+            return False
+        def mousedown(e):
+            nonlocal is_resizing, mousedown_pos, original_size, ui_dialog
+            l,t,w,h = ui_dialog.left_pixels, ui_dialog.top_pixels, ui_dialog.width_pixels, ui_dialog.height_pixels
+            is_resizing = resizing(e)
+            mousedown_pos = e.mouse
+            original_size = (w,h)
+        def mouseup(e):
+            nonlocal is_resizing
+            is_resizing = False
+        def mousemove(e):
+            nonlocal is_resizing, mousedown_pos, original_size, ui_dialog
+            if not is_resizing:
+                r = resizing(e)
+                if   r == 'width':  ui_dialog._computed_styles['cursor'] = 'ew-resize'
+                elif r == 'height': ui_dialog._computed_styles['cursor'] = 'ns-resize'
+                elif r == 'both':   ui_dialog._computed_styles['cursor'] = 'grab'
+                else:               ui_dialog._computed_styles['cursor'] = 'default'
+            else:
+                delta = e.mouse - mousedown_pos
+                minw,maxw = ui_dialog._computed_min_width,  ui_dialog._computed_max_width
+                minh,maxh = ui_dialog._computed_min_height, ui_dialog._computed_max_height
+                if minw == 'auto': minw = 0
+                if maxw == 'auto': maxw = float('inf')
+                if minh == 'auto': minh = 0
+                if maxh == 'auto': maxh = float('inf')
+                if is_resizing in {'width', 'both'}:
+                    ui_dialog.width = clamp(original_size[0] + delta.x, minw, maxw)
+                if is_resizing in {'height', 'both'}:
+                    ui_dialog.height = clamp(original_size[1] - delta.y, minh, maxh)
+                ui_dialog.dirty_flow()
+        ui_dialog.add_eventListener('on_mousedown', mousedown)
+        ui_dialog.add_eventListener('on_mouseup', mouseup)
+        ui_dialog.add_eventListener('on_mousemove', mousemove)
     ui_inside = ui_dialog.append_child(UI_Element(tagName='div', classes='inside', style='overflow-y:scroll'))
-    return {'dialog':ui_dialog, 'inside':ui_inside}
+    ui_dialog.append_child = ui_inside.append_child
+    return ui_dialog
+    # return {'dialog':ui_dialog, 'inside':ui_inside}
 
 
 

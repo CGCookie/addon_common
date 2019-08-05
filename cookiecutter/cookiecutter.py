@@ -27,11 +27,10 @@ from ..common.useractions import Actions
 
 from .cookiecutter_fsm import CookieCutter_FSM
 from .cookiecutter_ui import CookieCutter_UI
-from .cookiecutter_utils import CookieCutter_Utils
 from .cookiecutter_blender import CookieCutter_Blender
 
 
-class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Utils, CookieCutter_Blender):
+class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Blender):
     '''
     CookieCutter is used to create advanced operators very quickly!
 

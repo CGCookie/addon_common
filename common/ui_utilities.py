@@ -305,6 +305,7 @@ def convert_token_to_color(c):
     return c
 
 def convert_token_to_cursor(c):
+    if c is None: return c
     if type(c) is re.Match: c = c.group(0)
     if c in cursorname_to_cursor: return cursorname_to_cursor[c]
     if c in cursorname_to_cursor.values(): return c

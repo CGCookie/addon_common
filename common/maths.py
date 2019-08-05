@@ -1142,6 +1142,24 @@ class Size2D:
         if self._height is not None: return self._height
         return self._min_height
 
+    def smallest_width(self):
+        if self._min_width is not None: return self._min_width
+        if self._width is not None: return self._width
+        return self._max_width
+    def smallest_height(self):
+        if self._min_height is not None: return self._min_height
+        if self._height is not None: return self._height
+        return self._max_height
+
+    def get_width_midmaxmin(self):
+        if self._width is not None: return self._width
+        if self._max_width is not None: return self._max_width
+        return self._min_width
+    def get_height_midmaxmin(self):
+        if self._height is not None: return self._height
+        if self._max_height is not None: return self._max_height
+        return self._min_height
+
     def set_all_widths(self, v):
         self._width = self._min_width = self._max_width = v
     def set_all_heights(self, v):

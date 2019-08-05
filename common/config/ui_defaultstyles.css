@@ -13,7 +13,7 @@
 
     border-width:   1px;
     border-color:   rgba(0, 0, 0, 0.75);
-    border-radius:  0px;
+    border-radius:  4px;
 
     overflow: hidden;
     font: normal normal 12pt sans-serif;
@@ -36,7 +36,7 @@ button {
     cursor: default;
     display: inline;
     border-width: 0px;
-    border-radius: 5px;
+    border-radius: 4px;
     border-color: white rgb(96,96,96) rgb(32,32,32) rgb(224,224,224);
     background: rgba(160,160,160, 0.50);
     color: black;
@@ -50,15 +50,15 @@ button:focus {
 
 button:active {
     /*background: rgb(192,128,128);*/
-    background: rgba(128,224,255,0.5);
+    background: hsla(200, 100%, 50%, 1.0); /* rgba(128,224,255,0.5); */
 }
 
 button:hover {
-    background: rgb(64,192,255);
+    background: hsla(200, 100%, 62.5%, 1.0); /* rgb(64,192,255); */
 }
 
 button:active:hover {
-    background: rgb(128,224,255);
+    background: hsla(200, 100%, 80%, 1.0); /*rgb(128,224,255);*/
 }
 
 button:disabled {
@@ -110,15 +110,16 @@ br {
 
 dialog {
     position: fixed;
-    left: 0px;
-    top: 0px;
-    border-radius: 5px;
+    border-radius: 4px;
     border-width: 1px;
     border-color: black;
     background: rgba(32, 32, 32, 0.75);
     /*overflow-x: scroll;*/
     overflow-y: scroll;
     color: white;
+    width: 500px;
+    max-width: 750px;
+    min-width: 200px;
 }
 
 dialog.framed {
@@ -131,7 +132,7 @@ dialog.framed {
 }
 
 dialog.framed > div.header {
-    background: hsla(0, 0%, 25%, 0.75);
+    background: hsla(200, 0%, 25%, 0.75); /* hsla(0, 0%, 25%, 0.75); */
     color: white;
     font-weight: bold;
     margin: 0px;
@@ -139,13 +140,14 @@ dialog.framed > div.header {
     border-width: 1px;
     border-radius: 0px;
     border-color: rgba(0,0,0,0.25) rgba(0,0,0,0.25) rgba(0,0,0,1) rgba(0,0,0,0.25);
+    cursor: grab;
 }
 
 dialog.framed > div.header:hover {
-    background-color: hsla(0,0%,40%,0.75);
+    background-color: hsla(200, 25%, 40%, 0.75); /* hsla(0,0%,40%,0.75);*/
 }
 dialog.framed > div.header:active {
-    background-color: hsla(0,0%,40%,0.5);
+    background-color: hsla(200, 100%, 60%, 0.75); /*hsla(0,0%,40%,0.5);*/
 }
 
 dialog.framed > div.inside {
@@ -159,9 +161,14 @@ dialog.framed > div.inside {
 img {
     border-width: 1px;
     border-color: rgba(0,0,0,0.25);
-    background-color: rgba(255,0,0,0);
+    background-color: hsla(200, 100%, 62.5%, 0.0); /* rgba(255,0,0,0); */
     padding: 2px;
 }
 img:hover {
-    background-color: rgba(0,0,255,0.5);
+    background-color: hsla(200, 100%, 62.5%, 1.0); /* rgba(0,0,255,0.5); */
+}
+
+span {
+    color: white;
+    border-width: 0px;
 }
