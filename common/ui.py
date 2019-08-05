@@ -107,6 +107,7 @@ def dialog(**kwargs):
     return UI_Element(tagName='dialog', **kwargs)
 
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, **kwargs):
+    ui_document = Globals.ui_document
     ui_dialog = UI_Element(tagName='dialog', classes='framed', **kwargs)
     if label is not None:
         ui_label = ui_dialog.append_child(UI_Element(tagName='div', classes='header', innerText=label))
@@ -115,6 +116,7 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
         original_pos = None
         def mousedown(e):
             nonlocal is_dragging, mousedown_pos, original_pos, ui_dialog
+            ui_document.ignore_hover_change = True
             is_dragging = True
             mousedown_pos = e.mouse
 
@@ -126,6 +128,7 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
         def mouseup(e):
             nonlocal is_dragging
             is_dragging = False
+            ui_document.ignore_hover_change = False
         def mousemove(e):
             nonlocal is_dragging, mousedown_pos, original_pos, ui_dialog
             if not is_dragging: return
@@ -133,8 +136,9 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
             new_pos = original_pos + delta
             w,h = ui_dialog.width_pixels,ui_dialog.height_pixels
             rw,rh = ui_dialog._relative_element.width_pixels,ui_dialog._relative_element.height_pixels
-            ui_dialog.left = clamp(new_pos.x, 0, rw - w)
-            ui_dialog.top  = clamp(new_pos.y, -rh + h, 0)
+            # ui_dialog.left = clamp(new_pos.x, 0, rw - w)
+            # ui_dialog.top  = clamp(new_pos.y, -rh + h, 0)
+            ui_dialog.reposition(left=clamp(new_pos.x, 0, rw - w), top=clamp(new_pos.y, -rh + h, 0))
         ui_label.add_eventListener('on_mousedown', mousedown)
         ui_label.add_eventListener('on_mouseup', mouseup)
         ui_label.add_eventListener('on_mousemove', mousemove)
@@ -159,12 +163,15 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
             return False
         def mousedown(e):
             nonlocal is_resizing, mousedown_pos, original_size, ui_dialog
+            if e.target != ui_dialog: return
+            ui_document.ignore_hover_change = True
             l,t,w,h = ui_dialog.left_pixels, ui_dialog.top_pixels, ui_dialog.width_pixels, ui_dialog.height_pixels
             is_resizing = resizing(e)
             mousedown_pos = e.mouse
             original_size = (w,h)
         def mouseup(e):
             nonlocal is_resizing
+            ui_document.ignore_hover_change = False
             is_resizing = False
         def mousemove(e):
             nonlocal is_resizing, mousedown_pos, original_size, ui_dialog

@@ -25,7 +25,7 @@ import bgl
 from bpy.types import SpaceView3D
 
 from ..common.globals import Globals
-from ..common.blender import bversion
+from ..common.blender import bversion, tag_redraw_all
 from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger
 from ..common.drawing import Drawing
@@ -137,17 +137,11 @@ class CookieCutter_UI:
         self._space.draw_handler_remove(self._handle_postpixel, 'WINDOW')
         self.region_restore()
         #self._area.tag_redraw()
-        self.tag_redraw_all()
+        tag_redraw_all()
 
 
     #########################################
     # Region Darkening
-
-    def tag_redraw_all(self):
-        for wm in bpy.data.window_managers:
-            for win in wm.windows:
-                for ar in win.screen.areas:
-                    ar.tag_redraw()
 
     @blender_version_wrapper("<=", "2.79")
     def region_draw_cover(self):
@@ -204,7 +198,7 @@ class CookieCutter_UI:
                 except:
                     pass
 
-        self.tag_redraw_all()
+        tag_redraw_all()
 
     def region_restore(self):
         # remove callback handlers
@@ -213,5 +207,6 @@ class CookieCutter_UI:
             del self._postpixel_callbacks
         if hasattr(self, '_region_darkened'):
             del self._region_darkened
+        tag_redraw_all()
 
 

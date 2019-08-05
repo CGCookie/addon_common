@@ -97,6 +97,13 @@ def toggle_screen_lastop(ctx):
     space.show_region_hud = not space.show_region_hud
 
 
+def tag_redraw_all():
+    for wm in bpy.data.window_managers:
+        for win in wm.windows:
+            for ar in win.screen.areas:
+                ar.tag_redraw()
+
+
 
 def get_active_object():
     return bpy.context.active_object

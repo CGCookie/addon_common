@@ -22,12 +22,14 @@ Created by Jonathan Denning, Jonathan Williamson
 import os
 import re
 import time
+import random
 from inspect import signature
 import traceback
 
 import bpy
 import bgl
 
+from .blender import tag_redraw_all
 from .ui_styling import UI_Styling, ui_defaultstylings
 from .ui_utilities import helper_wraptext, convert_token_to_cursor
 from .drawing import ScissorStack
@@ -48,7 +50,6 @@ from ..ext import png
 '''
 TODO:
 
-- when moving dialog window quickly, the mouse will leave grabbed element, causing everything to be dirtied
 
 
 '''
@@ -680,6 +681,13 @@ class UI_Element_Properties:
         self._title = v
         self.dirty('title changed', parent=True, children=False)
 
+    def reposition(self, left=None, top=None, bottom=None, right=None):
+        if left is not None: self._style_left = left
+        if top  is not None: self._style_top  = top
+        self._absolute_pos = None
+        self.update_position()
+        tag_redraw_all()
+
     @property
     def left(self):
         l = self.style_left
@@ -919,7 +927,7 @@ class UI_Element_Dirtiness:
         if children: self._dirty_propagation['children'] |= properties
         self.propagate_dirtiness()
         # print('%s had %s dirtied, because %s' % (str(self), str(properties), str(cause)))
-        ui_document.tag_redraw_all()
+        tag_redraw_all()
 
     def dirty_styling(self):
         self._computed_styles = {}
@@ -929,7 +937,7 @@ class UI_Element_Dirtiness:
         for child in self._children_all: child.dirty_styling()
         if self._parent is None:
             self.dirty('Dirtying style cache', children=True)
-        ui_document.tag_redraw_all()
+        tag_redraw_all()
 
     def add_dirty_callback(self, child, properties):
         if type(properties) is str: properties = [properties]
@@ -947,7 +955,7 @@ class UI_Element_Dirtiness:
         if children:
             for child in self._children_all:
                 child.dirty_flow()
-        ui_document.tag_redraw_all()
+        tag_redraw_all()
 
     @property
     def is_dirty(self):
@@ -1525,39 +1533,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         styles       = self._computed_styles
         style_pos    = styles.get('position', 'static')
 
+        self._fitting_pos = fitting_pos
         self._fitting_size = fitting_size
         self._parent_size = parent_size
         self._absolute_pos = None
         self._content_offset = 0 if not self._static_content_size or first_on_line else self._static_content_space
+        self._document_elem = document_elem
+        self._nonstatic_elem = nonstatic_elem
 
-        # position element
-        if style_pos in {'fixed', 'absolute'}:
-            # pt,pr,pb,pl = self.top,self.right,self.bottom,self.left
-            # # TODO: ignoring units, which could be %!!
-            # if type(pt) is tuple: pt = pt[0]
-            # if type(pr) is tuple: pr = pr[0]
-            # if type(pb) is tuple: pb = pb[0]
-            # if type(pl) is tuple: pl = pl[0]
-            self._relative_element = document_elem if style_pos == 'fixed' else nonstatic_elem
-            pl,pt = self.left_pixels,self.top_pixels
-            # if self._dirty_flow: print(self,pt,pr,pb,pl)
-            if pl == 'auto':
-                # if pr != 'auto': print(self, self._relative_element._fitting_size, pr)
-                # if pr != 'auto' and self._relative_element._fitting_size:
-                #     # TODO: THIS DOES NOT WORK!! NEED TO SUBTRACT WIDTH, BUT DON'T KNOW IF, YET!
-                #     # move to set_view_size() or create separate function to set position?
-                #     pl = self._relative_element._fitting_size.max_width - pr # - self.width
-                # else: pl = 0
-                pl = 0
-            if pt == 'auto':
-                # if pb != 'auto' and self._relative_element._fitting_size:
-                #     pt = -self._relative_element._fitting_size.max_height + pb
-                # else: pt = 0
-                pt = 0
-            self._relative_pos = RelPoint2D((pl, pt))
-        else:
-            self._relative_element = self._parent
-            self._relative_pos = RelPoint2D(fitting_pos)
+        self.update_position()
 
         if not self._dirty_flow: return
 
@@ -1701,6 +1685,39 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._tmp_max_width = max_width
 
         self._dirty_flow = False
+
+    def update_position(self):
+        styles       = self._computed_styles
+        style_pos    = styles.get('position', 'static')
+
+        # position element
+        if style_pos in {'fixed', 'absolute'}:
+            # pt,pr,pb,pl = self.top,self.right,self.bottom,self.left
+            # # TODO: ignoring units, which could be %!!
+            # if type(pt) is tuple: pt = pt[0]
+            # if type(pr) is tuple: pr = pr[0]
+            # if type(pb) is tuple: pb = pb[0]
+            # if type(pl) is tuple: pl = pl[0]
+            self._relative_element = self._document_elem if style_pos == 'fixed' else self._nonstatic_elem
+            pl,pt = self.left_pixels,self.top_pixels
+            # if self._dirty_flow: print(self,pt,pr,pb,pl)
+            if pl == 'auto':
+                # if pr != 'auto': print(self, self._relative_element._fitting_size, pr)
+                # if pr != 'auto' and self._relative_element._fitting_size:
+                #     # TODO: THIS DOES NOT WORK!! NEED TO SUBTRACT WIDTH, BUT DON'T KNOW IF, YET!
+                #     # move to set_view_size() or create separate function to set position?
+                #     pl = self._relative_element._fitting_size.max_width - pr # - self.width
+                # else: pl = 0
+                pl = 0
+            if pt == 'auto':
+                # if pb != 'auto' and self._relative_element._fitting_size:
+                #     pt = -self._relative_element._fitting_size.max_height + pb
+                # else: pt = 0
+                pt = 0
+            self._relative_pos = RelPoint2D((pl, pt))
+        else:
+            self._relative_element = self._parent
+            self._relative_pos = RelPoint2D(self._fitting_pos)
 
     def set_view_size(self, size:Size2D):
         # parent is telling us how big we will be.  note: this does not trigger a reflow!
@@ -1900,6 +1917,8 @@ class UI_Document(UI_Document_FSM):
         self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
         self.fsm.init(self, start='main')
 
+        self.ignore_hover_change = False
+
         self._under_mouse = None
         self._under_down = None
         self._focus = None
@@ -1947,6 +1966,8 @@ class UI_Document(UI_Document_FSM):
 
     def handle_hover(self, change_cursor=True):
         # handle :hover, on_mouseenter, on_mouseleave
+        if self.ignore_hover_change: return
+
         if change_cursor and self._under_mouse:
             cursor = self._under_mouse._computed_styles.get('cursor', 'default')
             Globals.drawing.set_cursor(convert_token_to_cursor(cursor))
@@ -2091,12 +2112,6 @@ class UI_Document(UI_Document_FSM):
         self._body.draw()
 
         ScissorStack.end()
-
-    def tag_redraw_all(self):
-        for wm in bpy.data.window_managers:
-            for win in wm.windows:
-                for ar in win.screen.areas:
-                    ar.tag_redraw()
 
 ui_document = Globals.set(UI_Document())
 
