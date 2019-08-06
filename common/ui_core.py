@@ -515,8 +515,10 @@ class UI_Element_Properties:
 
     @property
     def children(self):
+        if self._wrapped: return self._wrapped.children
         return list(self._children)
     def append_child(self, child):
+        if self._wrapped: return self._wrapped.append_child(child)
         assert child
         if child in self._children:
             # attempting to add existing child?
@@ -530,6 +532,7 @@ class UI_Element_Properties:
         self.dirty('appending new child changes content', 'content')
         return child
     def delete_child(self, child):
+        if self._wrapped: return self._wrapped.delete_child(child)
         assert child
         assert child in self._children, 'attempting to delete child that does not exist?'
         self._children.remove(child)
@@ -538,6 +541,7 @@ class UI_Element_Properties:
         self.dirty('deleting child changes content', 'content')
     @UI_Element_Utils.defer_dirty('clearing children')
     def clear_children(self):
+        if self._wrapped: return self._wrapped.clear_children(child)
         for child in list(self._children):
             self.delete_child(child)
 
@@ -912,6 +916,37 @@ class UI_Element_Properties:
     def content_height(self):
         return self._static_content_size.height
 
+    @property
+    def type(self):
+        return self._type
+    @type.setter
+    def type(self, v):
+        self._type = v
+        self.dirty('Changing type can affect style', 'style', children=True)
+        self.dirty_styling()
+
+    @property
+    def value(self):
+        return self._value
+    @value.setter
+    def value(self, v):
+        if self._value == v: return
+        self._value = v
+        #self.dirty('Changing value can affect style')
+        #self.dirty_styling()
+
+    @property
+    def preclean(self):
+        return self._preclean
+    @preclean.setter
+    def preclean(self, fn):
+        self._preclean = fn
+
+    @property
+    def can_focus(self): return self._can_focus
+    @can_focus.setter
+    def can_focus(self, v): self._can_focus = v
+
 
 
 class UI_Element_Dirtiness:
@@ -998,15 +1033,20 @@ class UI_Element_Dirtiness:
         self._dirty_propagation['defer'] = bool(v)
         self.propagate_dirtiness()
 
-    def clean(self):
+    def _call_preclean(self):
+        if self.is_dirty and self._preclean: self._preclean()
+        for child in self._children_all: child._call_preclean()
+    def clean(self, depth=0):
         '''
         No need to clean if
         - already clean,
         - possibly more dirtiness to propagate,
         - if deferring cleaning.
         '''
+        self._call_preclean()
         if not self.is_dirty or self._defer_clean: return
         self.call_cleaning_callbacks()
+        for child in self._children_all: child.clean(depth=depth+1)
         assert not self.is_dirty, '%s is still dirty after cleaning: %s' % (str(self), str(self._dirty_properties))
 
 
@@ -1022,7 +1062,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._style_str     = ''        # custom style string
         self._innerText     = ''        # text to display (converted to UI_Elements)
         self._src_str       = ''        # path to resource, such as image
+        self._can_focus     = False     # True:self can take focus
         self._title         = None      # tooltip
+        self._type          = None
+        self._value         = None
+
+        self._wrapped       = None      # does this UI_Element wrap another?
+        self._preclean      = None      # fn that's called back right before clean is started
 
         #################################################################
         # read-only attributes of UI_Element
@@ -1176,9 +1222,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         return self.__str__()
 
     def __str__(self):
-        info = ['tagName', 'id', 'innerTextAsIs']
-        info = [(k, getattr(self, k)) for k in info]
+        info = ['tagName', 'id', 'type', 'innerText', 'innerTextAsIs']
+        info = [(k, getattr(self, k)) for k in info if hasattr(self, k)]
         info = ['%s="%s"' % (k, str(v)) for k,v in info if v]
+        if self.is_dirty: info += ['dirty']
         return '<UI_Element %s>' % ' '.join(info)
 
     @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content'})
@@ -1207,11 +1254,14 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._selector_before = None
             self._selector_after = None
         else:
+            attribs = ['type', 'value']
             sel_tagName = self._tagName
             sel_id = '#%s' % self._id if self._id else ''
             sel_cls = ''.join('.%s' % c for c in self._classes)
             sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
-            self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo]
+            sel_attribs = ''.join('[%s]' % p for p in attribs if getattr(self,p) is not None)
+            sel_attribvals = ''.join('[%s="%s"]' % (p,str(getattr(self,p))) for p in attribs if getattr(self,p) is not None)
+            self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
             self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
             self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
 
@@ -1241,29 +1291,34 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         # computed default styling
         if self._styling_default is None:
-            self._styling_default = UI_Styling()
-            if not self._innerTextAsIs:
-                # strip off all pseudoclasses
-                sel_base = [re.sub(r'(?<!:):[^:.#]+', r'', s) for s in self._selector]
-                for pseudoclasses in [None, 'focus', 'hover', 'active', ['hover','active'], 'disabled']:
-                    sel = list(sel_base)
-                    if pseudoclasses:
-                        if type(pseudoclasses) is str: pseudoclasses = [pseudoclasses]
-                        pseudoclasses = ''.join(':%s'%p for p in pseudoclasses)
-                        sel[-1] = sel[-1] + pseudoclasses
-                    # filtered_decllist = ui_defaultstylings.filter_styling(self._tagName, pseudoclasses)
-                    filtered_decllist = ui_defaultstylings.filter_styling(sel)
-                    self._styling_default.append(filtered_decllist)
+            # self._styling_default = UI_Styling()
+            # if not self._innerTextAsIs:
+            #     # strip off all pseudoclasses
+            #     sel_base = [re.sub(r'(?<!:):[^:.#]+', r'', s) for s in self._selector]
+            #     for pseudoclasses in [None, 'focus', 'hover', 'active', ['hover','active'], 'disabled']:
+            #         sel = list(sel_base)
+            #         if pseudoclasses:
+            #             if type(pseudoclasses) is str: pseudoclasses = [pseudoclasses]
+            #             pseudoclasses = ''.join(':%s'%p for p in pseudoclasses)
+            #             sel[-1] = sel[-1] + pseudoclasses
+            #         # filtered_decllist = ui_defaultstylings.filter_styling(self._tagName, pseudoclasses)
+            #         filtered_decllist = ui_defaultstylings.filter_styling(sel)
+            #         self._styling_default.append(filtered_decllist)
+            if self._innerTextAsIs:
+                self._styling_default = UI_Styling()
+            else:
+                self._styling_default = ui_defaultstylings
 
-        # compute custom styles
+        # # compute custom styles
         if self._styling_custom is None:
-            style_list = [self._style_str]
-            if self._style_left is not None: style_list.append('left:'+str(self._style_left)+'px')
-            if self._style_top is not None: style_list.append('top:'+str(self._style_top)+'px')
-            if self._style_right is not None: style_list.append('right:'+str(self._style_right)+'px')
-            if self._style_bottom is not None: style_list.append('bottom:'+str(self._style_bottom)+'px')
-            style_str = ';'.join(style_list)
-            self._styling_custom = UI_Styling('*{%s;}' % style_str)
+            # style_list = [self._style_str]
+            # if self._style_left is not None: style_list.append('left:'+str(self._style_left)+'px')
+            # if self._style_top is not None: style_list.append('top:'+str(self._style_top)+'px')
+            # if self._style_right is not None: style_list.append('right:'+str(self._style_right)+'px')
+            # if self._style_bottom is not None: style_list.append('bottom:'+str(self._style_bottom)+'px')
+            # style_str = ';'.join(style_list)
+            # self._styling_custom = UI_Styling('*{%s;}' % style_str)
+            self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
 
         styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
         self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
@@ -1840,13 +1895,17 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         ScissorStack.pop()
 
-    def get_under_mouse(self, mx, my):
-        if mx < self._l or mx >= self._l + self._w: return None
-        if my > self._t or my <= self._t - self._h: return None
+    def get_under_mouse(self, p:Point2D):
+        if p.x < self._l or p.x >= self._l + self._w: return None
+        if p.y > self._t or p.y <= self._t - self._h: return None
         for child in reversed(self._children):
-            r = child.get_under_mouse(mx, my)
+            r = child.get_under_mouse(p)
             if r: return r
         return self
+
+
+    def structure(self, depth=0):
+        return '\n'.join([('  '*depth) + str(self)] + [child.structure(depth+1) for child in self._children_all])
 
 
     ################################################################################
@@ -1943,7 +2002,7 @@ class UI_Document(UI_Document_FSM):
 
         self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
         self._mouse = Point2D((self._mx, self._my))
-        self._under_mouse = self._body.get_under_mouse(self._mx, self._my)
+        self._under_mouse = self._body.get_under_mouse(self._mouse)
         self._lmb = self.actions.using('LEFTMOUSE')
         self._mmb = self.actions.using('MIDDLEMOUSE')
         self._rmb = self.actions.using('RIGHTMOUSE')
@@ -1961,6 +2020,7 @@ class UI_Document(UI_Document_FSM):
         uictrld = False
         uictrld |= self._under_mouse is not None and self._under_mouse != self._body
         uictrld |= self.fsm.state != 'main'
+        uictrld |= self._focus is not None
         return {'hover'} if uictrld else None
 
 
@@ -1968,7 +2028,7 @@ class UI_Document(UI_Document_FSM):
         # handle :hover, on_mouseenter, on_mouseleave
         if self.ignore_hover_change: return
 
-        if change_cursor and self._under_mouse:
+        if change_cursor and self._under_mouse and self._under_mouse._tagName != 'body':
             cursor = self._under_mouse._computed_styles.get('cursor', 'default')
             Globals.drawing.set_cursor(convert_token_to_cursor(cursor))
 
@@ -2044,12 +2104,12 @@ class UI_Document(UI_Document_FSM):
     def modal_mousedown_canenter(self):
         can_enter = True
         can_enter &= bool(self._under_mouse) and not self._under_mouse.is_disabled
-        if not can_enter:
-            if self._focus:
-                # blur previous
-                self._focus.del_pseudoclass('focus')
-                self._focus.dispatch_event('on_blur')
-                self._focus = None
+        # if not can_enter:
+        #     if self._focus:
+        #         # blur previous
+        #         self._focus.del_pseudoclass('focus')
+        #         self._focus.dispatch_event('on_blur')
+        #         self._focus = None
         return can_enter
 
     @UI_Document_FSM.FSM_State('mousedown', 'enter')
@@ -2059,9 +2119,11 @@ class UI_Document(UI_Document_FSM):
             if self._focus:
                 self._focus.del_pseudoclass('focus')
                 self._focus.dispatch_event('on_blur')
-            self._focus = self._under_mouse
-            self._focus.add_pseudoclass('focus')
-            self._focus.dispatch_event('on_focus')
+                self._focus = None
+            if self._under_mouse.can_focus:
+                self._focus = self._under_mouse
+                self._focus.add_pseudoclass('focus')
+                self._focus.dispatch_event('on_focus')
 
         self._under_mousedown = self._under_mouse
         self._under_mousedown.add_pseudoclass('active')

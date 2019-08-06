@@ -23,6 +23,7 @@ import os
 import re
 import math
 import time
+import types
 import struct
 import random
 import traceback
@@ -105,6 +106,23 @@ def textarea(**kwargs):
 
 def dialog(**kwargs):
     return UI_Element(tagName='dialog', **kwargs)
+
+def input_text(**kwargs):
+    kwargs.setdefault('value', '')
+    ui_input = UI_Element(tagName='input', type='text', can_focus=True, **kwargs)
+    def preclean():
+        nonlocal ui_input
+        ui_input.innerText = ui_input.value
+    def mousedown(e):
+        nonlocal ui_input
+        ui_input.value = 'flarf ' + str(random.random())
+    def mouseup(e):
+        nonlocal ui_input
+        pass
+    ui_input.preclean = preclean
+    ui_input.add_eventListener('on_mousedown', mousedown)
+    ui_input.add_eventListener('on_mouseup', mouseup)
+    return ui_input
 
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, **kwargs):
     ui_document = Globals.ui_document
@@ -198,7 +216,12 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
         ui_dialog.add_eventListener('on_mouseup', mouseup)
         ui_dialog.add_eventListener('on_mousemove', mousemove)
     ui_inside = ui_dialog.append_child(UI_Element(tagName='div', classes='inside', style='overflow-y:scroll'))
-    ui_dialog.append_child = ui_inside.append_child
+    ui_dialog._wrapped = ui_inside
+    # ui_dialog.append_child_dialog = ui_dialog.append_child
+    # ui_dialog.children = types.MethodType(ui_inside.children, ui_inside)
+    # ui_dialog.append_child = types.MethodType(ui_inside.append_child, ui_inside)
+    # ui_dialog.delete_child = types.MethodType(ui_inside.delete_child, ui_inside)
+    # ui_dialog.clear_children = types.MethodType(ui_inside.clear_children, ui_inside)
     return ui_dialog
     # return {'dialog':ui_dialog, 'inside':ui_inside}
 

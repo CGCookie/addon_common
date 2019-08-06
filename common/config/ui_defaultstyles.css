@@ -25,8 +25,8 @@ body {
     height: 100%;
     margin: 0;
     padding: 0;
-    border: 5px rgba(255,0,0,0.25);
-    border-radius: 0px;
+    border: 4px rgba(0,0,0,0.25);
+    border-radius: 8px;
     cursor: default;
     overflow: hidden;
 }
@@ -177,4 +177,26 @@ img:hover {
 span {
     color: white;
     border-width: 0px;
+}
+
+input {
+    background: red;
+}
+
+input[type="text"] {
+    min-height: 28px;
+    display: block;
+    width: 100%;
+    /*margin: 2px 0px;*/
+    padding: 4px;
+    background-color: rgba(255,255,255,0.9);
+    border-width: 1px;
+    border-radius: 4px;
+    border-color: black;
+    color: black;
+    cursor: text;
+}
+
+input[type="text"]:focus {
+    border-color: cyan;
 }

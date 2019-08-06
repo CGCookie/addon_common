@@ -107,6 +107,7 @@ Things to think about:
 
 '''
 
+token_attribute = r'\[(?P<key>[-a-zA-Z_]+)((?P<op>=)"(?P<val>[^"]+)")?\]'
 
 token_rules = [
     ('ignore', skip_token, [
@@ -115,6 +116,9 @@ token_rules = [
     ]),
     ('special', convert_token_to_string, [
         r'[-.*>{},();]|[:]+',
+    ]),
+    ('attribute', convert_token_to_string, [
+        token_attribute,
     ]),
     ('key', convert_token_to_string, [
         r'color',
@@ -299,7 +303,7 @@ class UI_Style_RuleSet:
                 e = lexer.match_v_v('*')
             else:
                 e = lexer.match_t_v('id')
-            while lexer.peek_v() in {'.','#',':','::'}:
+            while True:
                 if lexer.peek_v() in {'.','#'}:
                     e += lexer.match_v_v({'.','#'})
                     e += lexer.match_t_v('id')
@@ -309,6 +313,10 @@ class UI_Style_RuleSet:
                 elif lexer.peek_v() == '::':
                     e += lexer.match_v_v('::')
                     e += lexer.match_t_v('')
+                elif 'attribute' in lexer.peek_t():
+                    e += lexer.match_t_v('attribute')
+                else:
+                    break
             return e
 
         # get selector
@@ -362,10 +370,14 @@ class UI_Style_RuleSet:
     def match(self, selector):
         # returns true if passed selector matches any selector in self.selectors
         def splitsel(sel):
-            p = {'type':'', 'class':[], 'id':'', 'pseudoelement':[], 'pseudoclass':[]}
+            p = {'type':'', 'class':[], 'id':'', 'pseudoelement':[], 'pseudoclass':[], 'attribs':set(), 'attribvals':{}}
             transition = {'.':'class', '#':'id', '::':'pseudoelement', ':':'pseudoclass'}
-            nsel = re.sub(r'([.]|#|::|:)', r' \1 ', sel).split(' ')
-            sel = nsel
+            for attrib in re.finditer(token_attribute, sel):
+                k,v = attrib.group('key'),attrib.group('val')
+                if v is None: p['attribs'].add(k)
+                else: p['attribvals'][k] = v
+            sel = re.sub(token_attribute, '', sel)
+            sel = re.sub(r'([.]|#|::|:|\[|\])', r' \1 ', sel).split(' ')
             v,m = '','type'
             for c in sel:
                 if c in {'.',':','::','#'}:
@@ -387,13 +399,14 @@ class UI_Style_RuleSet:
             a0,b0 = sel_elem[-1],sel_style[-1]
             if b0 == '>': return msel(sel_elem, sel_style[:-1], cont=False)
             ap,bp = splitsel(a0),splitsel(b0)
-            # if ap['type'] == 'button' and 'hover' in ap['pseudoclass'] and not ap['pseudoelement'] and bp['type'] == 'button': print(ap, bp)
             m = True
             m &= (bp['type'] == '*' and ap['type'] != '') or ap['type'] == bp['type']
             m &= bp['id'] == '' or ap['id'] == bp['id']
             m &= all(c in ap['class'] for c in bp['class'])
             m &= all(c in ap['pseudoelement'] for c in bp['pseudoelement'])
             m &= all(c in ap['pseudoclass'] for c in bp['pseudoclass'])
+            m &= all(key in ap['attribs'] for key in bp['attribs'])
+            m &= all(key in ap['attribvals'] and ap['attribvals'][key] == val for (key,val) in bp['attribvals'].items())
             if m and msel(sel_elem[:-1], sel_style[:-1]): return True
             if not cont: return False
             return msel(sel_elem[:-1], sel_style)
@@ -456,12 +469,15 @@ class UI_Styling:
     def __repr__(self): return self.__str__()
 
     def get_decllist(self, selector):
-        # return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
-        matchingrules = [rule for rule in self.rules if rule.match(selector)]
-        # if '*text*' in selector[-1]: print('elem:%s matched %s' % (selector, str(matchingrules)))
-        # print('elem:%s matched %s' % (selector, str(matchingrules)))
-        decllist = [d for rule in matchingrules for d in rule.decllist]
-        return decllist
+        if not hasattr(self, 'decllist_cache'): self.decllist_cache = {}
+        selector_tuple = tuple(selector)
+        if selector_tuple not in self.decllist_cache:
+            # return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+            matchingrules = [rule for rule in self.rules if rule.match(selector)]
+            # if '*text*' in selector[-1]: print('elem:%s matched %s' % (selector, str(matchingrules)))
+            # print('elem:%s matched %s' % (selector, str(matchingrules)))
+            self.decllist_cache[selector_tuple] = [d for rule in matchingrules for d in rule.decllist]
+        return self.decllist_cache[selector_tuple]
 
     def append(self, other_styling):
         self.rules += other_styling.rules
