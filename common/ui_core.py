@@ -35,7 +35,7 @@ from .ui_utilities import helper_wraptext, convert_token_to_cursor
 from .drawing import ScissorStack
 from .fsm import FSM
 
-from .useractions import Actions
+from .useractions import Actions, kmi_to_keycode
 
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
@@ -418,12 +418,13 @@ class UI_Event:
         'bubbling',
     ]
 
-    def __init__(self, target=None, mouse=None):
+    def __init__(self, target=None, mouse=None, key=None):
         self._eventPhase = 'none'
         self._cancelBubble = False
         self._cancelCapture = False
         self._target = target
         self._mouse = mouse
+        self._key = key
         self._defaultPrevented = False
 
     def stop_propagation():
@@ -459,6 +460,9 @@ class UI_Event:
 
     @property
     def mouse(self): return self._mouse
+
+    @property
+    def key(self): return self._key
 
     @property
     def default_prevented(self): return self._defaultPrevented
@@ -656,6 +660,10 @@ class UI_Element_Properties:
     def is_focused(self): return 'focus' in self._pseudoclasses
     @property
     def is_disabled(self): return 'disabled' in self._pseudoclasses
+
+    def blur(self):
+        if 'focus' not in self._pseudoclasses: return
+        ui_document.blur()
 
     @property
     def pseudoelement(self):
@@ -932,7 +940,7 @@ class UI_Element_Properties:
     def value(self, v):
         if self._value == v: return
         self._value = v
-        #self.dirty('Changing value can affect style')
+        self.dirty('Changing value can affect style and content')
         #self.dirty_styling()
 
     @property
@@ -1936,15 +1944,16 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             for (cap,cb,old_cb) in self._events[event]:
                 if not cap: cb(details)
 
-    def dispatch_event(self, event, details=None):
-        details = details or UI_Event(target=self, mouse=ui_document.actions.mouse)
+    def dispatch_event(self, event, mouse=None, key=None):
+        if mouse is None: mouse = ui_document.actions.mouse
+        ui_event = UI_Event(target=self, mouse=mouse, key=key)
         path = self.get_pathToRoot()[1:] # skipping first item, which is self
-        details.event_phase = 'capturing'
-        for cur in path[::-1]: cur._fire_event(event, details)
-        details.event_phase = 'at target'
-        self._fire_event(event, details)
-        details.event_phase = 'bubbling'
-        for cur in path: cur._fire_event(event, details)
+        ui_event.event_phase = 'capturing'
+        for cur in path[::-1]: cur._fire_event(event, ui_event)
+        ui_event.event_phase = 'at target'
+        self._fire_event(event, ui_event)
+        ui_event.event_phase = 'bubbling'
+        for cur in path: cur._fire_event(event, ui_event)
 
     ################################################################################
     # the following methods can be overridden to create different types of UI
@@ -1963,9 +1972,17 @@ class UI_Document(UI_Document_FSM):
     default_keymap = {
         'commit': {'RET',},
         'cancel': {'ESC',},
+        'keypress':
+            {c for c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'} |
+            {'NUMPAD_%d'%i for i in range(10)} | {'NUMPAD_PERIOD','NUMPAD_MINUS','NUMPAD_PLUS','NUMPAD_SLASH','NUMPAD_ASTERIX'} |
+            {'ZERO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'} |
+            {'PERIOD', 'MINUS', 'SPACE', 'SEMI_COLON', 'COMMA', 'QUOTE', 'ACCENT_GRAVE', 'PLUS', 'SLASH', 'BACK_SLASH', 'EQUAL', 'LEFT_BRACKET', 'RIGHT_BRACKET'},
     }
 
     doubleclick_time = 0.25
+    allow_disabled_to_blur = False
+    key_repeat_delay = 0.1500
+    key_repeat_pause = 0.0700
 
     def __init__(self):
         pass
@@ -2020,7 +2037,7 @@ class UI_Document(UI_Document_FSM):
         uictrld = False
         uictrld |= self._under_mouse is not None and self._under_mouse != self._body
         uictrld |= self.fsm.state != 'main'
-        uictrld |= self._focus is not None
+        # uictrld |= self._focus is not None
         return {'hover'} if uictrld else None
 
 
@@ -2104,26 +2121,20 @@ class UI_Document(UI_Document_FSM):
     def modal_mousedown_canenter(self):
         can_enter = True
         can_enter &= bool(self._under_mouse) and not self._under_mouse.is_disabled
-        # if not can_enter:
-        #     if self._focus:
-        #         # blur previous
-        #         self._focus.del_pseudoclass('focus')
-        #         self._focus.dispatch_event('on_blur')
-        #         self._focus = None
+        if UI_Document.allow_disabled_to_blur and not can_enter and self._focus:
+            # blur previous
+            self._focus.del_pseudoclass('focus')
+            self._focus.dispatch_event('on_blur')
+            self._focus = None
         return can_enter
 
     @UI_Document_FSM.FSM_State('mousedown', 'enter')
     def modal_mousedown_enter(self):
         change_focus = self._focus != self._under_mouse
         if change_focus:
-            if self._focus:
-                self._focus.del_pseudoclass('focus')
-                self._focus.dispatch_event('on_blur')
-                self._focus = None
+            self.blur()
             if self._under_mouse.can_focus:
-                self._focus = self._under_mouse
-                self._focus.add_pseudoclass('focus')
-                self._focus.dispatch_event('on_focus')
+                self.focus(self._under_mouse)
 
         self._under_mousedown = self._under_mouse
         self._under_mousedown.add_pseudoclass('active')
@@ -2131,7 +2142,9 @@ class UI_Document(UI_Document_FSM):
 
     @UI_Document_FSM.FSM_State('mousedown')
     def modal_mousedown(self):
-        if not self._lmb: return 'main'     # done with mousedown
+        if not self._lmb:
+            # done with mousedown
+            return 'focus' if self._under_mousedown.can_focus else 'main'
         self.handle_hover(change_cursor=False)
         self.handle_mousemove(ui_element=self._under_mousedown)
 
@@ -2155,6 +2168,53 @@ class UI_Document(UI_Document_FSM):
             self._last_click_time = 0
         self._under_mousedown.del_pseudoclass('active')
 
+    def blur(self):
+        if self._focus is None: return
+        self._focus.del_pseudoclass('focus')
+        self._focus.dispatch_event('on_blur')
+        self._focus = None
+
+    def focus(self, ui_element):
+        if ui_element is None: return
+        if self._focus == ui_element: return
+        self.blur()
+        self._focus = ui_element
+        self._focus.add_pseudoclass('focus')
+        self._focus.dispatch_event('on_focus')
+
+    @UI_Document_FSM.FSM_State('focus', 'enter')
+    def modal_focus_enter(self):
+        self._last_pressed = None
+        self._last_press_time = 0
+        self._last_press_start = 0
+
+    @UI_Document_FSM.FSM_State('focus')
+    def modal_focus(self):
+        if self.actions.pressed('LEFTMOUSE', unpress=False):
+            return 'mousedown'
+        # if self.actions.pressed('ESC'):
+        #     self.blur()
+        #     return 'main'
+        self.handle_hover()
+        self.handle_mousemove()
+
+        pressed = None
+        if self.actions.using('keypress', ignoreshift=True):
+            pressed = self.actions.as_char(self.actions.last_pressed)
+        for k,v in kmi_to_keycode.items():
+            if self.actions.using(k): pressed = v
+        if pressed:
+            cur = time.time()
+            if self._last_pressed != pressed:
+                self._last_press_start = cur
+                self._last_press_time = 0
+                self._focus.dispatch_event('on_keypress', key=pressed)
+            elif cur >= self._last_press_start + UI_Document.key_repeat_delay and cur >= self._last_press_time + UI_Document.key_repeat_pause:
+                self._last_press_time = cur
+                self._focus.dispatch_event('on_keypress', key=pressed)
+        self._last_pressed = pressed
+
+        if not self._focus: return 'main'
 
     def draw(self, context):
         w,h = context.region.width, context.region.height

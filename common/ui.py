@@ -110,18 +110,54 @@ def dialog(**kwargs):
 def input_text(**kwargs):
     kwargs.setdefault('value', '')
     ui_input = UI_Element(tagName='input', type='text', can_focus=True, **kwargs)
+    orig_text = None
+    edit_text = None
+    edit_index = 0
     def preclean():
-        nonlocal ui_input
-        ui_input.innerText = ui_input.value
-    def mousedown(e):
-        nonlocal ui_input
-        ui_input.value = 'flarf ' + str(random.random())
-    def mouseup(e):
-        nonlocal ui_input
-        pass
+        nonlocal ui_input, edit_text, edit_index
+        if edit_text is None:
+            ui_input.innerText = ui_input.value
+        else:
+            ui_input.innerText = edit_text[:edit_index] + '|' + edit_text[edit_index:]
+    def focus(e):
+        nonlocal ui_input, edit_index, edit_text, orig_text
+        orig_text = edit_text = ui_input.value
+        edit_index = len(edit_text)
+    def blur(e):
+        nonlocal ui_input, edit_text
+        ui_input.value = edit_text
+        edit_text = None
+    def keypress(e):
+        nonlocal ui_input, edit_text, edit_index, orig_text
+        if type(e.key) is int:
+            if e.key == 8:
+                if edit_index == 0: return
+                edit_text = edit_text[0:edit_index-1] + edit_text[edit_index:]
+                edit_index -= 1
+            elif e.key == 13:
+                ui_input.blur()
+            elif e.key == 27:
+                edit_text = orig_text
+                ui_input.blur()
+            elif e.key == 35:
+                edit_index = len(edit_text)
+            elif e.key == 36:
+                edit_index = 0
+            elif e.key == 37:
+                edit_index = max(edit_index - 1, 0)
+            elif e.key == 39:
+                edit_index = min(edit_index + 1, len(edit_text))
+            elif e.key == 46:
+                if edit_index == len(edit_text): return
+                edit_text = edit_text[0:edit_index] + edit_text[edit_index+1:]
+        else:
+            edit_text = edit_text[0:edit_index] + e.key + edit_text[edit_index:]
+            edit_index += 1
+        preclean()
     ui_input.preclean = preclean
-    ui_input.add_eventListener('on_mousedown', mousedown)
-    ui_input.add_eventListener('on_mouseup', mouseup)
+    ui_input.add_eventListener('on_focus', focus)
+    ui_input.add_eventListener('on_blur', blur)
+    ui_input.add_eventListener('on_keypress', keypress)
     return ui_input
 
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, **kwargs):

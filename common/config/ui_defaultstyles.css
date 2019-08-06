@@ -184,12 +184,13 @@ input {
 }
 
 input[type="text"] {
+    white-space: pre;
     min-height: 28px;
     display: block;
     width: 100%;
     /*margin: 2px 0px;*/
     padding: 4px;
-    background-color: rgba(255,255,255,0.9);
+    background-color: rgba(255,255,255,0.5);
     border-width: 1px;
     border-radius: 4px;
     border-color: black;
@@ -198,5 +199,6 @@ input[type="text"] {
 }
 
 input[type="text"]:focus {
+    background-color: rgba(255,255,255,1.0);
     border-color: cyan;
 }

@@ -27,6 +27,75 @@ from .maths import Point2D
 from .debug import dprint
 from .decorators import blender_version_wrapper
 
+kmi_to_keycode = {
+    'BACK_SPACE':    8,
+    'RET':          13,
+    'NUMPAD_ENTER': 13,
+    'ESC':          27,
+    'END':          35,
+    'HOME':         36,
+    'LEFT_ARROW':   37,
+    'RIGHT_ARROW':  39,
+    'DEL':          46,
+}
+
+kmi_to_char = {
+    'ZERO':   '0', 'NUMPAD_0':       '0',
+    'ONE':    '1', 'NUMPAD_1':       '1',
+    'TWO':    '2', 'NUMPAD_2':       '2',
+    'THREE':  '3', 'NUMPAD_3':       '3',
+    'FOUR':   '4', 'NUMPAD_4':       '4',
+    'FIVE':   '5', 'NUMPAD_5':       '5',
+    'SIX':    '6', 'NUMPAD_6':       '6',
+    'SEVEN':  '7', 'NUMPAD_7':       '7',
+    'EIGHT':  '8', 'NUMPAD_8':       '8',
+    'NINE':   '9', 'NUMPAD_9':       '9',
+    'PERIOD': '.', 'NUMPAD_PERIOD':  '.',
+    'PLUS':   '+', 'NUMPAD_PLUS':    '+',
+    'MINUS':  '-', 'NUMPAD_MINUS':   '-',
+    'SLASH':  '/', 'NUMPAD_SLASH':   '/',
+                   'NUMPAD_ASTERIX': '*',
+    'BACK_SLASH':   '\\',
+    'SPACE':        ' ',
+    'EQUAL':        '=',
+    'SEMI_COLON':   ';', 'COMMA':         ',',
+    'LEFT_BRACKET': '[', 'RIGHT_BRACKET': ']',
+    'QUOTE':        "'", 'ACCENT_GRAVE':  '`',
+    'A':'a', 'B':'b', 'C':'c', 'D':'d',
+    'E':'e', 'F':'f', 'G':'g', 'H':'h',
+    'I':'i', 'J':'j', 'K':'k', 'L':'l',
+    'M':'m', 'N':'n', 'O':'o', 'P':'p',
+    'Q':'q', 'R':'r', 'S':'s', 'T':'t',
+    'U':'u', 'V':'v', 'W':'w', 'X':'x',
+    'Y':'y', 'Z':'z',
+    'SHIFT+ZERO':   ')',
+    'SHIFT+ONE':    '!',
+    'SHIFT+TWO':    '@',
+    'SHIFT+THREE':  '#',
+    'SHIFT+FOUR':   '$',
+    'SHIFT+FIVE':   '%',
+    'SHIFT+SIX':    '^',
+    'SHIFT+SEVEN':  '&',
+    'SHIFT+EIGHT':  '*',
+    'SHIFT+NINE':   '(',
+    'SHIFT+PERIOD': '>',
+    'SHIFT+PLUS':   '+',
+    'SHIFT+MINUS':  '_',
+    'SHIFT+SLASH':  '?',
+    'SHIFT+BACK_SLASH':   '|',
+    'SHIFT+EQUAL':        '+',
+    'SHIFT+SEMI_COLON':   ':', 'SHIFT+COMMA':         '<',
+    'SHIFT+LEFT_BRACKET': '{', 'SHIFT+RIGHT_BRACKET': '}',
+    'SHIFT+QUOTE':        '"', 'SHIFT+ACCENT_GRAVE':  '~',
+    'SHIFT+A':'A', 'SHIFT+B':'B', 'SHIFT+C':'C', 'SHIFT+D':'D',
+    'SHIFT+E':'E', 'SHIFT+F':'F', 'SHIFT+G':'G', 'SHIFT+H':'H',
+    'SHIFT+I':'I', 'SHIFT+J':'J', 'SHIFT+K':'K', 'SHIFT+L':'L',
+    'SHIFT+M':'M', 'SHIFT+N':'N', 'SHIFT+O':'O', 'SHIFT+P':'P',
+    'SHIFT+Q':'Q', 'SHIFT+R':'R', 'SHIFT+S':'S', 'SHIFT+T':'T',
+    'SHIFT+U':'U', 'SHIFT+V':'V', 'SHIFT+W':'W', 'SHIFT+X':'X',
+    'SHIFT+Y':'Y', 'SHIFT+Z':'Z',
+}
+
 
 def kmi_details(kmi):
     kmi_ctrl  = 'CTRL+'  if kmi.ctrl  else ''
@@ -44,9 +113,13 @@ def kmi_details(kmi):
 
     return kmi_ftype
 
-def strip_mods(action):
+def strip_mods(action, ctrl=True, shift=True, alt=True, oskey=True):
     if action is None: return None
-    return action.replace('CTRL+','').replace('SHIFT+','').replace('ALT+','').replace('OSKEY+','')
+    if ctrl:  action = action.replace('CTRL+',  '')
+    if shift: action = action.replace('SHIFT+', '')
+    if alt:   action = action.replace('ALT+',   '')
+    if oskey: action = action.replace('OSKEY+', '')
+    return action
 
 class Actions:
     # https://docs.blender.org/api/2.79/bpy.types.KeyMapItems.html
@@ -182,6 +255,7 @@ class Actions:
         self.actions_pressed = set()
         self.now_pressed = {}
         self.just_pressed = None
+        self.last_pressed = None
 
         self.mouse = None
         self.mouse_prev = None
@@ -292,6 +366,7 @@ class Actions:
                 # mouse wheel actions have no release, so handle specially
                 self.just_pressed = ftype
             self.now_pressed[event.type] = ftype
+            self.last_pressed = ftype
         else:
             if event.type in self.now_pressed:
                 del self.now_pressed[event.type]
@@ -317,13 +392,14 @@ class Actions:
 
     def unpress(self): self.just_pressed = None
 
-
-    def using(self, actions, using_all=False):
+    def using(self, actions, using_all=False, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False):
         if actions is None: return False
         actions = self.convert(actions)
-        if using_all:
-            return all(p in actions for p in self.now_pressed.values())
-        return any(p in actions for p in self.now_pressed.values())
+        quantifier_fn = all if using_all else any
+        return quantifier_fn(
+            strip_mods(p, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey) in actions
+            for p in self.now_pressed.values()
+        )
 
     def navigating(self):
         actions = self.convert('navigate')
@@ -332,10 +408,11 @@ class Actions:
         if any(p in actions for p in self.now_pressed.values()): return True
         return False
 
-    def pressed(self, actions, unpress=True, ignoremods=False):
+    def pressed(self, actions, unpress=True, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False):
         if actions is None: return False
+        if ignoremods: ignorectrl = ignoreshift = ignorealt = ignoreoskey = True
         actions = self.convert(actions)
-        just_pressed = self.just_pressed if not ignoremods else strip_mods(self.just_pressed)
+        just_pressed = strip_mods(self.just_pressed, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey)
         ret = just_pressed in actions
         if ret and unpress: self.just_pressed = None
         return ret
@@ -354,3 +431,8 @@ class Actions:
         mx,my = self.mouse
         sx,sy = self.size
         return mx >= 0 and my >= 0 and mx < sx and my < sy
+
+    def as_char(self, ftype):
+        if ftype is None: return ''
+        #assert ftype in kmi_to_char, 'Trying to convert unhandled key "%s"' % str(self.just_pressed)
+        return kmi_to_char.get(ftype, None)
