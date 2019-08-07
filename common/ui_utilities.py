@@ -350,15 +350,14 @@ def helper_wraptext(text='', width=None, fontid=0, fontsize=12, preserve_newline
     tw = Globals.drawing.get_text_width
     wrap_text &= width is not None
 
-    if not preserve_newlines:
-        text = re.sub(r'\n', ' ', text)
-    if collapse_spaces:
-        text = re.sub(r' +', ' ', text)
+    if not preserve_newlines: text = re.sub(r'\n', ' ', text)
+    if collapse_spaces: text = re.sub(r' +', ' ', text)
     if wrap_text:
         if width is None: width = float('inf')
         cline,*ltext = text.split(' ')
         nlines = []
         for cword in ltext:
+            if not collapse_spaces and cword == '': cword = ' '
             nline = '%s %s'%(cline,cword)
             if tw(nline) <= width: cline = nline
             else: nlines,cline = nlines+[cline],cword

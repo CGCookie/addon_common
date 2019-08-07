@@ -183,22 +183,32 @@ input {
     background: red;
 }
 
-input[type="text"] {
-    white-space: pre;
-    min-height: 28px;
-    display: block;
+span.inputtext {
     width: 100%;
-    /*margin: 2px 0px;*/
-    padding: 4px;
+    min-height: 28px;
+    padding: 0px;
+    display: block;
     background-color: rgba(255,255,255,0.5);
     border-width: 1px;
     border-radius: 4px;
     border-color: black;
+}
+
+input[type="text"] {
+    background-color: transparent;
+    white-space: pre-wrap;
+    display: block;
+    width: 100%;
+    margin: 0px;
+    padding: 3px;
+    border-width: 1px;
+    border-color: transparent;
     color: black;
-    cursor: text;
 }
 
 input[type="text"]:focus {
     background-color: rgba(255,255,255,1.0);
     border-color: cyan;
 }
+
+

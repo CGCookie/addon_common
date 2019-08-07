@@ -519,10 +519,8 @@ class UI_Element_Properties:
 
     @property
     def children(self):
-        if self._wrapped: return self._wrapped.children
         return list(self._children)
     def append_child(self, child):
-        if self._wrapped: return self._wrapped.append_child(child)
         assert child
         if child in self._children:
             # attempting to add existing child?
@@ -536,7 +534,6 @@ class UI_Element_Properties:
         self.dirty('appending new child changes content', 'content')
         return child
     def delete_child(self, child):
-        if self._wrapped: return self._wrapped.delete_child(child)
         assert child
         assert child in self._children, 'attempting to delete child that does not exist?'
         self._children.remove(child)
@@ -545,7 +542,6 @@ class UI_Element_Properties:
         self.dirty('deleting child changes content', 'content')
     @UI_Element_Utils.defer_dirty('clearing children')
     def clear_children(self):
-        if self._wrapped: return self._wrapped.clear_children(child)
         for child in list(self._children):
             self.delete_child(child)
 
@@ -1075,7 +1071,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._type          = None
         self._value         = None
 
-        self._wrapped       = None      # does this UI_Element wrap another?
         self._preclean      = None      # fn that's called back right before clean is started
 
         #################################################################
@@ -1230,7 +1225,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         return self.__str__()
 
     def __str__(self):
-        info = ['tagName', 'id', 'type', 'innerText', 'innerTextAsIs']
+        info = ['tagName', 'id', 'classes', 'type', 'innerText', 'innerTextAsIs']
         info = [(k, getattr(self, k)) for k in info if hasattr(self, k)]
         info = ['%s="%s"' % (k, str(v)) for k,v in info if v]
         if self.is_dirty: info += ['dirty']
@@ -1400,8 +1395,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 'fontid':            self._fontid,
                 'fontsize':          self._fontsize,
                 'preserve_newlines': self._whitespace in {'pre', 'pre-line', 'pre-wrap'},
-                'collapse_spaces':   self._whitespace not in {'pre', 'pre-wrap'},
-                'wrap_text':         self._whitespace != 'pre',
+                'collapse_spaces':   self._whitespace in {'normal', 'nowrap', 'pre-line'},
+                'wrap_text':         self._whitespace in {'normal', 'pre-wrap', 'pre-line'},
             }
             # TODO: if whitespace:pre, then make self NOT wrap
             innerTextWrapped = helper_wraptext(**textwrap_opts)
@@ -1912,8 +1907,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         return self
 
 
-    def structure(self, depth=0):
-        return '\n'.join([('  '*depth) + str(self)] + [child.structure(depth+1) for child in self._children_all])
+    def structure(self, depth=0, all_children=False):
+        l = self._children if not all_children else self._children_all
+        return '\n'.join([('  '*depth) + str(self)] + [child.structure(depth+1) for child in l])
 
 
     ################################################################################
@@ -1964,6 +1960,33 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def compute_preferred_size(self): pass
 
 
+
+class UI_Element_Proxy:
+    def __init__(self, default_element):
+        # NOTE: use self.__dict__ here!!!
+        self.__dict__['_default_element'] = default_element
+        self.__dict__['_mapping'] = mapping = {}
+    def map(self, attribs, ui_element):
+        if type(attribs) is str: attribs = [attribs]
+        for attrib in attribs: self._mapping[attrib] = ui_element
+    def unmap(self, attribs):
+        if type(attribs) is str: attribs = [attribs]
+        for attrib in attribs: self._mapping[attrib] = None
+    def __dir__(self):
+        return dir(self._default_element)
+    def __getattr__(self, attrib):
+        ui_element = self._mapping.get(attrib, None)
+        if ui_element is None: ui_element = self._default_element
+        return getattr(ui_element, attrib)
+    def __setattr__(self, attrib, val):
+        if attrib in self.__dict__:
+            self.__dict__[attrib] = val
+            return val
+        ui_element = self._mapping.get(attrib, None)
+        if ui_element is None: ui_element = self._default_element
+        return setattr(ui_element, attrib, val)
+
+
 class UI_Document_FSM:
     fsm = FSM()
     FSM_State = fsm.wrapper
@@ -1981,8 +2004,8 @@ class UI_Document(UI_Document_FSM):
 
     doubleclick_time = 0.25
     allow_disabled_to_blur = False
-    key_repeat_delay = 0.1500
-    key_repeat_pause = 0.0700
+    key_repeat_delay = 0.1500 * 0.8
+    key_repeat_pause = 0.0700 * 0.2
 
     def __init__(self):
         pass

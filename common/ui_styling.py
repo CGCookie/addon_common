@@ -444,12 +444,16 @@ class UI_Styling:
         self.load_from_text(text)
 
     def load_from_text(self, text):
+        self.clear_cache()
         self.rules = []
         if not text: return
         charstream = Parse_CharStream(text)             # convert input into character stream
         lexer = Parse_Lexer(charstream, token_rules)    # tokenize the character stream
         while lexer.peek_t() != 'eof':
             self.rules.append(UI_Style_RuleSet.from_lexer(lexer))
+
+    def clear_cache(self):
+        self._decllist_cache = {}
 
     @staticmethod
     def from_decllist(decllist, selector=None, var=None): # tagname='*', pseudoclass=None):
@@ -469,17 +473,17 @@ class UI_Styling:
     def __repr__(self): return self.__str__()
 
     def get_decllist(self, selector):
-        if not hasattr(self, 'decllist_cache'): self.decllist_cache = {}
         selector_tuple = tuple(selector)
-        if selector_tuple not in self.decllist_cache:
+        if selector_tuple not in self._decllist_cache:
             # return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
             matchingrules = [rule for rule in self.rules if rule.match(selector)]
             # if '*text*' in selector[-1]: print('elem:%s matched %s' % (selector, str(matchingrules)))
             # print('elem:%s matched %s' % (selector, str(matchingrules)))
-            self.decllist_cache[selector_tuple] = [d for rule in matchingrules for d in rule.decllist]
-        return self.decllist_cache[selector_tuple]
+            self._decllist_cache[selector_tuple] = [d for rule in matchingrules for d in rule.decllist]
+        return self._decllist_cache[selector_tuple]
 
     def append(self, other_styling):
+        self.clear_cache()
         self.rules += other_styling.rules
         return self
 

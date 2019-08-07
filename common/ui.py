@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 import bpy
 import bgl
 
-from .ui_core import UI_Element
+from .ui_core import UI_Element, UI_Element_Proxy
 from .ui_utilities import (
     UIRender_Block, UIRender_Inline,
     helper_argtranslate,
@@ -109,56 +109,63 @@ def dialog(**kwargs):
 
 def input_text(**kwargs):
     kwargs.setdefault('value', '')
-    ui_input = UI_Element(tagName='input', type='text', can_focus=True, **kwargs)
-    orig_text = None
-    edit_text = None
-    edit_index = 0
+    ui_container = UI_Element(tagName='span', classes='inputtext')
+    ui_input = UI_Element(tagName='input', type='text', can_focus=True, parent=ui_container, **kwargs)
+
+    data = {'e':ui_input, 'orig': None, 'text': None, 'idx': 0}
     def preclean():
-        nonlocal ui_input, edit_text, edit_index
-        if edit_text is None:
-            ui_input.innerText = ui_input.value
+        nonlocal data
+        if data['text'] is None:
+            data['e'].innerText = data['e'].value
         else:
-            ui_input.innerText = edit_text[:edit_index] + '|' + edit_text[edit_index:]
+            data['e'].innerText = '%s|%s' % (data['text'][:data['idx']], data['text'][data['idx']:])
     def focus(e):
-        nonlocal ui_input, edit_index, edit_text, orig_text
-        orig_text = edit_text = ui_input.value
-        edit_index = len(edit_text)
+        nonlocal data
+        data['orig'] = data['text'] = data['e'].value
+        data['idx'] = len(data['text'])
     def blur(e):
-        nonlocal ui_input, edit_text
-        ui_input.value = edit_text
-        edit_text = None
+        nonlocal data
+        data['e'].value = data['text']
+        data['text'] = None
     def keypress(e):
-        nonlocal ui_input, edit_text, edit_index, orig_text
+        nonlocal data
         if type(e.key) is int:
+            # https://www.w3schools.com/jsref/tryit.asp?filename=tryjsref_event_key_keycode2
+            # TODO: use enum rather than magic numbers!
             if e.key == 8:
-                if edit_index == 0: return
-                edit_text = edit_text[0:edit_index-1] + edit_text[edit_index:]
-                edit_index -= 1
+                if data['idx'] == 0: return
+                data['text'] = data['text'][0:data['idx']-1] + data['text'][data['idx']:]
+                data['idx'] -= 1
             elif e.key == 13:
-                ui_input.blur()
+                data['e'].blur()
             elif e.key == 27:
-                edit_text = orig_text
-                ui_input.blur()
+                data['text'] = data['orig']
+                data['e'].blur()
             elif e.key == 35:
-                edit_index = len(edit_text)
+                data['idx'] = len(data['text'])
             elif e.key == 36:
-                edit_index = 0
+                data['idx'] = 0
             elif e.key == 37:
-                edit_index = max(edit_index - 1, 0)
+                data['idx'] = max(data['idx'] - 1, 0)
             elif e.key == 39:
-                edit_index = min(edit_index + 1, len(edit_text))
+                data['idx'] = min(data['idx'] + 1, len(data['text']))
             elif e.key == 46:
-                if edit_index == len(edit_text): return
-                edit_text = edit_text[0:edit_index] + edit_text[edit_index+1:]
+                if data['idx'] == len(data['text']): return
+                data['text'] = data['text'][0:data['idx']] + data['text'][data['idx']+1:]
         else:
-            edit_text = edit_text[0:edit_index] + e.key + edit_text[edit_index:]
-            edit_index += 1
+            data['text'] = data['text'][0:data['idx']] + e.key + data['text'][data['idx']:]
+            data['idx'] += 1
         preclean()
     ui_input.preclean = preclean
     ui_input.add_eventListener('on_focus', focus)
     ui_input.add_eventListener('on_blur', blur)
     ui_input.add_eventListener('on_keypress', keypress)
-    return ui_input
+
+    ui_proxy = UI_Element_Proxy(ui_container)
+    ui_proxy.map('value', ui_input)
+    ui_proxy.map('innerText', ui_input)
+
+    return ui_proxy
 
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, **kwargs):
     ui_document = Globals.ui_document
@@ -252,14 +259,10 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
         ui_dialog.add_eventListener('on_mouseup', mouseup)
         ui_dialog.add_eventListener('on_mousemove', mousemove)
     ui_inside = ui_dialog.append_child(UI_Element(tagName='div', classes='inside', style='overflow-y:scroll'))
-    ui_dialog._wrapped = ui_inside
-    # ui_dialog.append_child_dialog = ui_dialog.append_child
-    # ui_dialog.children = types.MethodType(ui_inside.children, ui_inside)
-    # ui_dialog.append_child = types.MethodType(ui_inside.append_child, ui_inside)
-    # ui_dialog.delete_child = types.MethodType(ui_inside.delete_child, ui_inside)
-    # ui_dialog.clear_children = types.MethodType(ui_inside.clear_children, ui_inside)
-    return ui_dialog
-    # return {'dialog':ui_dialog, 'inside':ui_inside}
+
+    ui_proxy = UI_Element_Proxy(ui_dialog)
+    ui_proxy.map(['children','append_child','delete_child','clear_children'], ui_inside)
+    return ui_proxy
 
 
 
