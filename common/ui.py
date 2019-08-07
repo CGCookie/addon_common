@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 import bpy
 import bgl
 
-from .ui_core import UI_Element, UI_Element_Proxy
+from .ui_core import UI_Element, UI_Proxy
 from .ui_utilities import (
     UIRender_Block, UIRender_Inline,
     helper_argtranslate,
@@ -161,7 +161,7 @@ def input_text(**kwargs):
     ui_input.add_eventListener('on_blur', blur)
     ui_input.add_eventListener('on_keypress', keypress)
 
-    ui_proxy = UI_Element_Proxy(ui_container)
+    ui_proxy = UI_Proxy(ui_container)
     ui_proxy.map('value', ui_input)
     ui_proxy.map('innerText', ui_input)
 
@@ -260,7 +260,7 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
         ui_dialog.add_eventListener('on_mousemove', mousemove)
     ui_inside = ui_dialog.append_child(UI_Element(tagName='div', classes='inside', style='overflow-y:scroll'))
 
-    ui_proxy = UI_Element_Proxy(ui_dialog)
+    ui_proxy = UI_Proxy(ui_dialog)
     ui_proxy.map(['children','append_child','delete_child','clear_children'], ui_inside)
     return ui_proxy
 

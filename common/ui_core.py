@@ -1961,7 +1961,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
 
 
-class UI_Element_Proxy:
+class UI_Proxy:
     def __init__(self, default_element):
         # NOTE: use self.__dict__ here!!!
         self.__dict__['_default_element'] = default_element
@@ -2008,9 +2008,12 @@ class UI_Document(UI_Document_FSM):
     key_repeat_pause = 0.0700 * 0.2
 
     def __init__(self):
-        pass
+        self._context = None
+        self._area = None
 
     def init(self, context, **kwargs):
+        self._context = context
+        self._area = context.area
         self.actions = Actions(bpy.context, UI_Document.default_keymap)
         self._body = UI_Element(tagName='body')
         self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
@@ -2038,6 +2041,8 @@ class UI_Document(UI_Document_FSM):
         return self._body
 
     def update(self, context, event):
+        if context.area != self._area: return
+
         self.actions.update(context, event, self._timer, print_actions=False)
 
         self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
@@ -2240,6 +2245,7 @@ class UI_Document(UI_Document_FSM):
         if not self._focus: return 'main'
 
     def draw(self, context):
+        if self._area != context.area: return
         w,h = context.region.width, context.region.height
         sz = Size2D(width=w, max_width=w, height=h, max_height=h)
 
