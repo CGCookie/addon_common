@@ -39,7 +39,7 @@ from .useractions import Actions, kmi_to_keycode
 
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
-from .maths import Vec2D, Color, mid, Box2D, Size1D, Size2D, Point2D, RelPoint2D
+from .maths import Vec2D, Color, mid, Box2D, Size1D, Size2D, Point2D, RelPoint2D, clamp
 from .shaders import Shader
 from .fontmanager import FontManager
 from .utils import iter_head
@@ -495,6 +495,7 @@ class UI_Element_Properties:
         if self._innerText == nText: return
         self._innerText = nText
         self.dirty('changing innerText changes content', 'content')
+        self.dirty_flow()
 
     @property
     def innerTextAsIs(self):
@@ -600,20 +601,20 @@ class UI_Element_Properties:
     def add_class(self, cls):
         assert ' ' not in cls, 'cannot add class "%s" to "%s" because it has a space in it' % (cls, self._tagName)
         if cls in self._classes: return
-        self._classes.add(cls)
-        self._classes_str = '%s %s' (self._classes_str, cls)
-        self.dirty('adding class for %s affects style' % (cls, str(self)), 'style', parent=False, children=True)
+        self._classes.append(cls)
+        self._classes_str = ' '.join(self._classes)
+        self.dirty('adding class "%s" for %s affects style' % (str(cls), str(self)), 'style', parent=False, children=True)
         if self._parent:
-            self.dirty('adding class for %s affects parent content' % (cls, str(self)), 'content', parent=True, children=False)
+            self.dirty('adding class "%s" for %s affects parent content' % (cls, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
     def del_class(self, cls):
         assert ' ' not in cls, 'cannot del class "%s" from "%s" because it has a space in it' % (cls, self._tagName)
         if cls not in self._classes: return
         self._classes.remove(cls)
         self._classes_str = ' '.join(self._classes)
-        self.dirty('deleting class %s for %s affects style' % (cls, str(self)), 'style', parent=False, children=True)
+        self.dirty('deleting class "%s" for %s affects style' % (cls, str(self)), 'style', parent=False, children=True)
         if self._parent:
-            self.dirty('deleting class %s for %s affects parent content' % (cls, str(self)), 'content', parent=True, children=False)
+            self.dirty('deleting class "%s" for %s affects parent content' % (cls, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
 
     @property
@@ -710,15 +711,15 @@ class UI_Element_Properties:
         return self._computed_styles.get('left', 'auto')
     @style_left.setter
     def style_left(self, v):
+        if self._style_left == v: return
         self._style_left = v
         self.dirty_flow()
 
     @property
     def left_pixels(self):
-        if self._relative_element == self:
-            rew = self._parent_size.width
-        else:
-            rew = self._relative_element.width_pixels
+        if self._relative_element is None:   rew = 0
+        elif self._relative_element == self: rew = self._parent_size.width
+        else:                                rew = self._relative_element.width_pixels
         l = self.style_left
         if self._relative_pos and l == 'auto': l = self._relative_pos.x
         if l != 'auto':
@@ -735,6 +736,8 @@ class UI_Element_Properties:
     def top_pixels(self):
         if self._relative_element == self:
             reh = self._parent_size.height
+        elif self._relative_element is None:
+            reh = 0
         else:
             reh = self._relative_element.height_pixels
         t = self.style_top
@@ -758,6 +761,8 @@ class UI_Element_Properties:
             elif w[1] == '%':
                 if self._relative_element == self:
                     rew = self._parent_size.width
+                elif self._relative_element is None:
+                    rew = 0
                 else:
                     rew = self._relative_element.width_pixels
                 w = rew * w[0] / 100.0
@@ -771,6 +776,8 @@ class UI_Element_Properties:
             elif h[1] == '%':
                 if self._relative_element == self:
                     reh = self._parent_size.height
+                elif self._relative_element is None:
+                    reh = 0
                 else:
                     reh = self._relative_element.height_pixels
                 h = reh * h[0] / 100.0
@@ -791,6 +798,7 @@ class UI_Element_Properties:
         return self._computed_styles.get('top', 'auto')
     @style_top.setter
     def style_top(self, v):
+        if self._style_top == v: return
         self._style_top = v
         self.dirty_flow()
 
@@ -815,6 +823,7 @@ class UI_Element_Properties:
         return self._computed_styles.get('right', 'auto')
     @style_right.setter
     def style_right(self, v):
+        if self._style_right == v: return
         self._style_right = v
         self.dirty_flow()
 
@@ -831,6 +840,7 @@ class UI_Element_Properties:
         return self._computed_styles.get('bottom', 'auto')
     @style_bottom.setter
     def style_bottom(self, v):
+        if self_style_bottom == v: return
         self._style_bottom = v
         self.dirty_flow()
 
@@ -847,6 +857,7 @@ class UI_Element_Properties:
         return self._computed_styles.get('width', 'auto')
     @style_width.setter
     def style_width(self, v):
+        if self._style_width == v: return
         self._style_width = v
         self.dirty_flow()
 
@@ -863,6 +874,7 @@ class UI_Element_Properties:
         return self._computed_styles.get('height', 'auto')
     @style_height.setter
     def style_height(self, v):
+        if self._style_height == v: return
         self._style_height = v
         self.dirty_flow()
 
@@ -878,6 +890,7 @@ class UI_Element_Properties:
         v = min(v, self._dynamic_content_size.height - self._absolute_size.height + self._mbp_height)
         v = max(v, 0)
         self._scroll_offset.y = v
+        tag_redraw_all()
 
     @property
     def scrollLeft(self):
@@ -889,12 +902,19 @@ class UI_Element_Properties:
         if not self._is_scrollable_x: v = 0
         v = min(v, self._dynamic_content_size.width - self._absolute_size.width + self._mbp_width)
         v = max(v, 0)
-        self._scroll_offset.x = -v
+        v = -v
+        self._scroll_offset.x = v
+        tag_redraw_all()
 
     @property
     def is_visible(self):
         # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
+        if self._is_visible is None: return self._computed_styles.get('display', 'auto') != 'none'
         return self._is_visible
+    @is_visible.setter
+    def is_visible(self, v):
+        self._is_visible = v
+        self.dirty('changing visibility can affect style', 'style', children=True)
 
     @property
     def is_scrollable(self):
@@ -945,6 +965,20 @@ class UI_Element_Properties:
     @preclean.setter
     def preclean(self, fn):
         self._preclean = fn
+
+    @property
+    def postclean(self):
+        return self._postclean
+    @postclean.setter
+    def postclean(self, fn):
+        self._postclean = fn
+
+    @property
+    def postflow(self):
+        return self._postflow
+    @postflow.setter
+    def postflow(self, fn):
+        self._postflow = fn
 
     @property
     def can_focus(self): return self._can_focus
@@ -1040,6 +1074,12 @@ class UI_Element_Dirtiness:
     def _call_preclean(self):
         if self.is_dirty and self._preclean: self._preclean()
         for child in self._children_all: child._call_preclean()
+    def _call_postclean(self):
+        if self._was_dirty and self._postclean: self._postclean()
+        for child in self._children_all: child._call_postclean()
+    def _call_postflow(self):
+        if self._postflow: self._postflow()
+        for child in self._children_all: child._call_postflow()
     def clean(self, depth=0):
         '''
         No need to clean if
@@ -1047,12 +1087,13 @@ class UI_Element_Dirtiness:
         - possibly more dirtiness to propagate,
         - if deferring cleaning.
         '''
+        self._was_dirty = self.is_dirty
         self._call_preclean()
         if not self.is_dirty or self._defer_clean: return
         self.call_cleaning_callbacks()
         for child in self._children_all: child.clean(depth=depth+1)
+        self._call_postclean()
         assert not self.is_dirty, '%s is still dirty after cleaning: %s' % (str(self), str(self._dirty_properties))
-
 
 
 class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
@@ -1071,7 +1112,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._type          = None
         self._value         = None
 
+        self._was_dirty = False
         self._preclean      = None      # fn that's called back right before clean is started
+        self._postclean     = None      # fn that's called back right after clean is done
+        self._postflow      = None      # fn that's called back right after layout is done
 
         #################################################################
         # read-only attributes of UI_Element
@@ -1100,6 +1144,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._mbp_height           = None
         self._relative_element     = None
         self._relative_pos         = None
+        self._relative_offset      = None
         self._scroll_offset        = Vec2D((0,0))
         self._absolute_pos         = None       # abs pos of element from relative info; cached in draw
         self._absolute_size        = None       # viewing size of element; set by parent
@@ -1136,7 +1181,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # TODO: go back through these to make sure we've caught everything
         self._classes          = []     # classes applied to element, set by self.classes property, based on self._classes_str
         self._computed_styles  = {}     # computed style UI_Style after applying all styling
-        self._is_visible       = False  # indicates if self is visible, set in compute_style(), based on self._computed_styles
+        self._is_visible       = None   # indicates if self is visible, set in compute_style(), based on self._computed_styles
         self._is_scrollable_x  = False  # indicates is self is scrollable along x, set in compute_style(), based on self._computed_styles
         self._is_scrollable_y  = False  # indicates is self is scrollable along y, set in compute_style(), based on self._computed_styles
         self._static_content_size     = None   # min and max size of content, determined from children and style
@@ -1271,7 +1316,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # initialize styles in order: default, focus, active, hover, hover+active
         # TODO: inherit parent styles with other elements (not just *text*)
         if self._styling_parent is None:
-            if self._parent and self._innerTextAsIs:
+            if self._parent and self._innerTextAsIs is not None:
                 keep = {
                     'font-family', 'font-style', 'font-weight', 'font-size',
                     'color',
@@ -1307,7 +1352,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             #         # filtered_decllist = ui_defaultstylings.filter_styling(self._tagName, pseudoclasses)
             #         filtered_decllist = ui_defaultstylings.filter_styling(sel)
             #         self._styling_default.append(filtered_decllist)
-            if self._innerTextAsIs:
+            if self._innerTextAsIs is not None:
                 self._styling_default = UI_Styling()
             else:
                 self._styling_default = ui_defaultstylings
@@ -1326,7 +1371,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
         self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
 
-        self._is_visible = self._computed_styles.get('display', 'auto') != 'none'
         if self._is_visible and not self._pseudoelement:
             # need to compute ::before and ::after styles to know whether there is content to compute and render
             self._computed_styles_before = UI_Styling.compute_style(self._selector_before, *styling_list)
@@ -1407,14 +1451,48 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._textwrap_opts = textwrap_opts
                 self._innerTextWrapped = innerTextWrapped
                 self._children_text = []
+                self._text_map = []
+                idx = 0
                 for l in self._innerTextWrapped.splitlines():
-                    if self._children_text: self._children_text.append(UI_Element(tagName='br'))
-                    self._children_text += [UI_Element(innerTextAsIs=w, _parent=self) for w in l.split()]
+                    if self._children_text:
+                        ui_br = UI_Element(tagName='br', _parent=self)
+                        self._children_text.append(ui_br)
+                        self._text_map.append({
+                            'ui_element': ui_br,
+                            'idx': idx,
+                            'offset': 0,
+                            'char': '\n',
+                            'pre': '',
+                        })
+                        idx += 1
+                    words = re.split(r'( +)', l)
+                    for word in words:
+                        ui_word = UI_Element(innerTextAsIs=word, _parent=self)
+                        self._children_text.append(ui_word)
+                        for i in range(len(word)):
+                            self._text_map.append({
+                                'ui_element': ui_word,
+                                'idx': idx,
+                                'offset': i,
+                                'char': word[i],
+                                'pre': word[:i],
+                            })
+                        idx += len(word)
+                ui_end = UI_Element(innerTextAsIs='', _parent=self)
+                self._children_text.append(ui_end)
+                self._text_map.append({
+                    'ui_element': ui_end,
+                    'idx': idx,
+                    'offset': 0,
+                    'char': '',
+                    'pre': '',
+                })
                 self._children_text_min_size = Size2D(width=0, height=0)
                 for child in self._children_text:
                     child.clean()
-                    self._children_text_min_size.width = max(self._children_text_min_size.width, child._static_content_size.width)
+                    self._children_text_min_size.width  = max(self._children_text_min_size.width,  child._static_content_size.width)
                     self._children_text_min_size.height = max(self._children_text_min_size.height, child._static_content_size.height)
+
         elif self._src_str and not self._src:
             image = load_image_png(self._src_str)
             self._image_height,self._image_width,self._image_depth = len(image),len(image[0]),len(image[0][0])
@@ -1439,6 +1517,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._children_text = []
             self._children_text_min_size = None
             self._innerTextWrapped = None
+
         else:
             self._children_text = []
             self._children_text_min_size = None
@@ -1462,6 +1541,22 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._dirty_callbacks['content'] = set()
 
         self.defer_dirty_propagation = False
+
+    def get_text_pos(self, index):
+        if self._innerText is None: return None
+        index = clamp(index, 0, len(self._text_map))
+        m = self._text_map[index]
+        e = m['ui_element']
+        idx = m['idx']
+        offset = m['offset']
+        pre = m['pre']
+        size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
+        tw = Globals.drawing.get_text_width(pre)
+        # th = Globals.drawing.get_line_height(pre)
+        Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
+        #print(index, m, e._relative_pos, e._relative_offset, e._scroll_offset, tw)
+        e_pos = e._relative_pos + e._relative_offset + e._scroll_offset + RelPoint2D((tw, 0))
+        return e_pos
 
     @UI_Element_Utils.add_cleaning_callback('blocks', {'size'})
     def _compute_blocks(self):
@@ -1529,7 +1624,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._static_content_size = None
 
         # set size based on content (computed size)
-        if self._innerTextAsIs:
+        if self._innerTextAsIs is not None:
             # TODO: allow word breaking?
             # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
             size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
@@ -1595,7 +1690,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._fitting_size = fitting_size
         self._parent_size = parent_size
         self._absolute_pos = None
-        self._content_offset = 0 if not self._static_content_size or first_on_line else self._static_content_space
+        self._content_offset = 0 #if not self._static_content_size or first_on_line else self._static_content_space
         self._document_elem = document_elem
         self._nonstatic_elem = nonstatic_elem
 
@@ -1616,18 +1711,25 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         min_height    = self._get_style_num('min-height', 'auto', percent_of=parent_height, scale=dpi_mult)     # could be 'auto'
         max_width     = self._get_style_num('max-width',  'auto', percent_of=parent_width,  scale=dpi_mult)     # could be 'auto'
         max_height    = self._get_style_num('max-height', 'auto', percent_of=parent_height, scale=dpi_mult)     # could be 'auto'
-        border_width  = self._get_style_num('border-width', 0, scale=dpi_mult)
-        margin_top,  margin_right,  margin_bottom,  margin_left  = self._get_style_trbl('margin',  scale=dpi_mult)
-        padding_top, padding_right, padding_bottom, padding_left = self._get_style_trbl('padding', scale=dpi_mult)
         overflow_x   = styles.get('overflow-x', 'visible')
         overflow_y   = styles.get('overflow-y', 'visible')
 
+        border_width  = self._get_style_num('border-width', 0, scale=dpi_mult)
+        margin_top,  margin_right,  margin_bottom,  margin_left  = self._get_style_trbl('margin',  scale=dpi_mult)
+        padding_top, padding_right, padding_bottom, padding_left = self._get_style_trbl('padding', scale=dpi_mult)
         mbp_left   = (margin_left    + border_width + padding_left)
         mbp_right  = (padding_right  + border_width + margin_right)
         mbp_top    = (margin_top     + border_width + padding_top)
         mbp_bottom = (padding_bottom + border_width + margin_bottom)
         mbp_width  = mbp_left + mbp_right
         mbp_height = mbp_top  + mbp_bottom
+
+        self._mbp_left = mbp_left
+        self._mbp_top = mbp_top
+        self._mbp_right = mbp_right
+        self._mbp_bottom = mbp_bottom
+        self._mbp_width = mbp_width
+        self._mbp_height = mbp_height
 
         self._computed_min_width  = min_width  # self._get_style_num('min-width',  'auto', percent_of=parent_width,  scale=dpi_mult) # could be 'auto'
         self._computed_min_height = min_height # self._get_style_num('min-height', 'auto', percent_of=parent_height, scale=dpi_mult) # could be 'auto'
@@ -1636,7 +1738,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if self._static_content_size:
             # self has static content size
-            dw = self._static_content_size.width + (0 if first_on_line else self._static_content_space)
+            dw = self._static_content_size.width # + (0 if first_on_line else self._static_content_space)
             dh = self._static_content_size.height
 
         else:
@@ -1653,6 +1755,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if min_width  != 'auto': inside_size.min_width  = max(0, min_width  - mbp_width)
             if min_height != 'auto': inside_size.min_height = max(0, min_height - mbp_height)
 
+            if self._innerText and self._whitespace in {'nowrap', 'pre'}:
+                inside_size.min_width = inside_size.width = inside_size.max_width = float('inf')
+
             lines = []
             accum_width  = 0    # max width for all lines
             accum_height = 0    # sum heights for all lines
@@ -1662,6 +1767,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 line_width = 0
                 line_height = 0
                 for element in block:
+                    if not element.is_visible: continue
                     position = element._computed_styles.get('position', 'static')
                     c = position not in {'absolute', 'fixed'}
                     sx = element._computed_styles.get('overflow-x', 'visible')
@@ -1736,8 +1842,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if max_height != 'auto': dh = min(max_height, dh)
 
         self._dynamic_full_size = Size2D(width=dw, height=dh)
-        self._mbp_width = mbp_width
-        self._mbp_height = mbp_height
         # if self._tagName == 'body': print(self._dynamic_content_size, self._dynamic_full_size)
 
         self._tmp_max_width = max_width
@@ -1745,8 +1849,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._dirty_flow = False
 
     def update_position(self):
-        styles       = self._computed_styles
-        style_pos    = styles.get('position', 'static')
+        styles    = self._computed_styles
+        style_pos = styles.get('position', 'static')
+        pl,pt     = self.left_pixels,self.top_pixels
 
         # position element
         if style_pos in {'fixed', 'absolute'}:
@@ -1757,7 +1862,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             # if type(pb) is tuple: pb = pb[0]
             # if type(pl) is tuple: pl = pl[0]
             self._relative_element = self._document_elem if style_pos == 'fixed' else self._nonstatic_elem
-            pl,pt = self.left_pixels,self.top_pixels
+            if self._relative_element is None or self._relative_element == self:
+                mbp_left = mbp_top = 0
+            else:
+                mbp_left = self._relative_element._mbp_left
+                mbp_top = self._relative_element._mbp_top
             # if self._dirty_flow: print(self,pt,pr,pb,pl)
             if pl == 'auto':
                 # if pr != 'auto': print(self, self._relative_element._fitting_size, pr)
@@ -1772,10 +1881,20 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 #     pt = -self._relative_element._fitting_size.max_height + pb
                 # else: pt = 0
                 pt = 0
-            self._relative_pos = RelPoint2D((pl, pt))
+            self._relative_pos = RelPoint2D((pl, pt)) # ((pl + mbp_left, pt - mbp_top))
+            self._relative_offset = RelPoint2D((mbp_left, -mbp_top))
+        elif style_pos == 'relative':
+            if pl == 'auto':
+                pl = 0
+            if pt == 'auto':
+                pt = 0
+            self._relative_element = self._parent
+            self._relative_pos = RelPoint2D(self._fitting_pos)
+            self._relative_offset = RelPoint2D((pl, pt))
         else:
             self._relative_element = self._parent
             self._relative_pos = RelPoint2D(self._fitting_pos)
+            self._relative_offset = RelPoint2D((0, 0))
 
     def set_view_size(self, size:Size2D):
         # parent is telling us how big we will be.  note: this does not trigger a reflow!
@@ -1856,16 +1975,25 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def absolute_pos(self):
         return self._absolute_pos
 
-    def draw(self, depth=0):
-        if not self.is_visible: return
-
-        parent_pos = self._parent.absolute_pos if self._parent else Point2D((0, self._parent_size.max_height-1))
-        abs_pos = parent_pos + self._relative_pos
-        self._absolute_pos = parent_pos + self._relative_pos + self._scroll_offset
+    def _setup_ltwh(self):
+        # parent_pos = self._parent.absolute_pos if self._parent else Point2D((0, self._parent_size.max_height-1))
+        parent_pos = self._relative_element.absolute_pos if self._relative_element and self._relative_element != self else Point2D((0, self._parent_size.max_height-1))
+        if not parent_pos: parent_pos = RelPoint2D((0,0))
+        rel_pos = self._relative_pos or RelPoint2D((0,0))
+        rel_offset = self._relative_offset or RelPoint2D((0,0))
+        abs_pos = parent_pos + rel_pos + rel_offset
+        self._absolute_pos = parent_pos + rel_pos + rel_offset + self._scroll_offset
         self._l = round(abs_pos.x)
         self._t = round(abs_pos.y)
         self._w = round(self._absolute_size.width)
         self._h = round(self._absolute_size.height)
+        self._r = self._l + self._w - 1
+        self._b = self._t - self._h + 1
+
+    def draw(self, depth=0):
+        if not self.is_visible: return
+
+        self._setup_ltwh()
 
         ScissorStack.push(self._l, self._t, self._w, self._h)
         bgl.glEnable(bgl.GL_BLEND)
@@ -1876,7 +2004,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         border_width = self._get_style_num('border-width', 0, scale=dpi_mult)
 
         if ScissorStack.is_visible() and ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
-            if self._innerTextAsIs:
+            if self._innerTextAsIs is not None:
                 pos = Point2D((self._l + self._content_offset, self._t))
                 size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
                 Globals.drawing.text_draw2D(self._innerTextAsIs, pos, self._parent._fontcolor)
@@ -1899,6 +2027,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         ScissorStack.pop()
 
     def get_under_mouse(self, p:Point2D):
+        if not self.is_visible: return None
         if p.x < self._l or p.x >= self._l + self._w: return None
         if p.y > self._t or p.y <= self._t - self._h: return None
         for child in reversed(self._children):
@@ -2139,10 +2268,12 @@ class UI_Document(UI_Document_FSM):
             # done scrolling
             return 'main'
         nx = self._scroll_element.scrollLeft + (self._scroll_point.x - self._mx)
-        ny = self._scroll_element.scrollTop - (self._scroll_point.y - self._my)
+        ny = self._scroll_element.scrollTop  - (self._scroll_point.y - self._my)
         self._scroll_element.scrollLeft = nx
         self._scroll_element.scrollTop = ny
+        print(self._scroll_element, nx, ny)
         self._scroll_point = self._mouse
+        self._scroll_element._setup_ltwh()
 
 
     @UI_Document_FSM.FSM_State('mousedown', 'can enter')
@@ -2258,6 +2389,9 @@ class UI_Document(UI_Document_FSM):
             self._body.dirty_flow()
             # self._body.dirty('region size changed', 'style', children=True)
         self._body.clean()
+        self._body.layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
+        self._body.set_view_size(sz)
+        self._body._call_postflow()
         self._body.layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
         self._body.set_view_size(sz)
         self._body.draw()

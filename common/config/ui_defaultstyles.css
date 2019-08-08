@@ -184,6 +184,9 @@ input {
 }
 
 span.inputtext {
+    position: relative; /*relative;*/
+    left: 0px;
+    top: 0px;
     width: 100%;
     min-height: 28px;
     padding: 0px;
@@ -195,20 +198,37 @@ span.inputtext {
 }
 
 input[type="text"] {
+    position: relative; /* necessary for cursor! */
+    left: 0px;
+    top: 0px;
     background-color: transparent;
     white-space: pre-wrap;
     display: block;
     width: 100%;
+    min-height: 28px;
     margin: 0px;
     padding: 3px;
     border-width: 1px;
     border-color: transparent;
     color: black;
+    overflow-x: scroll;
 }
-
 input[type="text"]:focus {
-    background-color: rgba(255,255,255,1.0);
-    border-color: cyan;
+    background-color: rgba(255, 255, 255, 1.0);
+    border-color: hsla(200, 100%, 62.5%, 1.0);
 }
 
+input[type="text"] span.inputtextcursor {
+    position: absolute;
+    margin: 0px;
+    padding: 0px;
+    border-width: 0px;
+    left: 0px;
+    top: 0px;
+    display: none;
+    color: hsla(200, 100%, 12.5%, 1.0); /* l=62.5% */
+}
+input[type="text"]:focus span.inputtextcursor {
+    display: inline;
+}
 

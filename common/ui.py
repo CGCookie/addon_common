@@ -110,25 +110,45 @@ def dialog(**kwargs):
 def input_text(**kwargs):
     kwargs.setdefault('value', '')
     ui_container = UI_Element(tagName='span', classes='inputtext')
-    ui_input = UI_Element(tagName='input', type='text', can_focus=True, parent=ui_container, **kwargs)
+    ui_input  = UI_Element(tagName='input', type='text', can_focus=True, parent=ui_container, **kwargs)
+    ui_cursor = UI_Element(tagName='span', classes='inputtextcursor',    parent=ui_input, innerText='|')
 
-    data = {'e':ui_input, 'orig': None, 'text': None, 'idx': 0}
+    data = {'orig': None, 'text': None, 'idx': 0, 'pos': None}
     def preclean():
-        nonlocal data
         if data['text'] is None:
-            data['e'].innerText = data['e'].value
+            ui_input.innerText = ui_input.value
         else:
-            data['e'].innerText = '%s|%s' % (data['text'][:data['idx']], data['text'][data['idx']:])
+            ui_input.innerText = data['text']
+    def postflow():
+        if data['text'] is None: return
+        data['pos'] = ui_input.get_text_pos(data['idx'])
+        ui_cursor.left = data['pos'].x - ui_input._mbp_left - ui_cursor._absolute_size.width / 2
+        ui_cursor.top  = data['pos'].y + ui_input._mbp_top
+    def cursor_postflow():
+        if data['text'] is None: return
+        ui_input._setup_ltwh()
+        ui_cursor._setup_ltwh()
+        # if ui_cursor._l < ui_input._l:
+        #     ui_input._scroll_offset.x = min(0, ui_input._l - ui_cursor._l)
+        vl = ui_input._l + ui_input._mbp_left
+        vr = ui_input._r - ui_input._mbp_right
+        vw = ui_input._w - ui_input._mbp_width
+        if ui_cursor._r > vr:
+            dx = ui_cursor._r - vr + 2
+            ui_input.scrollLeft = ui_input.scrollLeft + dx
+            ui_input._setup_ltwh()
+        if ui_cursor._l < vl:
+            dx = ui_cursor._l - vl - 2
+            ui_input.scrollLeft = ui_input.scrollLeft + dx
+            ui_input._setup_ltwh()
     def focus(e):
-        nonlocal data
-        data['orig'] = data['text'] = data['e'].value
-        data['idx'] = len(data['text'])
+        data['orig'] = data['text'] = ui_input.value
+        data['idx'] = 0 # len(data['text'])
+        data['pos'] = None
     def blur(e):
-        nonlocal data
-        data['e'].value = data['text']
+        ui_input.value = data['text']
         data['text'] = None
     def keypress(e):
-        nonlocal data
         if type(e.key) is int:
             # https://www.w3schools.com/jsref/tryit.asp?filename=tryjsref_event_key_keycode2
             # TODO: use enum rather than magic numbers!
@@ -137,26 +157,34 @@ def input_text(**kwargs):
                 data['text'] = data['text'][0:data['idx']-1] + data['text'][data['idx']:]
                 data['idx'] -= 1
             elif e.key == 13:
-                data['e'].blur()
+                ui_input.blur()
             elif e.key == 27:
                 data['text'] = data['orig']
-                data['e'].blur()
+                ui_input.blur()
             elif e.key == 35:
                 data['idx'] = len(data['text'])
+                ui_input.dirty_flow()
             elif e.key == 36:
                 data['idx'] = 0
+                ui_input.dirty_flow()
             elif e.key == 37:
                 data['idx'] = max(data['idx'] - 1, 0)
+                ui_input.dirty_flow()
             elif e.key == 39:
                 data['idx'] = min(data['idx'] + 1, len(data['text']))
+                ui_input.dirty_flow()
             elif e.key == 46:
                 if data['idx'] == len(data['text']): return
                 data['text'] = data['text'][0:data['idx']] + data['text'][data['idx']+1:]
+            else:
+                changed = False
         else:
             data['text'] = data['text'][0:data['idx']] + e.key + data['text'][data['idx']:]
             data['idx'] += 1
         preclean()
     ui_input.preclean = preclean
+    ui_input.postflow = postflow
+    ui_cursor.postflow = cursor_postflow
     ui_input.add_eventListener('on_focus', focus)
     ui_input.add_eventListener('on_blur', blur)
     ui_input.add_eventListener('on_keypress', keypress)
@@ -214,8 +242,9 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
             l,t,w,h = ui_dialog.left_pixels, ui_dialog.top_pixels, ui_dialog.width_pixels, ui_dialog.height_pixels
             mt,mr,mb,ml = ui_dialog._get_style_trbl('margin', scale=dpi_mult)
             bw = ui_dialog._get_style_num('border-width', 0, scale=dpi_mult)
-            gl = l + w - mr - bw
-            gb = t - h + mb + bw
+            ro = ui_dialog._relative_offset
+            gl = l + ro.x + w - mr - bw
+            gb = t - ro.y - h + mb + bw
             rx = resizable_x and gl <= e.mouse.x < gl + bw
             ry = resizable_y and gb >= e.mouse.y > gl - bw
             if rx and ry: return 'both'
