@@ -263,6 +263,9 @@ input[type="checkbox"][checked] img.checkbox {
     background-image: url('checkmark.png');
 }
 
+input[type="checkbox"]:active img.checkbox {
+    background-color: hsla(200, 100%, 75%, 1.0);
+}
 /*input[type="checkbox"] img.checkmarkimg {
     margin: 0px;
     padding: 0px;
@@ -277,10 +280,18 @@ input[type="checkbox"][checked] img.checkmarkimg {
 }*/
 
 input[type="checkbox"] label {
-    color: white;
+    color: rgba(255, 255, 255, 0.50);
     margin: 0px;
     padding: 0px;
     padding-top: 3px;
     padding-right: 10px;
     border-width: 0px;
+}
+
+input[type="checkbox"]:hover label {
+    color: rgba(255, 255, 255, 1.00);
+}
+
+input[type="checkbox"][checked] label {
+    color: rgba(255, 255, 255, 1.00);
 }

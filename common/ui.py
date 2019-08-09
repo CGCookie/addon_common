@@ -108,12 +108,7 @@ def dialog(**kwargs):
     return UI_Element(tagName='dialog', **kwargs)
 
 def label(**kwargs):
-    ui_label = UI_Element(tagName='span', **kwargs)
-    def mouseclick(e):
-        element = ui_label.get_root().getElementById(ui_label.forId)
-        if element is None: return
-        element.dispatch_event('mouseclick', ui_event=e)
-    return ui_label
+    return UI_Element(tagName='label', **kwargs)
 
 def input_radio(**kwargs):
     pass
@@ -122,12 +117,12 @@ def input_checkbox(**kwargs):
     # TODO: "label" arg should create a label ui_element
     # TODO: strip input ui_element to only be checkmark!
     helper_argtranslate('label', 'innerText', kwargs)
-    kw = helper_argsplitter({'innerText'}, kwargs)
+    kw_label = helper_argsplitter({'innerText'}, kwargs)
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
     ui_input = UI_Element(tagName='input', type='checkbox', can_focus=True, **kwargs)
     ui_checkmark = UI_Element(tagName='img', classes='checkbox',  parent=ui_input)
-    ui_label = UI_Element(tagName='label', parent=ui_input, innerText=kw.get('innerText',''))
+    ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label)
     def mouseclick(e):
         ui_input.checked = True if ui_input.checked is None else None
     ui_input.add_eventListener('on_mouseclick', mouseclick)

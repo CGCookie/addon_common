@@ -2074,10 +2074,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 else:
                     ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._computed_styles)
 
-            il = round(self._l + margin_left + border_width + padding_left)
-            it = round(self._t - margin_top - border_width - padding_top)
-            iw = round(self._w - (margin_left + border_width + padding_left + padding_right + border_width + margin_right))
-            ih = round(self._h - (margin_top + border_width + padding_top + padding_bottom + border_width + margin_bottom))
+            if False:
+                # include padding
+                il = round(self._l + margin_left + border_width + padding_left)
+                it = round(self._t - margin_top - border_width - padding_top)
+                iw = round(self._w - (margin_left + border_width + padding_left + padding_right + border_width + margin_right))
+                ih = round(self._h - (margin_top + border_width + padding_top + padding_bottom + border_width + margin_bottom))
+            else:
+                # do not include padding
+                il = round(self._l + margin_left + border_width)
+                it = round(self._t - margin_top - border_width)
+                iw = round(self._w - (margin_left + border_width + border_width + margin_right))
+                ih = round(self._h - (margin_top + border_width + border_width + margin_bottom))
             ScissorStack.push(il, it, iw, ih)
             for child in self._children_all: child.draw(depth+1)
             ScissorStack.pop()
@@ -2264,6 +2272,12 @@ class UI_Document(UI_Document_FSM):
         return {'hover'} if uictrld else None
 
 
+    def _addrem_pseudoclass(self, pseudoclass, remove_from=None, add_to=None):
+        rem = set(remove_from.get_pathToRoot()) if remove_from else set()
+        add = set(add_to.get_pathToRoot()) if add_to else set()
+        for e in rem - add: e.del_pseudoclass(pseudoclass)
+        for e in add - rem: e.add_pseudoclass(pseudoclass)
+
     def handle_hover(self, change_cursor=True):
         # handle :hover, on_mouseenter, on_mouseleave
         if self.ignore_hover_change: return
@@ -2274,10 +2288,7 @@ class UI_Document(UI_Document_FSM):
 
         if self._under_mouse == self._last_under_mouse: return
 
-        rem = set(self._last_under_mouse.get_pathToRoot()) if self._last_under_mouse else set()
-        add = set(self._under_mouse.get_pathToRoot()) if self._under_mouse else set()
-        for e in rem - add: e.del_pseudoclass('hover')
-        for e in add - rem: e.add_pseudoclass('hover')
+        self._addrem_pseudoclass('hover', remove_from=self._last_under_mouse, add_to=self._under_mouse)
         if self._last_under_mouse: self._last_under_mouse.dispatch_event('on_mouseleave')
         if self._under_mouse: self._under_mouse.dispatch_event('on_mouseenter')
 
@@ -2362,7 +2373,8 @@ class UI_Document(UI_Document_FSM):
                 self.focus(self._under_mouse)
 
         self._under_mousedown = self._under_mouse
-        self._under_mousedown.add_pseudoclass('active')
+        self._addrem_pseudoclass('active', add_to=self._under_mousedown)
+        # self._under_mousedown.add_pseudoclass('active')
         self._under_mousedown.dispatch_event('on_mousedown')
 
     @UI_Document_FSM.FSM_State('mousedown')
@@ -2386,11 +2398,17 @@ class UI_Document(UI_Document_FSM):
             if dblclick:
                 self._under_mousedown.dispatch_event('on_mousedblclick')
                 # self._last_under_click = None
+            if self._under_mousedown.forId:
+                # send mouseclick events to ui_element indicated by forId!
+                ui_for = self._under_mousedown.get_root().getElementById(self._under_mousedown.forId)
+                if ui_for is None: return
+                ui_for.dispatch_event('mouseclick', ui_event=e)
             self._last_click_time = time.time()
         else:
             self._last_under_click = None
             self._last_click_time = 0
-        self._under_mousedown.del_pseudoclass('active')
+        self._addrem_pseudoclass('active', remove_from=self._under_mousedown)
+        # self._under_mousedown.del_pseudoclass('active')
 
     def blur(self):
         if self._focus is None: return
