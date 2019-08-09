@@ -38,7 +38,7 @@ import bgl
 from .ui_core import UI_Element, UI_Proxy
 from .ui_utilities import (
     UIRender_Block, UIRender_Inline,
-    helper_argtranslate,
+    helper_argtranslate, helper_argsplitter,
 )
 from .ui_styling import UI_Styling
 
@@ -107,24 +107,38 @@ def textarea(**kwargs):
 def dialog(**kwargs):
     return UI_Element(tagName='dialog', **kwargs)
 
+def label(**kwargs):
+    ui_label = UI_Element(tagName='span', **kwargs)
+    def mouseclick(e):
+        element = ui_label.get_root().getElementById(ui_label.forId)
+        if element is None: return
+        element.dispatch_event('mouseclick', ui_event=e)
+    return ui_label
+
+def input_radio(**kwargs):
+    pass
+
 def input_checkbox(**kwargs):
+    # TODO: "label" arg should create a label ui_element
+    # TODO: strip input ui_element to only be checkmark!
     helper_argtranslate('label', 'innerText', kwargs)
-    kwargs.setdefault('innerText', '')
+    kw = helper_argsplitter({'innerText'}, kwargs)
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
-    kw_input = {k:v for (k,v) in kwargs.items() if k!='innerText'}
-    ui_input = UI_Element(tagName='input', type='checkbox', can_focus=True, **kw_input)
-    ui_checkmark = UI_Element(tagName='span', classes='checkmark',  parent=ui_input)
-    ui_checkmark_img = UI_Element(tagName='img', classes='checkmarkimg',  parent=ui_checkmark, src='checkmark.png')
-    ui_label = UI_Element(tagName='label', parent=ui_input, innerText=kwargs['innerText'])
+    ui_input = UI_Element(tagName='input', type='checkbox', can_focus=True, **kwargs)
+    ui_checkmark = UI_Element(tagName='img', classes='checkbox',  parent=ui_input)
+    ui_label = UI_Element(tagName='label', parent=ui_input, innerText=kw.get('innerText',''))
     def mouseclick(e):
         ui_input.checked = True if ui_input.checked is None else None
     ui_input.add_eventListener('on_mouseclick', mouseclick)
     ui_proxy = UI_Proxy(ui_input)
+    ui_proxy.translate('label', 'innerText')
     ui_proxy.map({'innerText','children','append_child','delete_child','clear_children'}, ui_label)
     return ui_proxy
 
 def input_text(**kwargs):
+    # TODO: find a better structure for input text boxes!
+    #       can we get by with just input and inner span (cursor)?
     kwargs.setdefault('value', '')
     ui_container = UI_Element(tagName='span', classes='inputtext')
     ui_input  = UI_Element(tagName='input', type='text', can_focus=True, parent=ui_container, **kwargs)
@@ -213,6 +227,7 @@ def input_text(**kwargs):
     return ui_proxy
 
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, **kwargs):
+    # TODO: always add header, and use UI_Proxy translate+map "label" to change header
     ui_document = Globals.ui_document
     ui_dialog = UI_Element(tagName='dialog', classes='framed', **kwargs)
     if label is not None:

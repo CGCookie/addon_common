@@ -521,6 +521,24 @@ class UI_Element_Properties:
         l,cur = [],self
         while cur: l,cur = l+[cur],cur._parent
         return l
+    def get_root(self):
+        c = self
+        while c._parent: c = c._parent
+        return c
+
+    def getElementById(self, element_id):
+        if element_id is None: return None
+        if self._id == element_id: return self
+        for child in self._children_all:
+            e = child.getElementById(element_id)
+            if e is not None: return e
+        return None
+
+    def getElementsByName(self, element_name):
+        if element_name is None: return None
+        ret = [e for child in self._children_all for e in child.getElementsByName(element_name)]
+        if self._name == element_name: ret.append(self)
+        return ret
 
     @property
     def children(self):
@@ -581,6 +599,20 @@ class UI_Element_Properties:
         if self._parent:
             self.dirty('changing id for %s affects parent content' % str(self), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
+
+    @property
+    def forId(self):
+        return self._forId
+    @forId.setter
+    def forId(self, v):
+        self._forId = v
+
+    @property
+    def name(self):
+        return self._name
+    @name.setter
+    def name(self, v):
+        self._name = v
 
     @property
     def classes(self):
@@ -678,12 +710,16 @@ class UI_Element_Properties:
 
     @property
     def src(self):
-        return self._src_str
+        if self._src_str: return self._src_str
+        src = self._computed_styles.get('background-image', 'none')
+        if src == 'none': src = None
+        return src
     @src.setter
     def src(self, v):
         # TODO: load the resource and do something with it!!
+        if self._src_str == v: return
         self._src_str = v
-        self._src = None
+        self._src = None    # force reload of image
         self.dirty('changing src affects content', 'content', parent=True, children=False)
 
     @property
@@ -1120,14 +1156,16 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._classes_str   = ''        # list of classes (space delimited string)
         self._style_str     = ''        # custom style string
         self._innerText     = ''        # text to display (converted to UI_Elements)
-        self._src_str       = ''        # path to resource, such as image
+        self._src_str       = None      # path to resource, such as image
         self._can_focus     = False     # True:self can take focus
         self._title         = None      # tooltip
+        self._forId         = None      # used for labels
 
         # attribs
         self._type          = None
         self._value         = None
         self._checked       = None
+        self._name          = None
 
         self._was_dirty = False
         self._preclean      = None      # fn that's called back right before clean is started
@@ -1449,6 +1487,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         else:
             self._child_after = None
 
+        if self._src and not self.src:
+            self._src = None
+
         if self._innerText:
             # TODO: cache this!!
             textwrap_opts = {
@@ -1510,8 +1551,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     self._children_text_min_size.width  = max(self._children_text_min_size.width,  child._static_content_size.width)
                     self._children_text_min_size.height = max(self._children_text_min_size.height, child._static_content_size.height)
 
-        elif self._src_str and not self._src:
-            image = load_image_png(self._src_str)
+        elif self.src and not self._src:
+            image = load_image_png(self.src)
             self._image_height,self._image_width,self._image_depth = len(image),len(image[0]),len(image[0][0])
             assert self._image_depth == 4
             self._image_flat = [d for r in image for c in r for d in c]
@@ -2086,9 +2127,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             for (cap,cb,old_cb) in self._events[event]:
                 if not cap: cb(details)
 
-    def dispatch_event(self, event, mouse=None, key=None):
+    def dispatch_event(self, event, mouse=None, key=None, ui_event=None):
         if mouse is None: mouse = ui_document.actions.mouse
-        ui_event = UI_Event(target=self, mouse=mouse, key=key)
+        if ui_event is None: ui_event = UI_Event(target=self, mouse=mouse, key=key)
         path = self.get_pathToRoot()[1:] # skipping first item, which is self
         ui_event.event_phase = 'capturing'
         for cur in path[::-1]: cur._fire_event(event, ui_event)
@@ -2111,10 +2152,18 @@ class UI_Proxy:
     def __init__(self, default_element):
         # NOTE: use self.__dict__ here!!!
         self.__dict__['_default_element'] = default_element
-        self.__dict__['_mapping'] = mapping = {}
+        self.__dict__['_mapping'] = {}
+        self.__dict__['_translate'] = {}
     def map(self, attribs, ui_element):
         if type(attribs) is str: attribs = [attribs]
+        t = self._translate
+        attribs = [t.get(a, a) for a in attribs]
         for attrib in attribs: self._mapping[attrib] = ui_element
+    def translate(self, attrib_from, attrib_to):
+        self._translate[attrib_from] = attrib_to
+    def map_translate(self, attrib_from, attrib_to, ui_element):
+        self.translate(attrib_from, attrib_to)
+        self.map([attrib_to], ui_element)
     def unmap(self, attribs):
         if type(attribs) is str: attribs = [attribs]
         for attrib in attribs: self._mapping[attrib] = None

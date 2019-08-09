@@ -50,15 +50,15 @@ button:focus {
 
 button:active {
     /*background: rgb(192,128,128);*/
-    background: hsla(200, 100%, 50%, 1.0); /* rgba(128,224,255,0.5); */
+    background: hsla(200, 100%, 62.5%, 1.0); /* rgba(128,224,255,0.5); */
 }
 
 button:hover {
-    background: hsla(200, 100%, 62.5%, 1.0); /* rgb(64,192,255); */
+    background: rgba(160, 160, 160, 1.00); /* hsla(200, 100%, 62.5%, 1.0); /* rgb(64,192,255); */
 }
 
 button:active:hover {
-    background: hsla(200, 100%, 80%, 1.0); /*rgb(128,224,255);*/
+    background: hsla(200, 100%, 62.5%, 1.0); /*rgb(128,224,255);*/
 }
 
 button:disabled {
@@ -204,7 +204,7 @@ input[type="text"] {
     left: 0px;
     top: 0px;
     background-color: transparent;
-    white-space: pre-wrap;
+    white-space: pre;
     display: block;
     width: 100%;
     min-height: 28px;
@@ -243,25 +243,27 @@ input[type="checkbox"] {
     padding: 0px;
 }
 
-input[type="checkbox"] span.checkmark {
+input[type="checkbox"] img.checkbox {
     margin: 0;
     padding: 4px;
     margin-right: 5px;
     border-width: 0px;
-    width: 30px;
-    height: 25px;
-    background: hsla(200, 0%, 62.5%, 1.0);
+    width: 29px;
+    height: 24px;
+    background: rgba(160, 160, 160, 0.50); /* hsla(200, 0%, 62.5%, 1.0);*/
+    background-image: none;
 }
 
-input[type="checkbox"]:hover span.checkmark {
-    background: hsla(200, 0%, 75%, 1.0);
+input[type="checkbox"]:hover img.checkbox {
+    background: rgba(160, 160, 160, 1.00); /* hsla(200, 0%, 75%, 1.0); */
 }
 
-input[type="checkbox"][checked] span.checkmark {
+input[type="checkbox"][checked] img.checkbox {
     background: hsla(200, 100%, 62.5%, 1.0);
+    background-image: url('checkmark.png');
 }
 
-input[type="checkbox"] img.checkmarkimg {
+/*input[type="checkbox"] img.checkmarkimg {
     margin: 0px;
     padding: 0px;
     border-width: 0px;
@@ -272,7 +274,7 @@ input[type="checkbox"] img.checkmarkimg {
 
 input[type="checkbox"][checked] img.checkmarkimg {
     display: inline;
-}
+}*/
 
 input[type="checkbox"] label {
     color: white;

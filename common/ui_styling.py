@@ -123,7 +123,7 @@ token_rules = [
     ('key', convert_token_to_string, [
         r'color',
         r'display',
-        r'background(-color)?',
+        r'background(-(color|image))?',
         r'margin(-(left|right|top|bottom))?',
         r'padding(-(left|right|top|bottom))?',
         r'border(-(width|radius))?',
@@ -157,7 +157,7 @@ token_rules = [
         r'fill|contain|cover|none|scale-down',      # object-fit
     ]),
     ('url', get_converter_to_string('url'), [
-        r'url\((?P<url>[^)]*?)\)',
+        r'url\([\'"]?(?P<url>[^)]*?)[\'"]?\)',
     ]),
     ('string', get_converter_to_string('string'), [
         r'"(?P<string>[^"]*?)"',
