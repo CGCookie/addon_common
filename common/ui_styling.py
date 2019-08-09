@@ -115,7 +115,7 @@ token_rules = [
         r'/[*][\s\S]*?[*]/',    # multi-line comments
     ]),
     ('special', convert_token_to_string, [
-        r'[-.*>{},();]|[:]+',
+        r'[-.*>{},();#]|[:]+',
     ]),
     ('attribute', convert_token_to_string, [
         token_attribute,
