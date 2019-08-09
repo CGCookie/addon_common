@@ -526,10 +526,12 @@ class UI_Styling:
                 decllist['%s-bottom'%p] = vals[2]
                 decllist['%s-left'%p]   = vals[3]
             elif p == 'border':
-                if type(v) is not tuple: v = (v,)
-                decllist['border-width'] = v[0]
-                if len(v) > 1:
-                    vals = UI_Styling._trbl_split(v[1:])
+                if type(v) is not tuple or (len(v) == 2 and v[1] in {'px','vw','vh','pt','%%'}): v = (v,)
+                if type(v[0]) is float or type(v[0]) is tuple:
+                    decllist['border-width'] = v[0]
+                    v = v[1:]
+                if v:
+                    vals = UI_Styling._trbl_split(v)
                     decllist['border-top-color']    = vals[0]
                     decllist['border-right-color']  = vals[1]
                     decllist['border-bottom-color'] = vals[2]
@@ -547,7 +549,12 @@ class UI_Styling:
                 decllist['font-size'] = v[2]
                 decllist['font-family'] = v[3]
             elif p == 'background':
-                decllist['background-color'] = v
+                if type(v) is not tuple: v = (v,)
+                for ev in v:
+                    if type(ev) is Color:
+                        decllist['background-color'] = ev
+                    else:
+                        decllist['background-image'] = ev
             elif p == 'width':
                 decllist['width'] = v
                 decllist['min-width'] = v
