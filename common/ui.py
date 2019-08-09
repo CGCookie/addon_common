@@ -107,6 +107,23 @@ def textarea(**kwargs):
 def dialog(**kwargs):
     return UI_Element(tagName='dialog', **kwargs)
 
+def input_checkbox(**kwargs):
+    helper_argtranslate('label', 'innerText', kwargs)
+    kwargs.setdefault('innerText', '')
+
+    # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
+    kw_input = {k:v for (k,v) in kwargs.items() if k!='innerText'}
+    ui_input = UI_Element(tagName='input', type='checkbox', can_focus=True, **kw_input)
+    ui_checkmark = UI_Element(tagName='span', classes='checkmark',  parent=ui_input)
+    ui_checkmark_img = UI_Element(tagName='img', classes='checkmarkimg',  parent=ui_checkmark, src='checkmark.png')
+    ui_label = UI_Element(tagName='label', parent=ui_input, innerText=kwargs['innerText'])
+    def mouseclick(e):
+        ui_input.checked = True if ui_input.checked is None else None
+    ui_input.add_eventListener('on_mouseclick', mouseclick)
+    ui_proxy = UI_Proxy(ui_input)
+    ui_proxy.map({'innerText','children','append_child','delete_child','clear_children'}, ui_label)
+    return ui_proxy
+
 def input_text(**kwargs):
     kwargs.setdefault('value', '')
     ui_container = UI_Element(tagName='span', classes='inputtext')

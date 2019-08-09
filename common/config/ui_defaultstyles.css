@@ -170,9 +170,6 @@ img {
     background-color: hsla(200, 100%, 62.5%, 0.0); /* rgba(255,0,0,0); */
     padding: 2px;
 }
-img:hover {
-    background-color: hsla(200, 100%, 62.5%, 1.0); /* rgba(0,0,255,0.5); */
-}
 
 span {
     color: white;
@@ -184,6 +181,7 @@ input {
 }
 
 span.inputtext {
+    margin: 0px;
     position: relative; /*relative;*/
     left: 0px;
     top: 0px;
@@ -191,10 +189,14 @@ span.inputtext {
     min-height: 28px;
     padding: 0px;
     display: block;
-    background-color: rgba(255,255,255,0.5);
+    background: rgba(160,160,160, 0.50);
+    /*background-color: rgba(255,255,255,0.5);*/
     border-width: 1px;
     border-radius: 4px;
     border-color: black;
+}
+span.inputtext:hover {
+    background-color: rgba(160,160,160,1.00);
 }
 
 input[type="text"] {
@@ -212,6 +214,7 @@ input[type="text"] {
     border-color: transparent;
     color: black;
     overflow-x: scroll;
+    cursor: text;
 }
 input[type="text"]:focus {
     background-color: rgba(255, 255, 255, 1.0);
@@ -232,3 +235,50 @@ input[type="text"]:focus span.inputtextcursor {
     display: inline;
 }
 
+
+
+input[type="checkbox"] {
+    background-color: transparent;
+    border-width: 0px;
+    padding: 0px;
+}
+
+input[type="checkbox"] span.checkmark {
+    margin: 0;
+    padding: 4px;
+    margin-right: 5px;
+    border-width: 0px;
+    width: 30px;
+    height: 25px;
+    background: hsla(200, 0%, 62.5%, 1.0);
+}
+
+input[type="checkbox"]:hover span.checkmark {
+    background: hsla(200, 0%, 75%, 1.0);
+}
+
+input[type="checkbox"][checked] span.checkmark {
+    background: hsla(200, 100%, 62.5%, 1.0);
+}
+
+input[type="checkbox"] img.checkmarkimg {
+    margin: 0px;
+    padding: 0px;
+    border-width: 0px;
+    display: none;
+    width: 100%;
+    height: 100%;
+}
+
+input[type="checkbox"][checked] img.checkmarkimg {
+    display: inline;
+}
+
+input[type="checkbox"] label {
+    color: white;
+    margin: 0px;
+    padding: 0px;
+    padding-top: 3px;
+    padding-right: 10px;
+    border-width: 0px;
+}

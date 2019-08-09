@@ -126,7 +126,7 @@ vec2 get_texcoord() {
     float h = (top - bottom) - (margin_top + border_width + padding_top + padding_bottom + border_width + margin_bottom);
     float tx = (screen_pos.x - (left + margin_left + border_width + padding_left)) / w;
     float ty = (screen_pos.y - (bottom + margin_bottom + border_width + padding_bottom)) / h;
-    return vec2(tx, ty);
+    return vec2(tx, 1.0 - ty);
 }
 
 void main() {

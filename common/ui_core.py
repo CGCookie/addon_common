@@ -103,10 +103,14 @@ def get_font(fontfamily, fontstyle=None, fontweight=None):
 def get_image_path(fn, ext=None, subfolders=None):
     # if no subfolders are given, assuming image path is <root>/icons
     # or <root>/images where <root> is the 2 levels above this file
-    if subfolders is None: subfolders = ['icons', 'images']
-    if ext: fn = '%s.%s' % (fn,ext)
-    path_root = os.path.join(os.path.dirname(__file__), '..', '..')
+    if subfolders is None:
+        subfolders = ['icons', 'images']
+    if ext:
+        fn = '%s.%s' % (fn,ext)
+    path_here = os.path.dirname(__file__)
+    path_root = os.path.join(path_here, '..', '..')
     paths = [os.path.join(path_root, p, fn) for p in subfolders]
+    paths += [os.path.join(path_here, 'images', fn)]
     return iter_head((p for p in paths if os.path.exists(p)), None)
 
 
@@ -960,6 +964,16 @@ class UI_Element_Properties:
         #self.dirty_styling()
 
     @property
+    def checked(self):
+        return self._checked
+    @checked.setter
+    def checked(self, v):
+        if self._checked == v: return
+        self._checked = v
+        self.dirty('Changing checked can affect style and content', 'style', children=True)
+        #self.dirty_styling()
+
+    @property
     def preclean(self):
         return self._preclean
     @preclean.setter
@@ -1109,8 +1123,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._src_str       = ''        # path to resource, such as image
         self._can_focus     = False     # True:self can take focus
         self._title         = None      # tooltip
+
+        # attribs
         self._type          = None
         self._value         = None
+        self._checked       = None
 
         self._was_dirty = False
         self._preclean      = None      # fn that's called back right before clean is started
@@ -1302,7 +1319,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._selector_before = None
             self._selector_after = None
         else:
-            attribs = ['type', 'value']
+            attribs = ['type', 'value', 'checked']
             sel_tagName = self._tagName
             sel_id = '#%s' % self._id if self._id else ''
             sel_cls = ''.join('.%s' % c for c in self._classes)
@@ -2315,12 +2332,11 @@ class UI_Document(UI_Document_FSM):
             dblclick = True
             dblclick &= self._under_mousedown == self._last_under_click
             dblclick &= time.time() < self._last_click_time + self.doubleclick_time
+            self._under_mousedown.dispatch_event('on_mouseclick')
+            self._last_under_click = self._under_mousedown
             if dblclick:
                 self._under_mousedown.dispatch_event('on_mousedblclick')
-                self._last_under_click = None
-            else:
-                self._under_mousedown.dispatch_event('on_mouseclick')
-                self._last_under_click = self._under_mousedown
+                # self._last_under_click = None
             self._last_click_time = time.time()
         else:
             self._last_under_click = None
