@@ -111,7 +111,25 @@ def label(**kwargs):
     return UI_Element(tagName='label', **kwargs)
 
 def input_radio(**kwargs):
-    pass
+    # TODO: "label" arg should create a label ui_element
+    # TODO: strip input ui_element to only be checkmark!
+    helper_argtranslate('label', 'innerText', kwargs)
+    kw_label = helper_argsplitter({'innerText'}, kwargs)
+
+    # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
+    ui_input = UI_Element(tagName='input', type='radio', can_focus=True, **kwargs)
+    ui_radio = UI_Element(tagName='img', classes='radio',  parent=ui_input)
+    ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label)
+    def mouseclick(e):
+        if ui_input.name is None: return
+        ui_elements = ui_input.get_root().getElementsByName(ui_input.name)
+        for ui_element in ui_elements:
+            ui_element.checked = True if ui_element == ui_input else None
+    ui_input.add_eventListener('on_mouseclick', mouseclick)
+    ui_proxy = UI_Proxy(ui_input)
+    ui_proxy.translate('label', 'innerText')
+    ui_proxy.map({'innerText','children','append_child','delete_child','clear_children'}, ui_label)
+    return ui_proxy
 
 def input_checkbox(**kwargs):
     # TODO: "label" arg should create a label ui_element
