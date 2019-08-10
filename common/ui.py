@@ -142,7 +142,8 @@ def input_checkbox(**kwargs):
     ui_checkmark = UI_Element(tagName='img', classes='checkbox',  parent=ui_input)
     ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label)
     def mouseclick(e):
-        ui_input.checked = True if ui_input.checked is None else None
+        ui_input.checked = not bool(ui_input.checked)
+        print('click', ui_input.checked)
     ui_input.add_eventListener('on_mouseclick', mouseclick)
     ui_proxy = UI_Proxy(ui_input)
     ui_proxy.translate('label', 'innerText')
@@ -153,7 +154,8 @@ def input_text(**kwargs):
     # TODO: find a better structure for input text boxes!
     #       can we get by with just input and inner span (cursor)?
     kwargs.setdefault('value', '')
-    ui_container = UI_Element(tagName='span', classes='inputtext')
+    kw_container = helper_argsplitter({'parent'}, kwargs)
+    ui_container = UI_Element(tagName='span', classes='inputtext', **kw_container)
     ui_input  = UI_Element(tagName='input', type='text', can_focus=True, parent=ui_container, **kwargs)
     ui_cursor = UI_Element(tagName='span', classes='inputtextcursor',    parent=ui_input, innerText='|')
 
@@ -238,6 +240,29 @@ def input_text(**kwargs):
     ui_proxy.map('innerText', ui_input)
 
     return ui_proxy
+
+
+def collapsible(label, **kwargs):
+    helper_argtranslate('collapsed', 'checked', kwargs)
+    kwargs.setdefault('checked', True)
+    kw_input = helper_argsplitter({'checked'}, kwargs)
+
+    ui_container = UI_Element(tagName='div', classes='collapsible', **kwargs)
+    ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id',str(random.random()))), classes='header', parent=ui_container, **kw_input)
+    # ui_label = UI_Element(tagName='input', classes='header', innerText=label, type="checkbox", parent=ui_container, **kw_input)
+    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container)
+
+    def toggle():
+        if ui_label.checked: ui_inside.add_class('collapsed')
+        else:                ui_inside.del_class('collapsed')
+    ui_label.add_eventListener('on_input', toggle)
+    toggle()
+
+    ui_proxy = UI_Proxy(ui_container)
+    ui_proxy.translate_map('collapsed', 'checked', ui_label)
+    ui_proxy.map(['children','append_child','delete_child','clear_children'], ui_inside)
+    return ui_proxy
+
 
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, **kwargs):
     # TODO: always add header, and use UI_Proxy translate+map "label" to change header

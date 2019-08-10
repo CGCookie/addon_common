@@ -111,7 +111,8 @@ def get_image_path(fn, ext=None, subfolders=None):
     path_root = os.path.join(path_here, '..', '..')
     paths = [os.path.join(path_root, p, fn) for p in subfolders]
     paths += [os.path.join(path_here, 'images', fn)]
-    return iter_head((p for p in paths if os.path.exists(p)), None)
+    paths = [p for p in paths if os.path.exists(p)]
+    return iter_head(paths, None)
 
 
 def load_image_png(fn):
@@ -119,7 +120,9 @@ def load_image_png(fn):
     if not fn in load_image_png.cache:
         # have not seen this image before
         # note: assuming 4 channels (rgba) per pixel!
-        w,h,d,m = png.Reader(get_image_path(fn)).read()
+        path = get_image_path(fn)
+        print('Loading image "%s" (%s)' % (str(fn), str(path)))
+        w,h,d,m = png.Reader(path).read()
         load_image_png.cache[fn] = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
     return load_image_png.cache[fn]
 
@@ -756,75 +759,6 @@ class UI_Element_Properties:
         self.dirty_flow()
 
     @property
-    def left_pixels(self):
-        if self._relative_element is None:   rew = 0
-        elif self._relative_element == self: rew = self._parent_size.width
-        else:                                rew = self._relative_element.width_pixels
-        l = self.style_left
-        if self._relative_pos and l == 'auto': l = self._relative_pos.x
-        if l != 'auto':
-            if type(l) is tuple:
-                if   l[1] == 'px': l = l[0]
-                elif l[1] == '%':  l = rew * l[0] / 100.0
-        else:
-            r = self.style_right
-            if type(r) is tuple:
-                if   r[1] == 'px': l = rew - (r[0]               + self.width_pixels)
-                elif r[1] == '%':  l = rew - (rew * r[0] / 100.0 + self.width_pixels)
-        return l
-    @property
-    def top_pixels(self):
-        if self._relative_element == self:
-            reh = self._parent_size.height
-        elif self._relative_element is None:
-            reh = 0
-        else:
-            reh = self._relative_element.height_pixels
-        t = self.style_top
-        if self._relative_pos and t == 'auto': t = self._relative_pos.y
-        if t != 'auto':
-            if type(t) is tuple:
-                if t[1]   == 'px': t = t[0]
-                elif t[1] == '%':  t = reh * t[0] / 100.0
-        else:
-            b = self.style_bottom
-            if type(b) is tuple:
-                if  b[1] == 'px': t = -reh + (b[0]               + self.height_pixels)
-                elif b[1] == '%': t = -reh + (reh * b[0] / 100.0 + self.height_pixels)
-        return t
-    @property
-    def width_pixels(self):
-        w = self.style_width
-        if self._absolute_size and w == 'auto': w = self._absolute_size.width
-        if type(w) is tuple:
-            if w[1] == 'px': w = w[0]
-            elif w[1] == '%':
-                if self._relative_element == self:
-                    rew = self._parent_size.width
-                elif self._relative_element is None:
-                    rew = 0
-                else:
-                    rew = self._relative_element.width_pixels
-                w = rew * w[0] / 100.0
-        return w
-    @property
-    def height_pixels(self):
-        h = self.style_height
-        if self._absolute_size and h == 'auto': h = self._absolute_size.height
-        if type(h) is tuple:
-            if h[1] == 'px': h = h[0]
-            elif h[1] == '%':
-                if self._relative_element == self:
-                    reh = self._parent_size.height
-                elif self._relative_element is None:
-                    reh = 0
-                else:
-                    reh = self._relative_element.height_pixels
-                h = reh * h[0] / 100.0
-        return h
-
-
-    @property
     def top(self):
         t = self.style_top
         return self._relative_pos.y if self._relative_pos and t == 'auto' else t
@@ -918,6 +852,76 @@ class UI_Element_Properties:
         self._style_height = v
         self.dirty_flow()
 
+    @property
+    def left_pixels(self):
+        if self._relative_element is None:   rew = self._parent_size.width if self._parent_size else 0
+        elif self._relative_element == self: rew = self._parent_size.width
+        else:                                rew = self._relative_element.width_pixels
+        l = self.style_left
+        if self._relative_pos and l == 'auto': l = self._relative_pos.x
+        if l != 'auto':
+            if type(l) is tuple:
+                if   l[1] == 'px': l = l[0]
+                elif l[1] == '%':  l = rew * l[0] / 100.0
+        else:
+            r = self.style_right
+            w = self.width_pixels if self.width_pixels != 'auto' else 0
+            if type(r) is tuple:
+                if   r[1] == 'px': l = rew - (r[0]               + w)
+                elif r[1] == '%':  l = rew - (rew * r[0] / 100.0 + w)
+            elif r != 'auto':      l = rew - (r                  + w)
+        return l
+    @property
+    def top_pixels(self):
+        if self._relative_element is None:   reh = self._parent_size.height if self._parent_size else 0
+        elif self._relative_element == self: reh = self._parent_size.height
+        else:                                reh = self._relative_element.height_pixels
+        t = self.style_top
+        if self._relative_pos and t == 'auto': t = self._relative_pos.y
+        if t != 'auto':
+            if type(t) is tuple:
+                if t[1]   == 'px': t = t[0]
+                elif t[1] == '%':  t = reh * t[0] / 100.0
+        else:
+            b = self.style_bottom
+            h = self.height_pixels if self.height_pixels != 'auto' else 0
+            if type(b) is tuple:
+                if   b[1] == 'px': t = (b[0]               + h) # - reh
+                elif b[1] == '%':  t = (reh * b[0] / 100.0 + h) # - reh
+            elif b != 'auto':      t = (b                  + h) # - reh
+        return t
+    @property
+    def width_pixels(self):
+        w = self.style_width
+        if self._absolute_size and w == 'auto': w = self._absolute_size.width
+        if type(w) is tuple:
+            if w[1] == 'px': w = w[0]
+            elif w[1] == '%':
+                if self._relative_element == self:
+                    rew = self._parent_size.width
+                elif self._relative_element is None:
+                    rew = 0
+                else:
+                    rew = self._relative_element.width_pixels
+                w = rew * w[0] / 100.0
+        return w
+    @property
+    def height_pixels(self):
+        h = self.style_height
+        if self._absolute_size and h == 'auto': h = self._absolute_size.height
+        if type(h) is tuple:
+            if h[1] == 'px': h = h[0]
+            elif h[1] == '%':
+                if self._relative_element == self:
+                    reh = self._parent_size.height
+                elif self._relative_element is None:
+                    reh = 0
+                else:
+                    reh = self._relative_element.height_pixels
+                h = reh * h[0] / 100.0
+        return h
+
+
 
 
     @property
@@ -996,6 +1000,7 @@ class UI_Element_Properties:
     def value(self, v):
         if self._value == v: return
         self._value = v
+        self.dispatch_event('on_input')
         self.dirty('Changing value can affect style and content')
         #self.dirty_styling()
 
@@ -1004,8 +1009,10 @@ class UI_Element_Properties:
         return self._checked
     @checked.setter
     def checked(self, v):
+        v = "checked" if v else None
         if self._checked == v: return
         self._checked = v
+        self.dispatch_event('on_input')
         self.dirty('Changing checked can affect style and content', 'style', children=True)
         #self.dirty_styling()
 
@@ -1229,6 +1236,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             'on_mousedblclick': [],     # mouse button is pressed twice in quick succession
             'on_mouseleave':    [],     # mouse leaves self (:hover is removed)
             'on_scroll':        [],     # self is being scrolled
+            'on_input':         [],     # occurs immediately after value has changed
         }
 
         ####################################################################
@@ -1371,42 +1379,19 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # initialize styles in order: default, focus, active, hover, hover+active
         # TODO: inherit parent styles with other elements (not just *text*)
         if self._styling_parent is None:
-            if self._parent and self._innerTextAsIs is not None:
-                keep = {
-                    'font-family', 'font-style', 'font-weight', 'font-size',
-                    'color',
-                }
-                # remove = {
-                #     'width','height','min-width','min-height','max-width','max-height',
-                #     'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
-                #     'padding-left','padding-right','padding-top','padding-bottom',
-                #     'border-width', 'border-radius',
-                #     'border-left-color', 'border-right-color', 'border-top-color', 'border-bottom-color',
-                #     'display','position','white-space',
-                #     'background-color',
-                #     'overflow-x', 'overflow-y',
+            if self._parent:
+                # keep = {
+                #     'font-family', 'font-style', 'font-weight', 'font-size',
+                #     'color',
                 # }
-                decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
-                self._styling_parent = UI_Styling.from_decllist(decllist)
-                # self._styling_parent = UI_Styling()
+                # decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
+                # self._styling_parent = UI_Styling.from_decllist(decllist)
+                self._styling_parent = UI_Styling()
             else:
                 self._styling_parent = UI_Styling()
 
         # computed default styling
         if self._styling_default is None:
-            # self._styling_default = UI_Styling()
-            # if not self._innerTextAsIs:
-            #     # strip off all pseudoclasses
-            #     sel_base = [re.sub(r'(?<!:):[^:.#]+', r'', s) for s in self._selector]
-            #     for pseudoclasses in [None, 'focus', 'hover', 'active', ['hover','active'], 'disabled']:
-            #         sel = list(sel_base)
-            #         if pseudoclasses:
-            #             if type(pseudoclasses) is str: pseudoclasses = [pseudoclasses]
-            #             pseudoclasses = ''.join(':%s'%p for p in pseudoclasses)
-            #             sel[-1] = sel[-1] + pseudoclasses
-            #         # filtered_decllist = ui_defaultstylings.filter_styling(self._tagName, pseudoclasses)
-            #         filtered_decllist = ui_defaultstylings.filter_styling(sel)
-            #         self._styling_default.append(filtered_decllist)
             if self._innerTextAsIs is not None:
                 self._styling_default = UI_Styling()
             else:
@@ -1414,13 +1399,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         # # compute custom styles
         if self._styling_custom is None:
-            # style_list = [self._style_str]
-            # if self._style_left is not None: style_list.append('left:'+str(self._style_left)+'px')
-            # if self._style_top is not None: style_list.append('top:'+str(self._style_top)+'px')
-            # if self._style_right is not None: style_list.append('right:'+str(self._style_right)+'px')
-            # if self._style_bottom is not None: style_list.append('bottom:'+str(self._style_bottom)+'px')
-            # style_str = ';'.join(style_list)
-            # self._styling_custom = UI_Styling('*{%s;}' % style_str)
             self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
 
         styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
@@ -1444,6 +1422,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._fontcolor = self._computed_styles.get('color', (0,0,0,1))
 
         self._whitespace = self._computed_styles.get('white-space', 'normal')
+
+        self._src = None
 
         # tell children to recompute selector
         # NOTE: self._children_all has not been constructed, yet!
@@ -1687,7 +1667,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
             size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
             self._static_content_size = Size2D()
-            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs))
+            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs)+1)
             self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs))
             self._static_content_space = Globals.drawing.get_text_width(' ')
             # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
@@ -2169,7 +2149,7 @@ class UI_Proxy:
         for attrib in attribs: self._mapping[attrib] = ui_element
     def translate(self, attrib_from, attrib_to):
         self._translate[attrib_from] = attrib_to
-    def map_translate(self, attrib_from, attrib_to, ui_element):
+    def translate_map(self, attrib_from, attrib_to, ui_element):
         self.translate(attrib_from, attrib_to)
         self.map([attrib_to], ui_element)
     def unmap(self, attribs):

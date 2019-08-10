@@ -115,7 +115,10 @@ token_rules = [
         r'/[*][\s\S]*?[*]/',    # multi-line comments
     ]),
     ('special', convert_token_to_string, [
-        r'[-.*>{},();#]|[:]+',
+        r'[-.*>{},();#~]|[:]+',
+    ]),
+    ('combinator', convert_token_to_string, [
+        r'[>~]',
     ]),
     ('attribute', convert_token_to_string, [
         token_attribute,
@@ -296,7 +299,7 @@ class UI_Style_RuleSet:
     def from_lexer(lexer):
         rs = UI_Style_RuleSet()
 
-        def elem():
+        def match_identifier():
             if lexer.peek_v() in {'.','#',':','::'}:
                 e = '*'
             elif lexer.peek_v() == '*':
@@ -323,12 +326,12 @@ class UI_Style_RuleSet:
         rs.selectors = [[]]
         while lexer.peek_v() != '{':
             if lexer.peek_v() == '*' or 'id' in lexer.peek_t():
-                rs.selectors[-1].append(elem())
-            elif lexer.peek_v() in {'>'}:
+                rs.selectors[-1].append(match_identifier())
+            elif 'combinator' in lexer.peek_t():
                 # TODO: handle + and ~ combinators?
-                sibling = lexer.match_v_v({'>'})
-                rs.selectors[-1].append(sibling)
-                rs.selectors[-1].append(elem())
+                combinator = lexer.match_t_v('combinator')
+                rs.selectors[-1].append(combinator)
+                rs.selectors[-1].append(match_identifier())
             elif lexer.peek_v() == ',':
                 lexer.match_v_v(',')
                 rs.selectors.append([])
@@ -557,8 +560,8 @@ class UI_Styling:
                         decllist['background-image'] = ev
             elif p == 'width':
                 decllist['width'] = v
-                decllist['min-width'] = v
-                decllist['max-width'] = v
+                # decllist['min-width'] = v
+                # decllist['max-width'] = v
             elif p == 'height':
                 decllist['height'] = v
                 decllist['min-height'] = v
