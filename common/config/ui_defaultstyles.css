@@ -41,26 +41,21 @@ button {
     background: rgba(160,160,160, 0.50);
     color: black;
 }
-
 button:focus {
     /*background: yellow;*/
     /*background: lightcyan;*/
     background: rgba(160,160,160, 1.00);
 }
-
 button:active {
     /*background: rgb(192,128,128);*/
     background: hsla(200, 100%, 62.5%, 1.0); /* rgba(128,224,255,0.5); */
 }
-
 button:hover {
     background: rgba(160, 160, 160, 1.00); /* hsla(200, 100%, 62.5%, 1.0); /* rgb(64,192,255); */
 }
-
 button:active:hover {
     background: hsla(200, 100%, 62.5%, 1.0); /*rgb(128,224,255);*/
 }
-
 button:disabled {
     background-color: rgb(128,128,128);
     color: rgb(192,192,192);
@@ -140,7 +135,7 @@ dialog.framed > div.header {
     color: white;
     font-weight: bold;
     margin: 0px;
-    padding: 2px 15px 5px 15px;
+    padding: 2px 15px 2px 15px;
     border: 1px rgba(0,0,0,0.25) rgba(0,0,0,0.25) rgba(0,0,0,1) rgba(0,0,0,0.25);
     border-radius: 0px;
     cursor: grab;
@@ -343,3 +338,79 @@ div.collapsible > div.inside.collapsed {
     display: none;
 }
 
+
+
+div.mdown {
+    margin: 2px;
+    border: 1px rgba(0,0,0,0.5);
+    padding: 4px;
+    background: rgba(0,0,0,0.25);
+}
+
+div.mdown h1 {
+    width: 100%;
+    margin: 0px 4px 4px 4px;
+    padding: 4px 4px 4px 12px;
+    border: 0px;
+    font-size: 24;
+    font-weight: bold;
+}
+
+div.mdown h2 {
+    width: 100%;
+    margin: 8px 4px 4px 4px;
+    padding: 4px 4px 4px 12px;
+    border: 1px transparent;
+    border-bottom-color: rgba(255, 255, 255, 0.25);
+    border-radius: 0px;
+    font-size: 18;
+    font-weight: bold;
+}
+
+div.mdown h3 {
+    width: 100%;
+    margin: 8px 4px 4px 4px;
+    padding: 4px 4px 4px 12px;
+    border: 1px transparent;
+    border-bottom-color: rgba(255, 255, 255, 0.125);
+    border-radius: 0px;
+    font-size: 15;
+    font-weight: bold;
+}
+
+div.mdown img {
+    display: block;
+    border: 1px rgba(255, 255, 255, 0.25);
+}
+
+div.mdown p {  }
+
+div.mdown ul {
+    margin: 0px;
+    border: 0px;
+    padding: 0px;
+    display: block;
+}
+
+div.mdown li {
+    /*margin: 8px 0px;*/
+    margin: 0px;
+    border: 0px;
+    padding: 0px;
+    padding: 0px 0px 0px 8px;
+    display: block;
+}
+div.mdown li > img {
+    display: inline;
+    margin: 3px 0px 0px 0px;
+    border: 0px;
+    padding: 0px;
+    width: 8px;
+    height: 11px;
+}
+div.mdown li > span {
+    margin: 0px 0px 0px 8px;
+    border: 0px;
+    padding: 0px;
+    display: inline;
+}

@@ -465,6 +465,9 @@ class Color(Vector):
         if len(v) == 3: self.r, self.g, self.b = v
         else: self.r, self.g, self.b, self.a = v
 
+Color.transparent = Color((0,0,0,0))
+Color.black = Color((0,0,0,1))
+Color.white = Color((1,1,1,1))
 
 
 class Ray(Entity3D):

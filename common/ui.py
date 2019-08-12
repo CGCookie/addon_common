@@ -143,7 +143,6 @@ def input_checkbox(**kwargs):
     ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label)
     def mouseclick(e):
         ui_input.checked = not bool(ui_input.checked)
-        print('click', ui_input.checked)
     ui_input.add_eventListener('on_mouseclick', mouseclick)
     ui_proxy = UI_Proxy(ui_input)
     ui_proxy.translate('label', 'innerText')
@@ -264,6 +263,65 @@ def collapsible(label, **kwargs):
     return ui_proxy
 
 
+def markdown(mdown, **kwargs):
+    # process message similarly to Markdown
+    mdown = re.sub(r'^\n*', r'', mdown)                 # remove leading \n
+    mdown = re.sub(r'\n*$', r'', mdown)                 # remove trailing \n
+    mdown = re.sub(r'\n\n\n*', r'\n\n', mdown)          # 2+ \n => \n\n
+    paras = mdown.split('\n\n')                         # split into paragraphs
+
+    ui_container = UI_Element(tagName='div', classes='mdown', **kwargs)
+
+    for p in paras:
+        if p.startswith('# '):
+            # h1 heading!
+            h1text = re.sub(r'# +', r'', p)
+            UI_Element(tagName='h1', innerText=h1text, parent=ui_container)
+        elif p.startswith('## '):
+            # h2 heading!
+            h2text = re.sub(r'## +', r'', p)
+            UI_Element(tagName='h2', innerText=h2text, parent=ui_container)
+        elif p.startswith('### '):
+            # h3 heading!
+            h3text = re.sub(r'### +', r'', p)
+            UI_Element(tagName='h3', innerText=h3text, parent=ui_container)
+        elif p.startswith('- '):
+            # unordered list!
+            ui_ul = UI_Element(tagName='ul', parent=ui_container)
+            p = p[2:]
+            for litext in re.split(r'\n- ', p):
+                # litext = re.sub(r'- ', r'', litext)
+                ui_li = UI_Element(tagName='li', parent=ui_ul)
+                UI_Element(tagName='img', src='radio.png', parent=ui_li)
+                UI_Element(tagName='span', innerText=litext, parent=ui_li)
+        elif p.startswith('!['):
+            # image!
+            m = re.match(r'^!\[(?P<caption>.*)\]\((?P<filename>.*)\)$', p)
+            fn = m.group('filename')
+            UI_Element(tagName='img', src=fn, parent=ui_container)
+        elif p.startswith('| '):
+            # table
+            data = [l for l in p.split('\n')]
+            data = [re.sub(r'^\| ', r'', l) for l in data]
+            data = [re.sub(r' \|$', r'', l) for l in data]
+            data = [l.split(' | ') for l in data]
+            rows,cols = len(data),len(data[0])
+            # t = container.add(UI_TableContainer(rows, cols))
+            for r in range(rows):
+                for c in range(cols):
+                    if c == 0:
+                        pass
+                        # t.set(r, c, UI_Label(data[r][c]))
+                    else:
+                        pass
+                        # t.set(r, c, UI_WrappedLabel(data[r][c], min_size=(0, 12), max_size=(400, 12000)))
+        else:
+            p = re.sub(r'\n', ' ', p)      # join sentences of paragraph
+            UI_Element(tagName='p', innerText=p, parent=ui_container)
+
+    return ui_container
+
+
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, **kwargs):
     # TODO: always add header, and use UI_Proxy translate+map "label" to change header
     ui_document = Globals.ui_document
@@ -295,9 +353,10 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
             new_pos = original_pos + delta
             w,h = ui_dialog.width_pixels,ui_dialog.height_pixels
             rw,rh = ui_dialog._relative_element.width_pixels,ui_dialog._relative_element.height_pixels
+            mbpw,mbph = ui_dialog._relative_element._mbp_width,ui_dialog._relative_element._mbp_height
             # ui_dialog.left = clamp(new_pos.x, 0, rw - w)
             # ui_dialog.top  = clamp(new_pos.y, -rh + h, 0)
-            ui_dialog.reposition(left=clamp(new_pos.x, 0, rw - w), top=clamp(new_pos.y, -rh + h, 0))
+            ui_dialog.reposition(left=clamp(new_pos.x, 0, (rw - mbpw) - w), top=clamp(new_pos.y, -(rh - mbph) + h, 0))
         ui_label.add_eventListener('on_mousedown', mousedown)
         ui_label.add_eventListener('on_mouseup', mouseup)
         ui_label.add_eventListener('on_mousemove', mousemove)

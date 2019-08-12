@@ -42,6 +42,7 @@ from .ui_utilities import (
     convert_token_to_color, convert_token_to_numberunit,
     get_converter_to_string,
     skip_token,
+    NumberUnit,
 )
 
 from .decorators import blender_version_wrapper, debug_test_call
@@ -225,7 +226,7 @@ token_rules = [
         r'(?P<num>-?((\d*[.]\d+)|\d+))(?P<unit>px|vw|vh|pt|%|)',
     ]),
     ('id', convert_token_to_string, [
-        r'[a-zA-Z_][a-zA-Z_-]*',
+        r'[a-zA-Z_][a-zA-Z_\-0-9]*',
     ]),
 ]
 
@@ -315,7 +316,7 @@ class UI_Style_RuleSet:
                     e += lexer.match_t_v('pseudoclass')
                 elif lexer.peek_v() == '::':
                     e += lexer.match_v_v('::')
-                    e += lexer.match_t_v('')
+                    e += lexer.match_t_v('pseudoelement')
                 elif 'attribute' in lexer.peek_t():
                     e += lexer.match_t_v('attribute')
                 else:
@@ -495,18 +496,9 @@ class UI_Styling:
     def _trbl_split(v):
         # NOTE: if v is a tuple, either: (scalar, unit) or ((scalar, unit), (scalar, unit), ...)
         # TODO: IGNORING UNITS??
-        if type(v) is tuple and len(v) == 1:
-            v = v[0]
-        if type(v) is not tuple:
-            return (v, v, v, v)
-        if type(v[0]) is float:
-            # first case above: (scalar, unit)
-            return (v[0], v[0], v[0], v[0])
+        if type(v) is not tuple: return (v, v, v, v)
         l = len(v)
-        if type(v[0]) is tuple:
-            if l == 2: return (v[0][0], v[1][0], v[0][0], v[1][0])
-            if l == 3: return (v[0][0], v[1][0], v[2][0], v[1][0])
-            return (v[0][0], v[1][0], v[2][0], v[3][0])
+        if l == 1: return (v[0], v[0], v[0], v[0])
         if l == 2: return (v[0], v[1], v[0], v[1])
         if l == 3: return (v[0], v[1], v[2], v[1])
         return (v[0], v[1], v[2], v[3])
@@ -529,8 +521,8 @@ class UI_Styling:
                 decllist['%s-bottom'%p] = vals[2]
                 decllist['%s-left'%p]   = vals[3]
             elif p == 'border':
-                if type(v) is not tuple or (len(v) == 2 and v[1] in {'px','vw','vh','pt','%%'}): v = (v,)
-                if type(v[0]) is float or type(v[0]) is tuple:
+                if type(v) is not tuple: v = (v,)
+                if type(v[0]) is NumberUnit or type(v[0]) is float:
                     decllist['border-width'] = v[0]
                     v = v[1:]
                 if v:

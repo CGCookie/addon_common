@@ -5,6 +5,8 @@ uniform float left;
 uniform float right;
 uniform float top;
 uniform float bottom;
+uniform float width;
+uniform float height;
 
 uniform float margin_left;
 uniform float margin_right;
@@ -39,9 +41,10 @@ varying vec2 screen_pos;
 
 void main() {
     // set vertex to bottom-left, top-left, top-right, or bottom-right location, depending on pos
-    vec2 p = vec2(left, bottom);
-    if(pos.x > 0.5) p.x = right;
-    if(pos.y > 0.5) p.y = top;
+    vec2 p = vec2(
+        (pos.x < 0.5) ? (left  ) : (right + 1),
+        (pos.y < 0.5) ? (bottom) : (top   + 1)
+    );
 
     screen_pos  = p;
     gl_Position = uMVPMatrix * vec4(p, 0, 1);
@@ -121,31 +124,51 @@ int get_region() {
     return -1;
 }
 
-vec2 get_texcoord() {
-    float w = (right - left) - (margin_left + border_width + padding_left + padding_right + border_width + margin_right);
-    float h = (top - bottom) - (margin_top + border_width + padding_top + padding_bottom + border_width + margin_bottom);
-    float tx = (screen_pos.x - (left + margin_left + border_width + padding_left)) / w;
-    float ty = (screen_pos.y - (bottom + margin_bottom + border_width + padding_bottom)) / h;
-    return vec2(tx, 1.0 - ty);
+vec4 mix_image(vec4 bg, bool debug) {
+    vec4 c = bg;
+    float w = width  - (margin_left + border_width + padding_left + padding_right  + border_width + margin_right);
+    float h = height - (margin_top  + border_width + padding_top  + padding_bottom + border_width + margin_bottom);
+    float tx = screen_pos.x - (left + (margin_left + border_width + padding_left));
+    float ty = screen_pos.y - (top  - (margin_top  + border_width + padding_top));
+    vec2 texcoord = vec2(tx / w, -ty / h);
+    if((0 <= texcoord.x && texcoord.x <= 1) && (0 <= texcoord.y && texcoord.y <= 1)) {
+        vec4 t = texture(image, texcoord);
+        float a = t.a + c.a * (1.0 - t.a);
+        c = vec4((t.rgb * t.a + c.rgb * c.a * (1.0 - t.a)) / a, a);
+
+        if(debug) {
+            int i = (int(32 * texcoord.x) + 4 * int(32 * texcoord.y)) % 16;
+                 if(i ==  0) c = vec4(0.0, 0.0, 0.0, 1);
+            else if(i ==  1) c = vec4(0.0, 0.0, 0.5, 1);
+            else if(i ==  2) c = vec4(0.0, 0.5, 0.0, 1);
+            else if(i ==  3) c = vec4(0.0, 0.5, 0.5, 1);
+            else if(i ==  4) c = vec4(0.5, 0.0, 0.0, 1);
+            else if(i ==  5) c = vec4(0.5, 0.0, 0.5, 1);
+            else if(i ==  6) c = vec4(0.5, 0.5, 0.0, 1);
+            else if(i ==  7) c = vec4(0.5, 0.5, 0.5, 1);
+            else if(i ==  8) c = vec4(0.3, 0.3, 0.3, 1);
+            else if(i ==  9) c = vec4(0.0, 0.0, 1.0, 1);
+            else if(i == 10) c = vec4(0.0, 1.0, 0.0, 1);
+            else if(i == 11) c = vec4(0.0, 1.0, 1.0, 1);
+            else if(i == 12) c = vec4(1.0, 0.0, 0.0, 1);
+            else if(i == 13) c = vec4(1.0, 0.0, 1.0, 1);
+            else if(i == 14) c = vec4(1.0, 1.0, 0.0, 1);
+            else if(i == 15) c = vec4(1.0, 1.0, 1.0, 1);
+        }
+    }
+    return c;
 }
 
 void main() {
+    vec4 c = vec4(0,0,0,0);
     int region = get_region();
-    if(region == 5) {
-        vec4 c = background_color;
-        if(using_image > 0.5) {
-            vec2 texcoord = get_texcoord();
-            if(texcoord.x >= 0 && texcoord.x <= 1 && texcoord.y >= 0 && texcoord.y <= 1) {
-                vec4 t = texture(image, texcoord);
-                float a = t.a + c.a * (1.0 - t.a);
-                c = vec4((t.rgb * t.a + c.rgb * c.a * (1.0 - t.a)) / a, a);
-            }
-        }
-        gl_FragColor = c;
-    }
-    else if(region == 1) gl_FragColor = border_top_color;
-    else if(region == 2) gl_FragColor = border_right_color;
-    else if(region == 3) gl_FragColor = border_bottom_color;
-    else if(region == 4) gl_FragColor = border_left_color;
-    else discard;
+    if(region == 0) discard;
+    else if(region == 1) c = border_top_color;
+    else if(region == 2) c = border_right_color;
+    else if(region == 3) c = border_bottom_color;
+    else if(region == 4) c = border_left_color;
+    else if(region == 5) c = background_color;
+    else c = vec4(1,0,0,1);
+    if(using_image > 0.5) c = mix_image(c, false);
+    gl_FragColor = c;
 }

@@ -108,6 +108,9 @@ class Drawing:
     def line_width(self, width): bgl.glLineWidth(max(1, self.scale(width)))
     def point_size(self, size): bgl.glPointSize(max(1, self.scale(size)))
 
+    def set_font_color(self, fontid, color):
+        fm.color(color, fontid=fontid)
+
     def set_font_size(self, fontsize, fontid=None, force=False):
         fontsize, fontsize_scaled = int(fontsize), int(int(fontsize) * self._dpi_mult)
         if not force and fontsize_scaled == self.fontsize_scaled:
@@ -170,12 +173,12 @@ class Drawing:
         if fontsize: self.set_font_size(size_prev, fontid=fontid)
         return self.size_cache[key][item]
 
-    def get_text_width(self, text, fontsize=None):
-        return self.get_text_size_info(text, 'width', fontsize=fontsize)
-    def get_text_height(self, text, fontsize=None):
-        return self.get_text_size_info(text, 'height', fontsize=fontsize)
-    def get_line_height(self, text=None, fontsize=None):
-        return self.get_text_size_info(text, 'line height', fontsize=fontsize)
+    def get_text_width(self, text, fontsize=None, fontid=None):
+        return self.get_text_size_info(text, 'width', fontsize=fontsize, fontid=fontid)
+    def get_text_height(self, text, fontsize=None, fontid=None):
+        return self.get_text_size_info(text, 'height', fontsize=fontsize, fontid=fontid)
+    def get_line_height(self, text=None, fontsize=None, fontid=None):
+        return self.get_text_size_info(text, 'line height', fontsize=fontsize, fontid=fontid)
 
     def set_clipping(self, xmin, ymin, xmax, ymax, fontid=None):
         fm.clipping((xmin, ymin), (xmax, ymax), fontid=fontid)
@@ -198,7 +201,7 @@ class Drawing:
         else: self.disable_stipple()
 
     @blender_version_wrapper('<=','2.79')
-    def text_draw2D(self, text, pos:Point2D, color, dropshadow=None, fontsize=None, fontid=None):
+    def text_draw2D(self, text, pos:Point2D, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
         if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
 
         lines = str(text).splitlines()
@@ -209,9 +212,9 @@ class Drawing:
         if dropshadow: self.text_draw2D(text, (l+1,t-1), dropshadow, fontsize=fontsize)
 
         bgl.glEnable(bgl.GL_BLEND)
-        bgl.glColor4f(*color)
+        if color is not None: bgl.glColor4f(*color)
         for line in lines:
-            th = self.get_text_height(line)
+            th = self.get_line_height(line) if lineheight else self.get_text_height(line)
             fm.draw(line, xyz=(l, t-lb, 0), fontid=fontid)
             # blf.position(self.font_id, l, t - lb, 0)
             # blf.draw(self.font_id, line)
@@ -220,7 +223,7 @@ class Drawing:
         if fontsize: self.set_font_size(size_prev, fontid=fontid)
 
     @blender_version_wrapper('>=', '2.80')
-    def text_draw2D(self, text, pos:Point2D, color, dropshadow=None, fontsize=None, fontid=None):
+    def text_draw2D(self, text, pos:Point2D, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
         if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
 
         lines = str(text).splitlines()
@@ -231,9 +234,9 @@ class Drawing:
         if dropshadow: self.text_draw2D(text, (l+1,t-1), dropshadow, fontsize=fontsize)
 
         bgl.glEnable(bgl.GL_BLEND)
-        fm.color(color, fontid=fontid)
+        if color is not None: fm.color(color, fontid=fontid)
         for line in lines:
-            th = self.get_text_height(line)
+            th = self.get_line_height(line) if lineheight else self.get_text_height(line)
             fm.draw(line, xyz=(l, t-lb, 0), fontid=fontid)
             t -= lh
 
@@ -430,15 +433,17 @@ class ScissorStack:
         assert ScissorStack.is_started, 'Attempting to push to a non-started ScissorStack!'
 
         # compute right and bottom of new scissor box
-        nr, nb = nl+nw-1, nt-nh+1
+        nr = nl + (nw - 1)
+        nb = nt - (nh + 1)
 
         if clamp:
             # get previous scissor box
             pl, pb, pw, ph = ScissorStack.stack[-1]
-            pr, pt = pl+pw-1, pb+ph-1
+            pr = pl + (pw - 1)
+            pt = pb + (ph - 1)
             # clamp new box to previous (extra +1/-1 is to handle 0-sized width/height if boxes do not intersect)
             cl, cr, ct, cb = mid(nl,pl,pr), mid(nr+1,pl,pr)-1, mid(nt+1,pt,pb)-1, mid(nb,pt,pb)
-            cw, ch = max(0, cr-cl+1), max(0, ct-cb+1)
+            cw, ch = max(0, cr - cl + 1), max(0, ct - cb + 1)
             ScissorStack.stack.append((cl, cb, cw, ch))
         else:
             ScissorStack.stack.append((nl, nb, nw, nh))

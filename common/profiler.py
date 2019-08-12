@@ -25,6 +25,70 @@ import time
 
 from .globals import Globals
 
+class ProfilerHelper:
+    def __init__(self, pr, text):
+        full_text = (pr.stack[-1].full_text+'^' if pr.stack else '') + text
+        parent_text = (pr.stack[-1].full_text) if pr.stack else None
+        if full_text in pr.d_start:
+            Profiler._broken = True
+            assert False, '"%s" found in profiler already?' % text
+        self.pr = pr
+        self.text = text
+        self.full_text = full_text
+        self.parent_text = parent_text
+        self.all_call = '~~ All Calls ~~^%s' % text
+        self.parent_all_call = pr.stack[-1].all_call if pr.stack else None
+        self._is_done = False
+        self.pr.d_start[self.full_text] = time.time()
+        self.pr.stack.append(self)
+
+    def __del__(self):
+        if Profiler._broken:
+            return
+        if self._is_done:
+            return
+        Profiler._broken = True
+        print('Deleting Profiler before finished')
+        #assert False, 'Deleting Profiler before finished'
+
+    def update(self, key, delta, key_parent=None):
+        self.pr.d_count[key] = self.pr.d_count.get(key, 0) + 1
+        self.pr.d_times[key] = self.pr.d_times.get(key, 0) + delta
+        if key_parent:
+            self.pr.d_times_sub[key_parent] = self.pr.d_times_sub.get(key_parent, 0) + delta
+        self.pr.d_mins[key] = min(
+            self.pr.d_mins.get(key, float('inf')), delta)
+        self.pr.d_maxs[key] = max(
+            self.pr.d_maxs.get(key, float('-inf')), delta)
+        self.pr.d_last[key] = delta
+
+    def done(self):
+        while self.pr.stack and self.pr.stack[-1] != self:
+            self.pr.stack.pop()
+        if not self.pr.stack:
+            if self.full_text in self.pr.d_start:
+                del self.pr.d_start[self.full_text]
+            return
+        #assert self.pr.stack[-1] == self
+        assert not self._is_done
+        self.pr.stack.pop()
+        self._is_done = True
+        st = self.pr.d_start[self.full_text]
+        en = time.time()
+        delta = en-st
+        self.update(self.full_text, delta, key_parent=self.parent_text)
+        self.update('~~ All Calls ~~', delta)
+        self.update(self.all_call, delta, key_parent=self.parent_all_call)
+        del self.pr.d_start[self.full_text]
+
+class ProfilerHelper_Ignore:
+    def __init__(self, *args, **kwargs): pass
+
+    def done(self): pass
+
+
+
+
 class Profiler:
     _enabled = False
     _filename = 'Profiler'
@@ -45,67 +109,6 @@ class Profiler:
     @staticmethod
     def get_profiler_filename():
         return Profiler._filename
-
-    class ProfilerHelper(object):
-        def __init__(self, pr, text):
-            full_text = (pr.stack[-1].full_text+'^' if pr.stack else '') + text
-            parent_text = (pr.stack[-1].full_text) if pr.stack else None
-            if full_text in pr.d_start:
-                Profiler._broken = True
-                assert False, '"%s" found in profiler already?' % text
-            self.pr = pr
-            self.text = text
-            self.full_text = full_text
-            self.parent_text = parent_text
-            self.all_call = '~~ All Calls ~~^%s' % text
-            self.parent_all_call = pr.stack[-1].all_call if pr.stack else None
-            self._is_done = False
-            self.pr.d_start[self.full_text] = time.time()
-            self.pr.stack.append(self)
-
-        def __del__(self):
-            if Profiler._broken:
-                return
-            if self._is_done:
-                return
-            Profiler._broken = True
-            print('Deleting Profiler before finished')
-            #assert False, 'Deleting Profiler before finished'
-
-        def update(self, key, delta, key_parent=None):
-            self.pr.d_count[key] = self.pr.d_count.get(key, 0) + 1
-            self.pr.d_times[key] = self.pr.d_times.get(key, 0) + delta
-            if key_parent:
-                self.pr.d_times_sub[key_parent] = self.pr.d_times_sub.get(key_parent, 0) + delta
-            self.pr.d_mins[key] = min(
-                self.pr.d_mins.get(key, float('inf')), delta)
-            self.pr.d_maxs[key] = max(
-                self.pr.d_maxs.get(key, float('-inf')), delta)
-            self.pr.d_last[key] = delta
-
-        def done(self):
-            while self.pr.stack and self.pr.stack[-1] != self:
-                self.pr.stack.pop()
-            if not self.pr.stack:
-                if self.full_text in self.pr.d_start:
-                    del self.pr.d_start[self.full_text]
-                return
-            #assert self.pr.stack[-1] == self
-            assert not self._is_done
-            self.pr.stack.pop()
-            self._is_done = True
-            st = self.pr.d_start[self.full_text]
-            en = time.time()
-            delta = en-st
-            self.update(self.full_text, delta, key_parent=self.parent_text)
-            self.update('~~ All Calls ~~', delta)
-            self.update(self.all_call, delta, key_parent=self.parent_all_call)
-            del self.pr.d_start[self.full_text]
-
-    class ProfilerHelper_Ignore:
-        def __init__(self, *args, **kwargs): pass
-
-        def done(self): pass
 
     def __init__(self):
         self.clear()
@@ -134,9 +137,9 @@ class Profiler:
         # assert not Profiler._broken
         if Profiler._broken:
             print('Profiler broken. Ignoring')
-            return self.ProfilerHelper_Ignore()
+            return ProfilerHelper_Ignore()
         if not Profiler._enabled:
-            return self.ProfilerHelper_Ignore()
+            return ProfilerHelper_Ignore()
 
         frame = inspect.currentframe().f_back
         filename = os.path.basename(frame.f_code.co_filename)
@@ -148,7 +151,7 @@ class Profiler:
             text = '%s%s (%s:%d)' % (text, space, filename, linenum)
         else:
             text = text or fnname
-        return self.ProfilerHelper(self, text)
+        return ProfilerHelper(self, text)
 
     def __del__(self):
         # self.printout()

@@ -315,11 +315,26 @@ def convert_token_to_number(n):
     if type(n) is re.Match: n = n.group('num')
     return float(n)
 
+
+class NumberUnit:
+    def __init__(self, num, unit):
+        self._num = float(num)
+        self._unit = unit
+    def __str__(self): return '<NumberUnit num=%f unit=%s>' % (self._num, str(self._unit))
+    def __repr__(self): return self.__str__()
+    def __float__(self): return self.val()
+    def val(self, base=1):
+        if self._unit == '%':       return (self._num / 100.0) * float(base)
+        if self._unit == 'pt':       return self._num
+        if self._unit in {'px', ''}: return self._num
+        assert False, 'Unhandled unit "%s"' % self._unit
+
+
 def convert_token_to_numberunit(n):
     assert type(n) is re.Match
     v = n.group('num')
     u = n.group('unit')
-    return (float(v), u)
+    return NumberUnit(v, u)
 
 def skip_token(n):
     return None
