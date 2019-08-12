@@ -143,6 +143,7 @@ token_rules = [
         r'white-space',
         r'content',
         r'object-fit',
+        r'text-shadow',
     ]),
     ('value', convert_token_to_string, [
         r'auto',
@@ -158,6 +159,7 @@ token_rules = [
         r'normal|nowrap|pre|pre-wrap|pre-line',     # white-space
         r'normal|none',                             # content (more in url and string below)
         r'fill|contain|cover|none|scale-down',      # object-fit
+        r'none',                                    # text-shadow
     ]),
     ('url', get_converter_to_string('url'), [
         r'url\([\'"]?(?P<url>[^)]*?)[\'"]?\)',

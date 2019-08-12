@@ -148,10 +148,12 @@ span.dialog-title {
     border: 0px;
     padding: 0px;
     color: white;
-    font-weight: bold;
+    /*font-weight: bold;*/
     white-space: pre;
     cursor: grab;
+    text-shadow: 2px 2px rgba(0,0,0,0.25);
 }
+
 button.dialog-close {
     margin: 0px;
     padding: 2px;
@@ -368,6 +370,7 @@ div.mdown h1 {
     border: 0px;
     font-size: 24;
     font-weight: bold;
+    text-shadow: 2px 2px rgba(0,0,0,0.5);
 }
 
 div.mdown h2 {
@@ -379,6 +382,7 @@ div.mdown h2 {
     border-radius: 0px;
     font-size: 18;
     font-weight: bold;
+    text-shadow: 2px 2px rgba(0,0,0,0.5);
 }
 
 div.mdown h3 {
@@ -390,6 +394,7 @@ div.mdown h3 {
     border-radius: 0px;
     font-size: 15;
     font-weight: bold;
+    text-shadow: 2px 2px rgba(0,0,0,0.5);
 }
 
 div.mdown img {

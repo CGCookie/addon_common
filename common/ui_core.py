@@ -1444,6 +1444,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._fontid = get_font(fontfamily, fontstyle, fontweight)
         self._fontsize = self._computed_styles.get('font-size', NumberUnit(12,'pt')).val()
         self._fontcolor = self._computed_styles.get('color', (0,0,0,1))
+        self._textshadow = self._computed_styles.get('text-shadow', 'none')
 
         self._whitespace = self._computed_styles.get('white-space', 'normal')
 
@@ -1679,9 +1680,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             # TODO: allow word breaking?
             # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
             size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
+            ts = self._parent._textshadow
+            if ts != 'none':
+                tsx,tsy,tsc = ts
+                tsx = max(tsx.val(), 0)
+                tsy = max(tsy.val(), 0)
+            else: tsx,tsy = 0,0
             self._static_content_size = Size2D()
-            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs) + 1)
-            self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs) + 1)
+            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs) + 1 + tsx)
+            self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs) + 1 + tsy)
             self._static_content_space = Globals.drawing.get_text_width(' ')
             # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
             Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
@@ -2069,6 +2076,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 pr = profiler.start('drawing text')
                 # need to set font size each time, but not certain why...
                 Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
+                ts = self._parent._textshadow
+                if ts is not 'none':
+                    tsx,tsy,tsc = ts
+                    Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+tsx.val(), self._t-tsy.val()), color=tsc)
                 Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
                 # no need to reset prev size, since parent will do that
                 # Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
