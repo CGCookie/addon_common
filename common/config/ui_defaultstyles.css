@@ -348,6 +348,7 @@ div.collapsible > input.header[checked] > img {
 }
 div.collapsible > div.inside {
     display: block;
+    margin-top: 2px;
     margin-left: 16px;
 }
 div.collapsible > div.inside.collapsed {
@@ -433,3 +434,46 @@ div.mdown li > span {
     padding: 0px;
     display: inline;
 }
+
+
+
+div.labeledinputtext-container {
+    margin: 2px;
+    border: 0px;
+    padding: 0px;
+    display: block;
+    width: 100%;
+    background: transparent;
+}
+div.labeledinputtext-container > div.labeledinputtext-label-container {
+    margin: 0px;
+    border: 0px;
+    padding: 4px 0px 0px 0px;
+    display: inline;
+    width: 50%;
+    background: transparent;
+}
+div.labeledinputtext-container > div.labeledinputtext-label-container > label {
+    margin: 0px;
+    border: 0px;
+    padding: 0px;
+    display: block;
+    width: 100%;
+    background: transparent;
+}
+div.labeledinputtext-container > div.labeledinputtext-input-container {
+    margin: 0px;
+    border: 0px;
+    padding: 0px;
+    display: inline;
+    width: 50%;
+}
+div.labeledinputtext-container > div.labeledinputtext-input-container > span.inputtext {
+    margin: 0px;
+    border: 0px;
+    padding: 0px;
+    display: block;
+    width: 100%;
+    max-height: 22px;
+}
+

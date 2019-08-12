@@ -149,6 +149,18 @@ def input_checkbox(**kwargs):
     ui_proxy.map({'innerText','children','append_child','delete_child','clear_children'}, ui_label)
     return ui_proxy
 
+def labeled_input_text(label, **kwargs):
+    kw_container = helper_argsplitter({'parent'}, kwargs)
+    ui_container = UI_Element(tagName='div', classes='labeledinputtext-container', **kw_container)
+    ui_left = UI_Element(tagName='div', classes='labeledinputtext-label-container', parent=ui_container)
+    ui_right = UI_Element(tagName='div', classes='labeledinputtext-input-container', parent=ui_container)
+    ui_label = UI_Element(tagName='label', innerText=label, parent=ui_left)
+    ui_input = input_text(parent=ui_right, **kwargs)
+    ui_proxy = UI_Proxy(ui_container)
+    ui_proxy.translate_map('label', 'innerText', ui_label)
+    ui_proxy.map('value', ui_input)
+    return ui_proxy
+
 def input_text(**kwargs):
     # TODO: find a better structure for input text boxes!
     #       can we get by with just input and inner span (cursor)?

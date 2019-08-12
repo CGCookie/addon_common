@@ -1172,7 +1172,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._id            = ''        # unique identifier
         self._classes_str   = ''        # list of classes (space delimited string)
         self._style_str     = ''        # custom style string
-        self._innerText     = ''        # text to display (converted to UI_Elements)
+        self._innerText     = None      # text to display (converted to UI_Elements)
         self._src_str       = None      # path to resource, such as image
         self._can_focus     = False     # True:self can take focus
         self._title         = None      # tooltip
@@ -1509,7 +1509,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if self._src and not self.src:
             self._src = None
 
-        if self._innerText:
+        if self._innerText is not None:
             # TODO: cache this!!
             textwrap_opts = {
                 'text':              self._innerText,
@@ -1828,7 +1828,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if min_width  != 'auto': inside_size.min_width  = max(0, min_width  - mbp_width)
             if min_height != 'auto': inside_size.min_height = max(0, min_height - mbp_height)
 
-            if self._innerText and self._whitespace in {'nowrap', 'pre'}:
+            if self._innerText is not None and self._whitespace in {'nowrap', 'pre'}:
                 inside_size.min_width = inside_size.width = inside_size.max_width = float('inf')
 
             lines = []
