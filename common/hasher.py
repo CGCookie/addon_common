@@ -33,15 +33,28 @@ from .maths import (
 
 
 class Hasher:
-    def __init__(self):
+    def __init__(self, *args):
         self._hasher = md5()
+        self._digest = None
+        self.add(*args)
 
-    def add(self, s):
-        self._hasher.update(bytes(str(s), 'utf8'))
+    def __iadd__(self, other):
+        self.add(other)
+        return self
+
+    def add(self, *args):
+        self._digest = None
+        for arg in args:
+            self._hasher.update(bytes(str(arg), 'utf8'))
 
     def get_hash(self):
-        return self._hasher.hexdigest()
+        if self._digest is None:
+            self._digest == self._hasher.hexdigest()
+        return self._digest
 
+    def __eq__(self, other):
+        if type(other) is not Hasher: return False
+        return self.get_hash() == other.get_hash()
 
 def hash_cycle(cycle):
     l = len(cycle)

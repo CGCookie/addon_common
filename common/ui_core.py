@@ -44,6 +44,7 @@ from .shaders import Shader
 from .fontmanager import FontManager
 from .utils import iter_head
 from .profiler import profiler
+from .hasher import Hasher
 
 from ..ext import png
 
@@ -1050,7 +1051,7 @@ class UI_Element_Dirtiness:
     @profiler.profile
     def dirty(self, cause=None, properties=None, parent=True, children=False):
         if cause is None: cause = 'Unknown cause'
-        parent &= self._parent is not None and not self._do_not_dirty_parent
+        parent &= self._parent is not None and self._parent != self and not self._do_not_dirty_parent
         if properties is None: properties = set(UI_Element_Utils._cleaning_graph_nodes)
         elif type(properties) is str: properties = {properties}
         elif type(properties) is list: properties = set(properties)
@@ -1444,7 +1445,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._fontid = get_font(fontfamily, fontstyle, fontweight)
         self._fontsize = self._computed_styles.get('font-size', NumberUnit(12,'pt')).val()
         self._fontcolor = self._computed_styles.get('color', (0,0,0,1))
-        self._textshadow = self._computed_styles.get('text-shadow', 'none')
+        ts = self._computed_styles.get('text-shadow', 'none')
+        if ts == 'none': self._textshadow = 'none'
+        else: self._textshadow = (ts[0].val(), ts[1].val(), ts[-1])
 
         self._whitespace = self._computed_styles.get('white-space', 'normal')
 
@@ -1457,7 +1460,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if self._child_before: self._child_before._compute_styles()
         if self._child_after: self._child_after._compute_styles()
 
-        self.dirty('style change might have changed content (::before / ::after)', 'content')
+        # content_hash = Hasher()
+        # content_hash += self.is_visible
+        # content_hash += self.innerText
+        # content_hash += self.src
+        # content_hash += self._computed_styles_before.get('content', None) if self._computed_styles_before else None
+        # content_hash += self._computed_styles_after.get('content', None)  if self._computed_styles_after  else None
+        if True: # content_hash != getattr(self, '_style_content_hash', None):
+            self.dirty('style change might have changed content (::before / ::after)', 'content')
+            # self._style_content_hash = content_hash
         self.dirty('style change might have changed size', 'size')
         self.dirty_flow()
         self._dirty_properties.discard('style')
@@ -1479,16 +1490,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self.defer_dirty_propagation = True
 
-        if self._computed_styles_before and self._computed_styles_before.get('content', ''):
+        content_before = self._computed_styles_before.get('content', None) if self._computed_styles_before else None
+        if content_before is not None:
             # TODO: cache this!!
-            self._child_before = UI_Element(tagName=self._tagName, pseudoelement='before', _parent=self)
+            self._child_before = UI_Element(tagName=self._tagName, innerText=content_before, pseudoelement='before', _parent=self)
             self._child_before.clean()
         else:
             self._child_before = None
 
-        if self._computed_styles_after and self._computed_styles_after.get('content', ''):
+        content_after  = self._computed_styles_after.get('content', None)  if self._computed_styles_after  else None
+        if content_after:
             # TODO: cache this!!
-            self._child_after = UI_Element(tagName=self._tagName, pseudoelement='after', _parent=self)
+            self._child_after = UI_Element(tagName=self._tagName, innerText=content_after, pseudoelement='after', _parent=self)
             self._child_after.clean()
         else:
             self._child_after = None
@@ -1681,14 +1694,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
             size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
             ts = self._parent._textshadow
-            if ts != 'none':
-                tsx,tsy,tsc = ts
-                tsx = max(tsx.val(), 0)
-                tsy = max(tsy.val(), 0)
-            else: tsx,tsy = 0,0
+            if ts == 'none': tsx,tsy = 0,0
+            else: tsx,tsy,tsc = ts
             self._static_content_size = Size2D()
-            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs) + 1 + tsx)
-            self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs) + 1 + tsy)
+            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs) + 1 + max(0,tsx))
+            self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs) + 1 + max(0,tsy))
             self._static_content_space = Globals.drawing.get_text_width(' ')
             # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
             Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
@@ -2077,9 +2087,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 # need to set font size each time, but not certain why...
                 Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
                 ts = self._parent._textshadow
-                if ts is not 'none':
+                if ts != 'none':
                     tsx,tsy,tsc = ts
-                    Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+tsx.val(), self._t-tsy.val()), color=tsc)
+                    Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+tsx, self._t-tsy), color=tsc)
                 Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
                 # no need to reset prev size, since parent will do that
                 # Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
