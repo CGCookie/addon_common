@@ -42,11 +42,10 @@ from .ui_utilities import (
     convert_token_to_color, convert_token_to_numberunit,
     get_converter_to_string,
     skip_token,
-    NumberUnit,
 )
 
 from .decorators import blender_version_wrapper, debug_test_call
-from .maths import Point2D, Vec2D, clamp, mid, Color
+from .maths import Point2D, Vec2D, clamp, mid, Color, NumberUnit
 from .profiler import profiler
 from .drawing import Drawing, ScissorStack
 from .utils import iter_head

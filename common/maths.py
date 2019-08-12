@@ -1630,6 +1630,29 @@ class Accel2D:
         return None
 
 
+class NumberUnit:
+    def __init__(self, num, unit, base=None):
+        self._num = float(num)
+        self._unit = unit
+        self._base = base
+
+    def __str__(self): return '<NumberUnit num=%f unit=%s>' % (self._num, str(self._unit))
+
+    def __repr__(self): return self.__str__()
+
+    def __float__(self): return self.val()
+
+    def val(self, base=None):
+        if base is None:
+            base = 1 if self._base is None else self._base
+        if self._unit == '%':       return (self._num / 100.0) * float(base)
+        if self._unit == 'pt':       return self._num
+        if self._unit in {'px', ''}: return self._num
+        assert False, 'Unhandled unit "%s"' % self._unit
+
+
+
+
 def invert_matrix(mat):
     smat,d = str(mat),invert_matrix.__dict__
     if smat not in d:

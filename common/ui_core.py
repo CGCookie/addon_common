@@ -31,7 +31,7 @@ import bgl
 
 from .blender import tag_redraw_all
 from .ui_styling import UI_Styling, ui_defaultstylings
-from .ui_utilities import helper_wraptext, convert_token_to_cursor, NumberUnit
+from .ui_utilities import helper_wraptext, convert_token_to_cursor
 from .drawing import ScissorStack
 from .fsm import FSM
 
@@ -39,7 +39,7 @@ from .useractions import Actions, kmi_to_keycode
 
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
-from .maths import Vec2D, Color, mid, Box2D, Size1D, Size2D, Point2D, RelPoint2D, clamp
+from .maths import Vec2D, Color, mid, Box2D, Size1D, Size2D, Point2D, RelPoint2D, clamp, NumberUnit
 from .shaders import Shader
 from .fontmanager import FontManager
 from .utils import iter_head
@@ -118,16 +118,43 @@ def get_image_path(fn, ext=None, subfolders=None):
 
 def load_image_png(fn):
     if not hasattr(load_image_png, 'cache'): load_image_png.cache = {}
-    if not fn in load_image_png.cache:
+    if fn not in load_image_png.cache:
         # have not seen this image before
         # note: assuming 4 channels (rgba) per pixel!
         path = get_image_path(fn)
         print('Loading image "%s" (%s)' % (str(fn), str(path)))
-        w,h,d,m = png.Reader(path).read()
+        # w,h,d,m = png.Reader(path).read()
+        w,h,d,m = png.Reader(path).asRGBA()
         load_image_png.cache[fn] = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
     return load_image_png.cache[fn]
 
 
+def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR):
+    if not hasattr(load_texture, 'cache'): load_texture.cache = {}
+    if fn_image not in load_texture.cache:
+        image = load_image_png(fn_image)
+        height,width,depth = len(image),len(image[0]),len(image[0][0])
+        assert depth == 4
+        texbuffer = bgl.Buffer(bgl.GL_INT, [1])
+        bgl.glGenTextures(1, texbuffer)
+        texid = texbuffer[0]
+        bgl.glBindTexture(bgl.GL_TEXTURE_2D, texid)
+        # bgl.glTexEnv(bgl.GL_TEXTURE_ENV, bgl.GL_TEXTURE_ENV_MODE, bgl.GL_MODULATE)
+        bgl.glTexParameterf(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MAG_FILTER, mag_filter)
+        bgl.glTexParameterf(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MIN_FILTER, min_filter)
+        # texbuffer = bgl.Buffer(bgl.GL_BYTE, [self.width,self.height,self.depth], image_data)
+        image_size = width * height * depth
+        texbuffer = bgl.Buffer(bgl.GL_BYTE, [image_size], [d for r in image for c in r for d in c])
+        bgl.glTexImage2D(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, width, height, 0, bgl.GL_RGBA, bgl.GL_UNSIGNED_BYTE, texbuffer)
+        del texbuffer
+        bgl.glBindTexture(bgl.GL_TEXTURE_2D, 0)
+        load_texture.cache[fn_image] = {
+            'width': width,
+            'height': height,
+            'depth': depth,
+            'texid': texid,
+        }
+    return load_texture.cache[fn_image]
 
 class UI_Draw:
     _initialized = False
@@ -1532,25 +1559,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 pr.done()
 
         elif self.src and not self._src:
-            image = load_image_png(self.src)
-            self._image_height,self._image_width,self._image_depth = len(image),len(image[0]),len(image[0][0])
-            assert self._image_depth == 4
-            self._image_flat = [d for r in image for c in r for d in c]
+            self._image_data = load_texture(self.src)
             self._src = 'image'
-
-            self._image_texbuffer = bgl.Buffer(bgl.GL_INT, [1])
-            bgl.glGenTextures(1, self._image_texbuffer)
-            self._image_textureid = self._image_texbuffer[0]
-            bgl.glBindTexture(bgl.GL_TEXTURE_2D, self._image_textureid)
-            # bgl.glTexEnv(bgl.GL_TEXTURE_ENV, bgl.GL_TEXTURE_ENV_MODE, bgl.GL_MODULATE)
-            bgl.glTexParameterf(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MAG_FILTER, bgl.GL_NEAREST)
-            bgl.glTexParameterf(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MIN_FILTER, bgl.GL_LINEAR)
-            # texbuffer = bgl.Buffer(bgl.GL_BYTE, [self.width,self.height,self.depth], image_data)
-            image_size = self._image_width * self._image_height * self._image_depth
-            texbuffer = bgl.Buffer(bgl.GL_BYTE, [image_size], self._image_flat)
-            bgl.glTexImage2D(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, self._image_width, self._image_height, 0, bgl.GL_RGBA, bgl.GL_UNSIGNED_BYTE, texbuffer)
-            del texbuffer
-            bgl.glBindTexture(bgl.GL_TEXTURE_2D, 0)
 
             self._children_text = []
             self._children_text_min_size = None
@@ -1680,8 +1690,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             # TODO: set to image size?
             dpi_mult = Globals.drawing.get_dpi_mult()
             self._static_content_size = Size2D()
-            self._static_content_size.set_all_widths(self._image_width * dpi_mult)
-            self._static_content_size.set_all_heights(self._image_height * dpi_mult)
+            self._static_content_size.set_all_widths(self._image_data['width'] * dpi_mult)
+            self._static_content_size.set_all_heights(self._image_data['height'] * dpi_mult)
             self._static_content_space = 0
             pass
 
@@ -2065,7 +2075,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 pr.done()
             elif self._src == 'image':
                 pr = profiler.start('drawing mbp + image')
-                ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, self._image_textureid)
+                ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, self._image_data['texid'])
                 pr.done()
             else:
                 pr = profiler.start('drawing mbp')
@@ -2353,6 +2363,7 @@ class UI_Document(UI_Document_FSM):
         self._scroll_element = e
         self._scroll_point = self._mouse
         self._scroll_last = RelPoint2D((e.scrollLeft, e.scrollTop))
+        self.ignore_hover_change = True
         Globals.drawing.set_cursor('SCROLL_Y')
 
     @UI_Document_FSM.FSM_State('scroll')
@@ -2366,6 +2377,10 @@ class UI_Document(UI_Document_FSM):
         self._scroll_element.scrollTop = ny
         self._scroll_point = self._mouse
         self._scroll_element._setup_ltwh()
+
+    @UI_Document_FSM.FSM_State('scroll', 'exit')
+    def modal_scroll_exit(self):
+        self.ignore_hover_change = False
 
 
     @UI_Document_FSM.FSM_State('mousedown', 'can enter')
