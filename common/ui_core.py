@@ -1697,8 +1697,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if ts == 'none': tsx,tsy = 0,0
             else: tsx,tsy,tsc = ts
             self._static_content_size = Size2D()
-            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs) + 1 + max(0,tsx))
-            self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs) + 1 + max(0,tsy))
+            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs)) # + 1 + max(0,tsx))
+            self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs)) # + 1 + max(0,tsy))
             self._static_content_space = Globals.drawing.get_text_width(' ')
             # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
             Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
@@ -2072,7 +2072,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self._setup_ltwh()
 
-        ScissorStack.push(self._l, self._t, self._w, self._h)
+        if self._innerTextAsIs is not None and self._parent._textshadow != 'none':
+            tsx,tsy,tsc = self._parent._textshadow
+            ol = min(tsx, 0)
+            ot = max(-tsy, 0)
+            ow = abs(tsx)
+            oh = abs(tsy)
+        else: ol,ot,ow,oh = 0,0,0,0
+
+        ScissorStack.push(self._l+ol, self._t+ot, self._w+ow, self._h+oh)
         bgl.glEnable(bgl.GL_BLEND)
 
         dpi_mult = Globals.drawing.get_dpi_mult()
@@ -2081,7 +2089,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
         border_width = sc['border-width']
 
-        if ScissorStack.is_visible() and ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
+        if ScissorStack.is_visible() and ScissorStack.is_box_visible(self._l+ol, self._t+ot, self._w+ow, self._h+oh):
             if self._innerTextAsIs is not None:
                 pr = profiler.start('drawing text')
                 # need to set font size each time, but not certain why...

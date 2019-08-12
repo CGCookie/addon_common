@@ -477,9 +477,9 @@ class ScissorStack:
             # clamp new box to previous (extra +1/-1 is to handle 0-sized width/height if boxes do not intersect)
             cl, cr, ct, cb = mid(nl,pl,pr), mid(nr+1,pl,pr)-1, mid(nt+1,pt,pb)-1, mid(nb,pt,pb)
             cw, ch = max(0, cr - cl + 1), max(0, ct - cb + 1)
-            ScissorStack.stack.append((cl, cb, cw, ch))
+            ScissorStack.stack.append((int(cl), int(cb), int(cw), int(ch)))
         else:
-            ScissorStack.stack.append((nl, nb, nw, nh))
+            ScissorStack.stack.append((int(nl), int(nb), int(nw), int(nh)))
 
         ScissorStack._set_scissor()
 
