@@ -322,17 +322,27 @@ def markdown(mdown, **kwargs):
     return ui_container
 
 
-def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, **kwargs):
+def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, closeable=True, moveable=True, **kwargs):
     # TODO: always add header, and use UI_Proxy translate+map "label" to change header
     ui_document = Globals.ui_document
     ui_dialog = UI_Element(tagName='dialog', classes='framed', **kwargs)
-    if label is not None:
-        ui_label = ui_dialog.append_child(UI_Element(tagName='div', classes='header', innerText=label))
+
+    ui_header = UI_Element(tagName='div', classes='dialog-header', parent=ui_dialog)
+    if closeable:
+        def close():
+            if ui_dialog._parent is None: return
+            if ui_dialog._parent == ui_dialog: return
+            ui_dialog._parent.delete_child(ui_dialog)
+        ui_close = UI_Element(tagName='button', classes='dialog-close', on_mouseclick=close, parent=ui_header)
+
+    ui_label = UI_Element(tagName='span', classes='dialog-title', innerText=label or '', parent=ui_header)
+    if moveable:
         is_dragging = False
         mousedown_pos = None
         original_pos = None
         def mousedown(e):
             nonlocal is_dragging, mousedown_pos, original_pos, ui_dialog
+            if e.target != ui_header and e.target != ui_label: return
             ui_document.ignore_hover_change = True
             is_dragging = True
             mousedown_pos = e.mouse
@@ -357,9 +367,10 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
             # ui_dialog.left = clamp(new_pos.x, 0, rw - w)
             # ui_dialog.top  = clamp(new_pos.y, -rh + h, 0)
             ui_dialog.reposition(left=clamp(new_pos.x, 0, (rw - mbpw) - w), top=clamp(new_pos.y, -(rh - mbph) + h, 0))
-        ui_label.add_eventListener('on_mousedown', mousedown)
-        ui_label.add_eventListener('on_mouseup', mouseup)
-        ui_label.add_eventListener('on_mousemove', mousemove)
+        ui_header.add_eventListener('on_mousedown', mousedown)
+        ui_header.add_eventListener('on_mouseup', mouseup)
+        ui_header.add_eventListener('on_mousemove', mousemove)
+
     if resizable is not None: resizable_x = resizable_y = resizable
     if resizable_x or resizable_y:
         is_resizing = False
@@ -419,6 +430,7 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
     ui_inside = ui_dialog.append_child(UI_Element(tagName='div', classes='inside', style='overflow-y:scroll'))
 
     ui_proxy = UI_Proxy(ui_dialog)
+    ui_proxy.translate_map('label', 'innerText', ui_label)
     ui_proxy.map(['children','append_child','delete_child','clear_children'], ui_inside)
     return ui_proxy
 

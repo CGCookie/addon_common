@@ -200,7 +200,6 @@ class Drawing:
         if enable: self.enable_stipple()
         else: self.disable_stipple()
 
-    @blender_version_wrapper('<=','2.79')
     def text_draw2D(self, text, pos:Point2D, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
         if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
 
@@ -209,7 +208,41 @@ class Drawing:
         lh = self.line_height
         lb = self.line_base
 
-        if dropshadow: self.text_draw2D(text, (l+1,t-1), dropshadow, fontsize=fontsize)
+        if dropshadow: self.text_draw2D(text, (l+1,t-1), color=dropshadow, fontsize=fontsize, fontid=fontid, lineheight=lineheight)
+
+        bgl.glEnable(bgl.GL_BLEND)
+        if color is not None:
+            # bgl.glColor4f(*color) # 2.79
+            fm.color(color, fontid=fontid) # 2.80
+        for line in lines:
+            fm.draw(line, xyz=(l, t - lb, 0), fontid=fontid)
+            if lineheight: t -= lh # self.get_line_height(line)
+            else: t -= self.get_text_height(line)
+
+        if fontsize: self.set_font_size(size_prev, fontid=fontid)
+
+    def text_draw2D_simple(self, text, pos:Point2D, color=None):
+        l,t = round(pos[0]),round(pos[1])
+        lh = self.line_height
+        lb = self.line_base
+
+        bgl.glEnable(bgl.GL_BLEND)
+        if color is not None:
+            # bgl.glColor4f(*color) # 2.79
+            fm.color(color, fontid=fontid) # 2.80
+        fm.draw(line, xyz=(l, t - lb, 0), fontid=fontid)
+
+
+    @blender_version_wrapper('<=','2.79')
+    def text_draw2D_simple(self, text, pos:Point2D, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
+        if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
+
+        lines = str(text).splitlines()
+        l,t = round(pos[0]),round(pos[1])
+        lh = self.line_height
+        lb = self.line_base
+
+        if dropshadow: self.text_draw2D_simple(text, (l+1,t-1), color=dropshadow, fontsize=fontsize, fontid=fontid, lineheight=lineheight)
 
         bgl.glEnable(bgl.GL_BLEND)
         if color is not None: bgl.glColor4f(*color)
@@ -223,7 +256,7 @@ class Drawing:
         if fontsize: self.set_font_size(size_prev, fontid=fontid)
 
     @blender_version_wrapper('>=', '2.80')
-    def text_draw2D(self, text, pos:Point2D, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
+    def text_draw2D_simple(self, text, pos:Point2D, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
         if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
 
         lines = str(text).splitlines()
@@ -231,7 +264,7 @@ class Drawing:
         lh = self.line_height
         lb = self.line_base
 
-        if dropshadow: self.text_draw2D(text, (l+1,t-1), dropshadow, fontsize=fontsize)
+        if dropshadow: self.text_draw2D_simple(text, (l+1,t-1), color=dropshadow, fontsize=fontsize, fontid=fontid, lineheight=lineheight)
 
         bgl.glEnable(bgl.GL_BLEND)
         if color is not None: fm.color(color, fontid=fontid)

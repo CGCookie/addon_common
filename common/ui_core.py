@@ -2069,7 +2069,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 pr = profiler.start('drawing text')
                 # need to set font size each time, but not certain why...
                 Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
-                Globals.drawing.text_draw2D(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
+                Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
                 # no need to reset prev size, since parent will do that
                 # Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
                 pr.done()

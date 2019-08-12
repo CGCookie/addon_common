@@ -129,23 +129,37 @@ dialog.framed {
     margin: 5px;
 }
 
-dialog.framed > div.header {
-    white-space: pre;
+div.dialog-header {
     background: hsla(200, 0%, 25%, 0.75); /* hsla(0, 0%, 25%, 0.75); */
-    color: white;
-    font-weight: bold;
     margin: 0px;
-    padding: 2px 15px 2px 15px;
+    padding: 2px;
     border: 1px rgba(0,0,0,0.25) rgba(0,0,0,0.25) rgba(0,0,0,1) rgba(0,0,0,0.25);
     border-radius: 0px;
     cursor: grab;
 }
-
-dialog.framed > div.header:hover {
+div.dialog-header:hover {
     background-color: hsla(200, 25%, 40%, 0.75); /* hsla(0,0%,40%,0.75);*/
 }
-dialog.framed > div.header:active {
+div.dialog-header:active {
     background-color: hsla(200, 100%, 60%, 0.75); /*hsla(0,0%,40%,0.5);*/
+}
+span.dialog-title {
+    margin: 0px;
+    border: 0px;
+    padding: 0px;
+    color: white;
+    font-weight: bold;
+    white-space: pre;
+    cursor: grab;
+}
+button.dialog-close {
+    margin: 0px;
+    padding: 2px;
+    border: 0px;
+    display: inline;
+    width: 16px;
+    height: 16px;
+    background: url('close.png');
 }
 
 dialog.framed > div.inside {
@@ -199,7 +213,7 @@ input[type="text"] {
     white-space: pre;
     display: block;
     width: 100%;
-    min-height: 28px;
+    min-height: 26px;
     margin: 0px;
     padding: 3px;
     border-width: 1px;
@@ -402,11 +416,11 @@ div.mdown li {
 }
 div.mdown li > img {
     display: inline;
-    margin: 3px 0px 0px 0px;
+    margin: 5px 0px 0px 0px;
     border: 0px;
     padding: 0px;
-    width: 8px;
-    height: 11px;
+    width: 5px;
+    height: 10px;
 }
 div.mdown li > span {
     margin: 0px 0px 0px 8px;
