@@ -556,8 +556,8 @@ class UI_Element_Properties:
 
     def getElementsByName(self, element_name):
         if element_name is None: return None
-        ret = [e for child in self._children_all for e in child.getElementsByName(element_name)]
-        if self._name == element_name: ret.append(self)
+        ret = [self] if self._name == element_name else []
+        ret.extend(e for child in self._children for e in child.getElementsByName(element_name))
         return ret
 
     @property
