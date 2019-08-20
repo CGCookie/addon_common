@@ -1,3 +1,10 @@
+/*
+
+https://en.wikipedia.org/wiki/Flat_design#/media/File:Flat_widgets.png
+https://bulma.io/documentation/elements/button/
+
+*/
+
 * {
     margin:     2px 2px;
     padding:    4px 8px;
@@ -218,7 +225,7 @@ input[type="text"] {
     min-height: 26px;
     margin: 0px;
     padding: 3px;
-    border-width: 1px;
+    border-width: 5px;
     border-color: transparent;
     color: black;
     overflow-x: scroll;

@@ -48,7 +48,7 @@ class ProfilerHelper:
         if self._is_done:
             return
         Profiler._broken = True
-        print('Deleting Profiler before finished')
+        print('Deleting Profiler (%s) before finished' % self.full_text)
         #assert False, 'Deleting Profiler before finished'
 
     def update(self, key, delta, key_parent=None):
@@ -80,6 +80,7 @@ class ProfilerHelper:
         self.update('~~ All Calls ~~', delta)
         self.update(self.all_call, delta, key_parent=self.parent_all_call)
         del self.pr.d_start[self.full_text]
+        self.pr.clear_handler()
 
 class ProfilerHelper_Ignore:
     def __init__(self, *args, **kwargs): pass
@@ -93,6 +94,7 @@ class Profiler:
     _enabled = False
     _filename = 'Profiler'
     _broken = False
+    _clear = False
 
     @staticmethod
     def set_profiler_enabled(v):
@@ -111,7 +113,7 @@ class Profiler:
         return Profiler._filename
 
     def __init__(self):
-        self.clear()
+        self.clear_handler(force=True)
 
     def reset(self):
         self._broken = False
@@ -121,7 +123,10 @@ class Profiler:
     def is_broken():
         return Profiler._broken
 
-    def clear(self):
+    def clear_handler(self, force=False):
+        if not force:
+            if not self._clear: return
+            if self.stack: return
         self.d_start = {}
         self.d_times = {}
         self.d_times_sub = {}
@@ -132,6 +137,11 @@ class Profiler:
         self.stack = []
         self.last_profile_out = 0
         self.clear_time = time.time()
+        self._clear = False
+
+    def clear(self):
+        self._clear = True
+        self.clear_handler()
 
     def start(self, text=None, addFile=True):
         # assert not Profiler._broken

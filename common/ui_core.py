@@ -230,8 +230,8 @@ class UI_Draw:
             shader.bind()
             shader.uniform_float('left',                left)
             shader.uniform_float('top',                 top)
-            shader.uniform_float('right',               left + (width - 0))
-            shader.uniform_float('bottom',              top - (height - 0))
+            shader.uniform_float('right',               left + (width - 1))
+            shader.uniform_float('bottom',              top - (height - 1))
             shader.uniform_float('width',               width)
             shader.uniform_float('height',              height)
             shader.uniform_float('margin_left',         get_v('margin-left'))
@@ -589,6 +589,10 @@ class UI_Element_Properties:
     def clear_children(self):
         for child in list(self._children):
             self.delete_child(child)
+
+    def count_children(self):
+        return sum(1+child.count_children() for child in self._children)
+
 
     @property
     def style(self):
@@ -1697,7 +1701,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if ts == 'none': tsx,tsy = 0,0
             else: tsx,tsy,tsc = ts
             self._static_content_size = Size2D()
-            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs)) # + 1 + max(0,tsx))
+            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs) + 1) # + 1 + max(0,tsx))
             self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs)) # + 1 + max(0,tsy))
             self._static_content_space = Globals.drawing.get_text_width(' ')
             # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
@@ -2100,7 +2104,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+tsx, self._t-tsy), color=tsc)
                 Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
                 # no need to reset prev size, since parent will do that
-                # Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
                 pr.done()
             elif self._src == 'image':
                 pr = profiler.start('drawing mbp + image')
@@ -2124,19 +2127,19 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 it = round(self._t - (margin_top  + border_width))
                 iw = round(self._w - (margin_left + border_width + border_width + margin_right))
                 ih = round(self._h - (margin_top  + border_width + border_width + margin_bottom))
-            #ScissorStack.push(il, it, iw, ih)
+            # ScissorStack.push(il, it, iw, ih)
 
             if self._innerText is not None:
-                pr = profiler.start('drawing innerText')
+                pr2 = profiler.start('drawing innerText')
                 size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
                 Globals.drawing.set_font_color(self._fontid, self._fontcolor)
                 for child in self._children_all: child.draw(depth + 1)
                 Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
-                pr.done()
+                pr2.done()
             else:
                 for child in self._children_all: child.draw(depth+1)
 
-            #ScissorStack.pop()
+            # ScissorStack.pop()
             pr.done()
 
         ScissorStack.pop()

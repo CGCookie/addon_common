@@ -72,7 +72,7 @@ class Shader():
 
     @staticmethod
     def parse_string(string, includeVersion=True):
-        uniforms, varyings, attributes = [],[],[]
+        uniforms, varyings, attributes, consts = [],[],[],[]
         vertSource, fragSource = [],[]
         vertVersion, fragVersion = '', ''
         mode = None
@@ -86,6 +86,8 @@ class Shader():
                 attributes.append(line)
             elif line.startswith('varying '):
                 varyings.append(line)
+            elif line.startswith('const '):
+                consts.append(line)
             elif line.startswith('#version '):
                 if mode == 'vert':
                     vertVersion = line
@@ -103,11 +105,11 @@ class Shader():
                     fragSource.append(line)
         srcVertex = '\n'.join(
             ([vertVersion] if includeVersion else []) +
-            uniforms + attributes + varyings + vertSource
+            uniforms + attributes + varyings + consts + vertSource
         )
         srcFragment = '\n'.join(
             ([fragVersion] if includeVersion else []) +
-            uniforms + varyings + fragSource
+            uniforms + varyings + consts + fragSource
         )
         return (srcVertex, srcFragment)
 

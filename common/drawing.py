@@ -509,6 +509,6 @@ class ScissorStack:
         assert ScissorStack.is_started
         assert ScissorStack.stack
         vl, vb, vw, vh = ScissorStack.get_current_view()
-        vr, vt = vl+vw-1, vb+vh-1
-        r, b = l+w-1, t-h+1
+        vr, vt = vl + (vw - 1), vb + (vh - 1)
+        r, b = l + (w - 1), t - (h - 1)
         return not (l > vr or r < vl or t < vb or b > vt)

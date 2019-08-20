@@ -91,3 +91,19 @@ class FSM:
     def state(self):
         return self._state
 
+    def force_set_state(self, state, call_exit=False, call_enter=True):
+        if call_exit: self._call(self._state, substate='exit')
+        self._state = state
+        if call_enter: self._call(self._state, substate='enter')
+
+
+def FSMClass(cls):
+    cls.fsm = FSM()
+    cls.FSM_State = cls.fsm.wrapper
+    return cls
+
+    # https://krzysztofzuraw.com/blog/2016/python-class-decorators.html
+    # class Wrapper(object):
+    #     def __init__(self, *args, **kwargs):
+    #         self._wrapped = cls(*args, **kwargs)
+

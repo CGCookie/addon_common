@@ -152,7 +152,7 @@ def input_checkbox(**kwargs):
 def labeled_input_text(label, **kwargs):
     kw_container = helper_argsplitter({'parent'}, kwargs)
     ui_container = UI_Element(tagName='div', classes='labeledinputtext-container', **kw_container)
-    ui_left = UI_Element(tagName='div', classes='labeledinputtext-label-container', parent=ui_container)
+    ui_left  = UI_Element(tagName='div', classes='labeledinputtext-label-container', parent=ui_container)
     ui_right = UI_Element(tagName='div', classes='labeledinputtext-input-container', parent=ui_container)
     ui_label = UI_Element(tagName='label', innerText=label, parent=ui_left)
     ui_input = input_text(parent=ui_right, **kwargs)

@@ -34,6 +34,21 @@ attribute vec2 pos;
 
 varying vec2 screen_pos;
 
+const bool DEBUG = false;
+const bool DEBUG_CHECKER = true;
+
+const int REGION_OUTSIDE_LEFT   = -4;
+const int REGION_OUTSIDE_BOTTOM = -3;
+const int REGION_OUTSIDE_RIGHT  = -2;
+const int REGION_OUTSIDE_TOP    = -1;
+const int REGION_OUTSIDE        = 0;
+const int REGION_BORDER_TOP     = 1;
+const int REGION_BORDER_RIGHT   = 2;
+const int REGION_BORDER_BOTTOM  = 3;
+const int REGION_BORDER_LEFT    = 4;
+const int REGION_BACKGROUND     = 5;
+const int REGION_ERROR          = -100;
+
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
 
@@ -42,8 +57,8 @@ varying vec2 screen_pos;
 void main() {
     // set vertex to bottom-left, top-left, top-right, or bottom-right location, depending on pos
     vec2 p = vec2(
-        (pos.x < 0.5) ? (left  ) : (right + 1),
-        (pos.y < 0.5) ? (bottom) : (top   + 1)
+        (pos.x < 0.5) ? (left   - 1) : (right + 1),
+        (pos.y < 0.5) ? (bottom - 1) : (top   + 1)
     );
 
     screen_pos  = p;
@@ -68,75 +83,89 @@ int get_region() {
     */
 
     float dist_left   = screen_pos.x - (left + margin_left);
-    float dist_right  = (right - margin_right) - screen_pos.x;
-    float dist_bottom = screen_pos.y - (bottom + margin_bottom);
+    float dist_right  = (right - margin_right + 1) - screen_pos.x;
+    float dist_bottom = screen_pos.y - (bottom + margin_bottom - 1);
     float dist_top    = (top - margin_top) - screen_pos.y;
-    float radwid = max(border_radius, border_width);
-    float rad = max(0, border_radius - border_width);
-    float radwid2 = radwid * radwid, rad2 = rad * rad;
+    float radwid  = max(border_radius, border_width);
+    float rad     = max(0, border_radius - border_width);
+    float radwid2 = radwid * radwid;
+    float rad2    = rad * rad;
     float r2;
 
     // outside
-    if(dist_left < 0 || dist_right < 0 || dist_bottom < 0 || dist_top < 0) return 0;
+    float dist_min = min(min(min(dist_left, dist_right), dist_top), dist_bottom);
+    if(dist_min < 0) {
+        if(dist_min == dist_left)   return REGION_OUTSIDE_LEFT;
+        if(dist_min == dist_right)  return REGION_OUTSIDE_RIGHT;
+        if(dist_min == dist_top)    return REGION_OUTSIDE_TOP;
+        if(dist_min == dist_bottom) return REGION_OUTSIDE_BOTTOM;
+        return REGION_ERROR;
+    }
 
     // within top and bottom, might be left or right side
     if(dist_bottom > radwid && dist_top > radwid) {
-        if(dist_left > border_width && dist_right > border_width) return 5;
-        return (dist_left < dist_right) ? 4 : 2;
+        if(dist_left > border_width && dist_right > border_width) return REGION_BACKGROUND;
+        if(dist_left < dist_right) return REGION_BORDER_LEFT;
+        return REGION_BORDER_RIGHT;
     }
 
     // within left and right, might be bottom or top
     if(dist_left > radwid && dist_right > radwid) {
-        if(dist_bottom > border_width && dist_top > border_width) return 5;
-        return (dist_bottom < dist_top) ? 3 : 1;
+        if(dist_bottom > border_width && dist_top > border_width) return REGION_BACKGROUND;
+        if(dist_bottom < dist_top) return REGION_BORDER_BOTTOM;
+        return REGION_BORDER_TOP;
     }
 
     // top-left
     if(dist_top <= radwid && dist_left <= radwid) {
         r2 = pow(dist_left - radwid, 2.0) + pow(dist_top - radwid, 2.0);
-        if(r2 > radwid2) return 0;
-        if(r2 < rad2) return 5;
-        return (dist_left < dist_top) ? 4 : 1;
+        if(r2 > radwid2)             return REGION_OUTSIDE;
+        if(r2 < rad2)                return REGION_BACKGROUND;
+        if(dist_left < dist_top)     return REGION_BORDER_LEFT;
+        return REGION_BORDER_TOP;
     }
     // top-right
     if(dist_top <= radwid && dist_right <= radwid) {
         r2 = pow(dist_right - radwid, 2.0) + pow(dist_top - radwid, 2.0);
-        if(r2 > radwid2) return 0;
-        if(r2 < rad2) return 5;
-        return (dist_right < dist_top) ? 2 : 1;
+        if(r2 > radwid2)             return REGION_OUTSIDE;
+        if(r2 < rad2)                return REGION_BACKGROUND;
+        if(dist_right < dist_top)    return REGION_BORDER_RIGHT;
+        return REGION_BORDER_TOP;
     }
     // bottom-left
     if(dist_bottom <= radwid && dist_left <= radwid) {
         r2 = pow(dist_left - radwid, 2.0) + pow(dist_bottom - radwid, 2.0);
-        if(r2 > radwid2) return 0;
-        if(r2 < rad2) return 5;
-        return (dist_left < dist_bottom) ? 4 : 3;
+        if(r2 > radwid2)             return REGION_OUTSIDE;
+        if(r2 < rad2)                return REGION_BACKGROUND;
+        if(dist_left < dist_bottom)  return REGION_BORDER_LEFT;
+        return REGION_BORDER_BOTTOM;
     }
     // bottom-right
     if(dist_bottom <= radwid && dist_right <= radwid) {
         r2 = pow(dist_right - radwid, 2.0) + pow(dist_bottom - radwid, 2.0);
-        if(r2 > radwid2) return 0;
-        if(r2 < rad2) return 5;
-        return (dist_right < dist_bottom) ? 2 : 3;
+        if(r2 > radwid2)             return REGION_OUTSIDE;
+        if(r2 < rad2)                return REGION_BACKGROUND;
+        if(dist_right < dist_bottom) return REGION_BORDER_RIGHT;
+        return REGION_BORDER_BOTTOM;
     }
 
     // something bad happened
-    return -1;
+    return REGION_ERROR;
 }
 
-vec4 mix_image(vec4 bg, bool debug) {
+vec4 mix_image(vec4 bg) {
     vec4 c = bg;
     float w = width  - (margin_left + border_width + padding_left + padding_right  + border_width + margin_right);
     float h = height - (margin_top  + border_width + padding_top  + padding_bottom + border_width + margin_bottom);
     float tx = screen_pos.x - (left + (margin_left + border_width + padding_left));
     float ty = screen_pos.y - (top  - (margin_top  + border_width + padding_top));
-    vec2 texcoord = vec2(tx / w, -ty / h);
-    if((0 <= texcoord.x && texcoord.x <= 1) && (0 <= texcoord.y && texcoord.y <= 1)) {
+    vec2 texcoord = vec2(tx / (w), -ty / (h));
+    if((0 <= texcoord.x && texcoord.x < 1) && (0 <= texcoord.y && texcoord.y < 1)) {
         vec4 t = texture(image, texcoord);
         float a = t.a + c.a * (1.0 - t.a);
         c = vec4((t.rgb * t.a + c.rgb * c.a * (1.0 - t.a)) / a, a);
 
-        if(debug) {
+        if(DEBUG && DEBUG_CHECKER) {
             int i = (int(32 * texcoord.x) + 4 * int(32 * texcoord.y)) % 16;
                  if(i ==  0) c = vec4(0.0, 0.0, 0.0, 1);
             else if(i ==  1) c = vec4(0.0, 0.0, 0.5, 1);
@@ -155,6 +184,16 @@ vec4 mix_image(vec4 bg, bool debug) {
             else if(i == 14) c = vec4(1.0, 1.0, 0.0, 1);
             else if(i == 15) c = vec4(1.0, 1.0, 1.0, 1);
         }
+    } else if(DEBUG) {
+        // vec4 t = vec4(0,1,1,0.50);
+        // float a = t.a + c.a * (1.0 - t.a);
+        // c = vec4((t.rgb * t.a + c.rgb * c.a * (1.0 - t.a)) / a, a);
+        c = vec4(
+            1.0 - (1.0 - c.r) * 0.5,
+            1.0 - (1.0 - c.g) * 0.5,
+            1.0 - (1.0 - c.b) * 0.5,
+            c.a
+            );
     }
     return c;
 }
@@ -162,13 +201,18 @@ vec4 mix_image(vec4 bg, bool debug) {
 void main() {
     vec4 c = vec4(0,0,0,0);
     int region = get_region();
-    if(region == 0) discard;
-    else if(region == 1) c = border_top_color;
-    else if(region == 2) c = border_right_color;
-    else if(region == 3) c = border_bottom_color;
-    else if(region == 4) c = border_left_color;
-    else if(region == 5) c = background_color;
-    else c = vec4(1,0,0,1);
-    if(using_image > 0.5) c = mix_image(c, false);
+         if(region == REGION_OUTSIDE_TOP)    { c = vec4(1,0,0,0.25); if(!DEBUG) discard; }
+    else if(region == REGION_OUTSIDE_RIGHT)  { c = vec4(0,1,0,0.25); if(!DEBUG) discard; }
+    else if(region == REGION_OUTSIDE_BOTTOM) { c = vec4(0,0,1,0.25); if(!DEBUG) discard; }
+    else if(region == REGION_OUTSIDE_LEFT)   { c = vec4(0,1,1,0.25); if(!DEBUG) discard; }
+    else if(region == REGION_OUTSIDE)        { c = vec4(1,1,0,0.25); if(!DEBUG) discard; }
+    else if(region == REGION_BORDER_TOP)       c = border_top_color;
+    else if(region == REGION_BORDER_RIGHT)     c = border_right_color;
+    else if(region == REGION_BORDER_BOTTOM)    c = border_bottom_color;
+    else if(region == REGION_BORDER_LEFT)      c = border_left_color;
+    else if(region == REGION_BACKGROUND)       c = background_color;
+    else if(region == REGION_ERROR)            c = vec4(1,0,0,1);  // should never hit here
+    else                                       c = vec4(1,0,1,1);  // should really never hit here
+    if(using_image > 0.5) c = mix_image(c);
     gl_FragColor = c;
 }
