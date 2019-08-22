@@ -121,11 +121,16 @@ def input_radio(**kwargs):
     ui_radio = UI_Element(tagName='img', classes='radio',  parent=ui_input)
     ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label)
     def mouseclick(e):
+        ui_input.checked = True
+    def on_input(e):
+        # if ui_input is checked, uncheck all others with same name
+        if not ui_input.checked: return
         if ui_input.name is None: return
         ui_elements = ui_input.get_root().getElementsByName(ui_input.name)
         for ui_element in ui_elements:
-            ui_element.checked = True if ui_element == ui_input else None
+            if ui_element != ui_input: ui_element.checked = False
     ui_input.add_eventListener('on_mouseclick', mouseclick)
+    ui_input.add_eventListener('on_input', on_input)
     ui_proxy = UI_Proxy(ui_input)
     ui_proxy.translate('label', 'innerText')
     ui_proxy.map({'innerText','children','append_child','delete_child','clear_children'}, ui_label)
