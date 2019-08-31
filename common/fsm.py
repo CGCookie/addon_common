@@ -44,8 +44,9 @@ class FSM:
                         debugger.print_exception()
                         return
                 run.fnname = self.fnname
-                run.fsmstate = get_state(self.state, self.substate)
-                # print('%s: registered %s as %s' % (str(fsm), self.fnname, run.fsmstate))
+                run.fsmstate = self.state
+                run.fsmstate_full = get_state(self.state, self.substate)
+                # print('%s: registered %s as %s' % (str(fsm), self.fnname, run.fsmstate_full))
                 return run
         return FSM_State
 
@@ -54,7 +55,10 @@ class FSM:
         self._state_next = start
         self._state = None
         self._fsm_states = {}
-        for (m,fn) in find_fns(self._obj, 'fsmstate'):
+        self._fsm_states_handled = set()
+        for (st,fn) in find_fns(self._obj, 'fsmstate'):
+            self._fsm_states_handled.add(st)
+        for (m,fn) in find_fns(self._obj, 'fsmstate_full'):
             assert m not in self._fsm_states, 'Duplicate states registered!'
             self._fsm_states[m] = fn
             # print('%s: found fn %s as %s' % (str(self), str(fn), m))
@@ -85,7 +89,30 @@ class FSM:
             self._call(self._state, substate='exit')
             self._state = self._state_next
             self._call(self._state, substate='enter')
-        self._state_next = self._call(self._state, fail_if_not_exist=True)
+        ret = self._call(self._state, fail_if_not_exist=True)
+        if ret is None:
+            self._state_next = ret
+            ret = None
+        elif type(ret) is str:
+            if ret in self._fsm_states_handled:
+                self._state_next = ret
+                ret = None
+            else:
+                self._state_next = None
+                ret = ret
+        elif type(ret) is tuple:
+            st = {s for s in ret if s in self._fsm_states_handled}
+            if len(st) == 0:
+                self._state_next = None
+                ret = ret
+            elif len(st) == 1:
+                self._state_next = next(st)
+                ret = ret - st
+            else:
+                assert False, 'unhandled FSM return value "%s"' % str(ret)
+        else:
+            assert False, 'unhandled FSM return value "%s"' % str(ret)
+        return ret
 
     @property
     def state(self):
