@@ -1054,14 +1054,17 @@ class UI_Element_Properties:
 class UI_Element_Dirtiness:
     @profiler.profile
     def dirty(self, cause=None, properties=None, parent=True, children=False):
-        if cause is None: cause = 'Unknown cause'
-        parent &= self._parent is not None and self._parent != self and not self._do_not_dirty_parent
+        if cause is None: cause = 'Unspecified cause'
+        parent &= self._parent is not None
+        parent &= self._parent != self
+        parent &= not self._do_not_dirty_parent
         if properties is None: properties = set(UI_Element_Utils._cleaning_graph_nodes)
-        elif type(properties) is str: properties = {properties}
+        elif type(properties) is str:  properties = {properties}
         elif type(properties) is list: properties = set(properties)
+        if not (properties - self._dirty_properties): return
         self._dirty_properties |= properties
         self._dirty_causes.append(cause)
-        if parent: self._dirty_propagation['parent'] |= properties
+        if parent:   self._dirty_propagation['parent']   |= properties
         if children: self._dirty_propagation['children'] |= properties
         self.propagate_dirtiness()
         # print('%s had %s dirtied, because %s' % (str(self), str(properties), str(cause)))
@@ -1092,10 +1095,10 @@ class UI_Element_Dirtiness:
         parent &= self._parent is not None and not self._do_not_dirty_parent
         self._dirty_flow = True
         if parent and self._parent:
-            self._parent.dirty_flow()
+            self._parent.dirty_flow(parent=True, children=False)
         if children:
             for child in self._children_all:
-                child.dirty_flow()
+                child.dirty_flow(parent=False, children=True)
         tag_redraw_all()
 
     @property
@@ -1442,6 +1445,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         sc['border-top-color']    = self._computed_styles.get('border-top-color',    Color.transparent)
         sc['border-bottom-color'] = self._computed_styles.get('border-bottom-color', Color.transparent)
         sc['background-color']    = self._computed_styles.get('background-color',    Color.transparent)
+        sc['width'] = self._computed_styles.get('width', 'auto')
+        sc['height'] = self._computed_styles.get('height', 'auto')
 
         fontfamily = self._computed_styles.get('font-family', 'sans-serif')
         fontstyle = self._computed_styles.get('font-style', 'normal')
@@ -1455,8 +1460,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self._whitespace = self._computed_styles.get('white-space', 'normal')
 
-        self._src = None
-
         # tell children to recompute selector
         # NOTE: self._children_all has not been constructed, yet!
         for child in self._children: child._compute_style()
@@ -1464,17 +1467,35 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if self._child_before: self._child_before._compute_styles()
         if self._child_after: self._child_after._compute_styles()
 
-        # content_hash = Hasher()
-        # content_hash += self.is_visible
-        # content_hash += self.innerText
-        # content_hash += self.src
-        # content_hash += self._computed_styles_before.get('content', None) if self._computed_styles_before else None
-        # content_hash += self._computed_styles_after.get('content', None)  if self._computed_styles_after  else None
-        if True: # content_hash != getattr(self, '_style_content_hash', None):
+        style_content_hash = Hasher(
+            self.is_visible,
+            self.innerText,
+            self.src,
+            self._fontid, self._fontsize,
+            self._whitespace,
+            self._computed_styles.get('background-image', None),
+            self._computed_styles_before.get('content', None) if self._computed_styles_before else None,
+            self._computed_styles_after.get('content',  None) if self._computed_styles_after  else None,
+        )
+        if style_content_hash != getattr(self, '_style_content_hash', None):
             self.dirty('style change might have changed content (::before / ::after)', 'content')
-            # self._style_content_hash = content_hash
-        self.dirty('style change might have changed size', 'size')
-        self.dirty_flow()
+            self.dirty_flow()
+            self._style_content_hash = style_content_hash
+
+        style_size_hash = Hasher(
+            self._fontid, self._fontsize,
+            {k:sc[k] for k in [
+                'margin-top','margin-right','margin-bottom','margin-left',
+                'padding-top','padding-right','padding-bottom','padding-left',
+                'border-width',
+                'width', 'height'
+            ]},
+        )
+        if style_size_hash != getattr(self, '_style_size_hash', None):
+            self.dirty('style change might have changed size', 'size')
+            self.dirty_flow()
+            self._style_size_hash = style_size_hash
+
         self._dirty_properties.discard('style')
         self._dirty_callbacks['style'] = set()
 

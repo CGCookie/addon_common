@@ -36,7 +36,7 @@ class Hasher:
     def __init__(self, *args):
         self._hasher = md5()
         self._digest = None
-        self.add(*args)
+        self.add(args)
 
     def __iadd__(self, other):
         self.add(other)
@@ -45,7 +45,11 @@ class Hasher:
     def add(self, *args):
         self._digest = None
         for arg in args:
-            self._hasher.update(bytes(str(arg), 'utf8'))
+            if type(arg) is list:
+                self._hasher.update(bytes('list %d' % len(arg), 'utf8'))
+                self.add(arg)
+            else:
+                self._hasher.update(bytes(str(arg), 'utf8'))
 
     def get_hash(self):
         if self._digest is None:
