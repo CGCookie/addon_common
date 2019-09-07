@@ -253,7 +253,7 @@ class Shader():
             else:
                 assert False, 'Unhandled qualifier %s for variable %s' % (q, varName)
         except Exception as e:
-            print('ERROR (assign): ' + str(e))
+            print('ERROR Shader.assign(%s, %s)): %s' % (varName, str(varValue), str(e)))
 
     def enableVertexAttribArray(self, varName):
         assert varName in self.shaderVars, 'Variable %s not found' % varName

@@ -42,6 +42,7 @@ class FSM:
                             self.fnname, self.state, self.substate
                         ))
                         debugger.print_exception()
+                        print(e)
                         return
                 run.fnname = self.fnname
                 run.fsmstate = self.state

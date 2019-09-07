@@ -43,7 +43,8 @@ from .decorators import blender_version_wrapper
 from .fontmanager import FontManager as fm
 from .maths import Point2D, Vec2D, Point, Ray, Direction, mid
 from .profiler import profiler
-from .debug import dprint
+from .debug import dprint, debugger
+from .utils import find_fns
 
 
 class Drawing:
@@ -509,3 +510,48 @@ class ScissorStack:
         vr, vt = vl + (vw - 1), vb + (vh - 1)
         r, b = l + (w - 1), t - (h - 1)
         return not (l > vr or r < vl or t < vb or b > vt)
+
+
+class DrawCallbacks:
+    def __init__(self):
+        self.wrapper = self._create_wrapper()
+
+    def _create_wrapper(self):
+        drawcb = self
+        class DrawWrapper:
+            def __init__(self, mode):
+                assert mode in {'pre3d','post3d','post2d'}
+                self.mode = mode
+            def __call__(self, fn):
+                self.fn = fn
+                self.fnname = fn.__name__
+                def run(*args, **kwargs):
+                    try:
+                        return fn(*args, **kwargs)
+                    except Exception as e:
+                        print('Caught exception in drawing "%s", calling "%s"' % (self.mode, self.fnname))
+                        debugger.print_exception()
+                        print(e)
+                        return None
+                run.fnname = self.fnname
+                run.drawmode = self.mode
+                return run
+        return DrawWrapper
+
+    def init(self, obj):
+        self.obj = obj
+        self._fns = {
+            'pre3d':  [],
+            'post3d': [],
+            'post2d': [],
+        }
+        for (m,fn) in find_fns(self.obj, 'drawmode'):
+            self._fns[m] += [fn]
+
+    def _call(self, n):
+        for fn in self._fns[n]: fn(self.obj)
+    def pre3d(self):  self._call('pre3d')
+    def post3d(self): self._call('post3d')
+    def post2d(self): self._call('post2d')
+
+

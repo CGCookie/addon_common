@@ -28,9 +28,9 @@ from ..common.globals import Globals
 from ..common.blender import bversion, tag_redraw_all
 from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger
-from ..common.drawing import Drawing
+from ..common.drawing import Drawing, DrawCallbacks
 from ..common.ui_core import UI_Document
-from ..common.utils import find_fns
+
 
 if bversion() >= "2.80":
     import gpu
@@ -57,24 +57,12 @@ if bversion() >= "2.80":
 
 
 class CookieCutter_UI:
-    class Draw:
-        def __init__(self, mode):
-            assert mode in {'pre3d','post3d','post2d'}
-            self.mode = mode
-        def __call__(self, fn):
-            self.fn = fn
-            self.fnname = fn.__name__
-            def run(*args, **kwargs):
-                try:
-                    return fn(*args, **kwargs)
-                except Exception as e:
-                    print('Caught exception in drawing "%s", calling "%s"' % (self.mode, self.fnname))
-                    debugger.print_exception()
-                    print(e)
-                    return None
-            run.fnname = self.fnname
-            run.drawmode = self.mode
-            return run
+    '''
+    Assumes that direct subclass will have singleton instance (shared CookieCutter among all instances of that subclass and any subclasses)
+    '''
+
+    drawcallbacks = DrawCallbacks()
+    Draw = drawcallbacks.wrapper
 
     def ui_init(self):
         self.document = Globals.ui_document # UI_Document(self.context)
@@ -82,14 +70,12 @@ class CookieCutter_UI:
         self.drawing = Globals.drawing
         self.drawing.set_region(bpy.context.space_data, bpy.context.region, bpy.context.space_data.region_3d, bpy.context.window)
         self.blenderui_init()
-        fns = {'pre3d':[], 'post3d':[], 'post2d':[]}
-        for m,fn in find_fns(self, 'drawmode'): fns[m].append(fn)
-        def draw(fns):
-            for fn in fns: fn(self)
-        self._draw_pre3d  = lambda:draw(fns['pre3d'])
-        self._draw_post3d = lambda:draw(fns['post3d'])
-        self._draw_post2d = lambda:draw(fns['post2d'])
+        self.drawcallbacks.init(self)
         self._area.tag_redraw()
+
+    def _draw_pre3d(self):  self.drawcallbacks.pre3d()
+    def _draw_post3d(self): self.drawcallbacks.post3d()
+    def _draw_post2d(self): self.drawcallbacks.post2d()
 
     def ui_start(self):
         def preview():

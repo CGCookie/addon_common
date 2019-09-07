@@ -55,6 +55,7 @@ from .utils import shorten_floats
 from .maths import Point, Direction, Frame, XForm
 from .maths import invert_matrix, matrix_normal
 from .profiler import profiler
+from .decorators import blender_version_wrapper
 
 
 
@@ -109,7 +110,7 @@ def glColor(color):
     else:
         bgl.glColor4f(*color)
 
-
+@blender_version_wrapper('<', '2.80')
 def glSetDefaultOptions(opts=None):
     bgl.glEnable(bgl.GL_MULTISAMPLE)
     bgl.glEnable(bgl.GL_BLEND)
@@ -118,14 +119,29 @@ def glSetDefaultOptions(opts=None):
     bgl.glEnable(bgl.GL_POINT_SMOOTH)
     bgl.glEnable(bgl.GL_LINE_SMOOTH)
     bgl.glHint(bgl.GL_LINE_SMOOTH_HINT, bgl.GL_NICEST)
+@blender_version_wrapper('>=', '2.80')
+def glSetDefaultOptions(opts=None):
+    bgl.glEnable(bgl.GL_MULTISAMPLE)
+    bgl.glEnable(bgl.GL_BLEND)
+    bgl.glEnable(bgl.GL_DEPTH_TEST)
+    bgl.glEnable(bgl.GL_LINE_SMOOTH)
+    bgl.glHint(bgl.GL_LINE_SMOOTH_HINT, bgl.GL_NICEST)
 
-
+@blender_version_wrapper('<', '2.80')
 def glEnableStipple(enable=True):
     if enable:
         bgl.glLineStipple(4, 0x5555)
         bgl.glEnable(bgl.GL_LINE_STIPPLE)
     else:
         bgl.glDisable(bgl.GL_LINE_STIPPLE)
+@blender_version_wrapper('>=', '2.80')
+def glEnableStipple(enable=True):
+    pass
+    # if enable:
+    #     bgl.glLineStipple(4, 0x5555)
+    #     bgl.glEnable(bgl.GL_LINE_STIPPLE)
+    # else:
+    #     bgl.glDisable(bgl.GL_LINE_STIPPLE)
 
 
 # def glEnableBackfaceCulling(enable=True):
@@ -138,25 +154,22 @@ def glEnableStipple(enable=True):
 
 
 def glSetOptions(prefix, opts):
-    if not opts:
-        return
+    if not opts: return
 
     prefix = '%s ' % prefix if prefix else ''
 
     def set_if_set(opt, cb):
         opt = '%s%s' % (prefix, opt)
-        if opt in opts:
-            cb(opts[opt])
+        if opt in opts: cb(opts[opt])
     dpi_mult = opts.get('dpi mult', 1.0)
-    set_if_set('offset', lambda v: bmeshShader.assign('offset', v))
-    set_if_set('dotoffset', lambda v: bmeshShader.assign('dotoffset', v))
-    set_if_set('color', lambda v: bmeshShader.assign('color', v))
-    set_if_set('color selected',
-               lambda v: bmeshShader.assign('color_selected', v))
-    set_if_set('hidden', lambda v: bmeshShader.assign('hidden', v))
-    set_if_set('width', lambda v: bgl.glLineWidth(v*dpi_mult))
-    set_if_set('size', lambda v: bgl.glPointSize(v*dpi_mult))
-    set_if_set('stipple', lambda v: glEnableStipple(v))
+    set_if_set('offset',         lambda v: bmeshShader.assign('offset', v))
+    set_if_set('dotoffset',      lambda v: bmeshShader.assign('dotoffset', v))
+    set_if_set('color',          lambda v: bmeshShader.assign('color', v))
+    set_if_set('color selected', lambda v: bmeshShader.assign('color_selected', v))
+    set_if_set('hidden',         lambda v: bmeshShader.assign('hidden', v))
+    set_if_set('width',          lambda v: bgl.glLineWidth(v*dpi_mult))
+    set_if_set('size',           lambda v: bgl.glPointSize(v*dpi_mult))
+    set_if_set('stipple',        lambda v: glEnableStipple(v))
 
 
 def glSetMirror(symmetry=None, view=None, effect=0.0, frame: Frame=None):
@@ -481,7 +494,6 @@ class BGLBufferedRender:
         elif self.gltype == bgl.GL_POINTS:
             if opts.get('point size', 1.0) <= 0:
                 return
-
         nosel = opts.get('no selection', False)
         mx, my, mz = opts.get('mirror x', False), opts.get(
             'mirror y', False), opts.get('mirror z', False)
