@@ -29,6 +29,115 @@ def get_preferences(ctx=None):
 def get_preferences(ctx=None):
     return (ctx if ctx else bpy.context).preferences
 
+#############################################################
+
+class ModifierWrapper_Mirror:
+    '''
+    normalize the mirror modifier API across 2.79 and 2.80
+    '''
+    @staticmethod
+    def create_new(obj):
+        bpy.ops.object.modifier_add(type='MIRROR')
+        mod = ModifierWrapper_Mirror(obj, obj.modifiers[-1])
+        mod.set_defaults()
+        return mod
+
+    @staticmethod
+    def get_from_object(obj):
+        for mod in obj.modifiers:
+            if mod.type != 'MIRROR': continue
+            return ModifierWrapper_Mirror(obj, mod)
+        return None
+
+    def __init__(self, obj, modifier):
+        self.obj = obj
+        self.mod = modifier
+        self.read()
+
+    @property
+    def x(self):
+        return 'x' in self.symmetry
+    @x.setter
+    def x(self, v):
+        if v: self.symmetry.add('x')
+        else: self.symmetry.discard('x')
+
+    @property
+    def y(self):
+        return 'y' in self.symmetry
+    @y.setter
+    def y(self, v):
+        if v: self.symmetry.add('y')
+        else: self.symmetry.discard('y')
+
+    @property
+    def z(self):
+        return 'z' in self.symmetry
+    @z.setter
+    def z(self, v):
+        if v: self.symmetry.add('z')
+        else: self.symmetry.discard('z')
+
+    @property
+    def xyz(self):
+        return self.symmetry
+
+    def enable_axis(self, axis):
+        self.symmetry.add(axis)
+    def disable_axis(self, axis):
+        self.symmetry.discard(axis)
+    def disable_all(self):
+        self.symmetry.clear()
+    def is_enabled_axis(self, axis):
+        return axis in self.symmetry
+
+    def set_defaults(self):
+        self.mod.merge_threshold = 0.001
+        self.mod.show_expanded = False
+        self.mod.show_on_cage = True
+        self.mod.use_mirror_merge = True
+
+    @blender_version_wrapper('<', '2.80')
+    def read(self):
+        self.symmetry = set()
+        self.x = self.mod.use_x
+        self.y = self.mod.use_y
+        self.z = self.mod.use_z
+        self.symmetry_threshold = self.mod.merge_threshold
+        self.show_viewport = self.mod.show_viewport
+    @blender_version_wrapper('>=', '2.80')
+    def read(self):
+        self.symmetry = set()
+        self.x = self.mod.use_axis[0]
+        self.y = self.mod.use_axis[1]
+        self.z = self.mod.use_axis[2]
+        self.symmetry_threshold = self.mod.merge_threshold
+        self.show_viewport = self.mod.show_viewport
+
+    @blender_version_wrapper('<', '2.80')
+    def write(self):
+        self.mod.use_x = self.x
+        self.mod.use_y = self.y
+        self.mod.use_z = self.z
+        self.mod.merge_threshold = self.symmetry_threshold
+        self.mod.show_viewport = self.show_viewport
+    @blender_version_wrapper('>=', '2.80')
+    def write(self):
+        self.mod.use_axis[0] = self.x
+        self.mod.use_axis[1] = self.y
+        self.mod.use_axis[2] = self.z
+        self.mod.merge_threshold = self.symmetry_threshold
+        self.mod.show_viewport = self.show_viewport
+
+
+
+
+#############################################################
+
+@blender_version_wrapper('<', '2.80')
+def matrix_vector_mult(mat, vec): return mat * vec
+@blender_version_wrapper('>=', '2.80')
+def matrix_vector_mult(mat, vec): return mat @ vec
 
 
 #############################################################

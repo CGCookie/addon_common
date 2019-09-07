@@ -467,7 +467,7 @@ class ScissorStack:
 
         # compute right and bottom of new scissor box
         nr = nl + (nw - 1)
-        nb = nt - (nh + 1)
+        nb = nt - (nh - 1) - 1      # sub 1 (not certain why this needs to be)
 
         if clamp:
             # get previous scissor box
@@ -494,21 +494,18 @@ class ScissorStack:
         assert ScissorStack.is_started
         assert ScissorStack.stack
         l, b, w, h = ScissorStack.stack[-1]
-        r, t = l+w-1, b+h-1
+        r, t = l + (w - 1), b + (h - 1)
         return (l, t, w, h)
 
     @staticmethod
     def is_visible():
-        assert ScissorStack.is_started
-        assert ScissorStack.stack
-        vl, vb, vw, vh = ScissorStack.stack[-1]
+        vl,vb,vw,vh = ScissorStack.get_current_view()
         return vw > 0 and vh > 0
 
     @staticmethod
     def is_box_visible(l, t, w, h):
-        assert ScissorStack.is_started
-        assert ScissorStack.stack
         vl, vb, vw, vh = ScissorStack.get_current_view()
+        if vw <= 0 or vh <= 0: return False
         vr, vt = vl + (vw - 1), vb + (vh - 1)
         r, b = l + (w - 1), t - (h - 1)
         return not (l > vr or r < vl or t < vb or b > vt)

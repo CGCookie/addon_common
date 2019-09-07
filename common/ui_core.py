@@ -1470,7 +1470,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         style_content_hash = Hasher(
             self.is_visible,
             self.innerText,
-            self.src,
+            self._src_str,
             self._fontid, self._fontsize,
             self._whitespace,
             self._computed_styles.get('background-image', None),
@@ -1597,7 +1597,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     self._children_text_min_size.height = max(self._children_text_min_size.height, child._static_content_size.height)
                 pr.done()
 
-        elif self.src and not self._src:
+        elif self.src: # and not self._src:
             self._image_data = load_texture(self.src)
             self._src = 'image'
 
@@ -2114,7 +2114,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
         border_width = sc['border-width']
 
-        if ScissorStack.is_visible() and ScissorStack.is_box_visible(self._l+ol, self._t+ot, self._w+ow, self._h+oh):
+        if ScissorStack.is_box_visible(self._l+ol, self._t+ot, self._w+ow, self._h+oh):
             if self._innerTextAsIs is not None:
                 pr = profiler.start('drawing text')
                 # need to set font size each time, but not certain why...

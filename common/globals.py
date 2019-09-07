@@ -47,3 +47,6 @@ class Globals(metaclass=GlobalsMeta):
     def get(objtype):
         return Globals.__vars.get(objtype, None)
 
+    @staticmethod
+    def __getattr__(objtype):
+        return Globals.get(objtype)

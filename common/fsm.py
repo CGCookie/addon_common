@@ -55,9 +55,7 @@ class FSM:
         self._state_next = start
         self._state = None
         self._fsm_states = {}
-        self._fsm_states_handled = set()
-        for (st,fn) in find_fns(self._obj, 'fsmstate'):
-            self._fsm_states_handled.add(st)
+        self._fsm_states_handled = { st for (st,fn) in find_fns(self._obj, 'fsmstate') }
         for (m,fn) in find_fns(self._obj, 'fsmstate_full'):
             assert m not in self._fsm_states, 'Duplicate states registered!'
             self._fsm_states[m] = fn
@@ -89,19 +87,21 @@ class FSM:
             self._call(self._state, substate='exit')
             self._state = self._state_next
             self._call(self._state, substate='enter')
+
         ret = self._call(self._state, fail_if_not_exist=True)
+
         if ret is None:
             self._state_next = ret
             ret = None
         elif type(ret) is str:
-            if ret in self._fsm_states_handled:
+            if self.is_state(ret):
                 self._state_next = ret
                 ret = None
             else:
                 self._state_next = None
                 ret = ret
         elif type(ret) is tuple:
-            st = {s for s in ret if s in self._fsm_states_handled}
+            st = {s for s in ret if self.is_state(s)}
             if len(st) == 0:
                 self._state_next = None
                 ret = ret
@@ -112,7 +112,11 @@ class FSM:
                 assert False, 'unhandled FSM return value "%s"' % str(ret)
         else:
             assert False, 'unhandled FSM return value "%s"' % str(ret)
+
         return ret
+
+    def is_state(self, state):
+        return state in self._fsm_states_handled
 
     @property
     def state(self):

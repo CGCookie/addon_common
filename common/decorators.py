@@ -159,29 +159,34 @@ def timed_call(label):
 # https://github.com/CGCookie/retopoflow/commit/135746c7b4ee0052ad0c1842084b9ab983726b33#diff-d4260a97dcac93f76328dfaeb5c87688
 def blender_version_wrapper(op, ver):
     self = blender_version_wrapper
-    if not hasattr(self, 'init'):
+    if not hasattr(self, 'fns'):
         major, minor, rev = bpy.app.version
-        blenderver = '%d.%02d' % (major, minor)
-        self.fns = {}
+        self.blenderver = '%d.%02d' % (major, minor)
+        self.fns = fns = {}
         self.ops = {
-            '<': lambda v: blenderver < v,
-            '>': lambda v: blenderver > v,
-            '<=': lambda v: blenderver <= v,
-            '==': lambda v: blenderver == v,
-            '>=': lambda v: blenderver >= v,
-            '!=': lambda v: blenderver != v,
+            '<':  lambda v: self.blenderver <  v,
+            '>':  lambda v: self.blenderver >  v,
+            '<=': lambda v: self.blenderver <= v,
+            '==': lambda v: self.blenderver == v,
+            '>=': lambda v: self.blenderver >= v,
+            '!=': lambda v: self.blenderver != v,
         }
-        self.init = True
-    update_fn = self.ops[op](ver)
-    fns = self.fns
 
+    update_fn = self.ops[op](ver)
     def wrapit(fn):
-        n = fn.__name__
-        if update_fn:
-            fns[n] = fn
+        nonlocal self, update_fn
+        fn_name = fn.__name__
+        fns = self.fns
+        error_msg = "Could not find appropriate function named %s for version Blender %s" % (fn_name, self.blenderver)
+
+        if update_fn: fns[fn_name] = fn
 
         def callit(*args, **kwargs):
-            return fns[n](*args, **kwargs)
+            nonlocal fns, fn_name, error_msg
+            fn = fns.get(fn_name, None)
+            assert fn, error_msg
+            ret = fn(*args, **kwargs)
+            return ret
 
         return callit
     return wrapit

@@ -171,6 +171,46 @@ def delay_exec(action, f_globals=None, f_locals=None):
 #########################################################
 
 
+def git_info(start_at_caller=True):
+    if start_at_caller:
+        path_root = os.path.abspath(inspect.stack()[1][1])
+    else:
+        path_root = os.path.abspath(os.path.dirname(__file__))
+    try:
+        path_git_head = None
+        while path_root:
+            path_test = os.path.join(path_root, '.git', 'HEAD')
+            if os.path.exists(path_test):
+                # found it!
+                path_git_head = path_test
+                break
+            path_root = os.path.dirname(path_root)  # try next level up
+        if not path_git_head:
+            # could not find .git folder
+            return None
+        path_git_ref = open(path_git_head).read().split()[1]
+        if not path_git_ref.startswith('refs/heads/'):
+            print('git detected, but HEAD uses unexpected format')
+            return None
+        path_git_ref = path_git_ref[len('refs/heads/'):]
+        git_ref_fullpath = os.path.join(path_root, '.git', 'logs', 'refs', 'heads', path_git_ref)
+        if not os.path.exists(git_ref_fullpath):
+            print('git detected, but could not find ref file %s' % git_ref_fullpath)
+            return None
+        log = open(git_ref_fullpath).read().splitlines()
+        commit = log[-1].split()[1]
+        return ('%s %s' % (path_git_ref, commit))
+    except Exception as e:
+        print('An exception occurred while checking git info')
+        print(e)
+    return None
+
+
+
+
+#########################################################
+
+
 
 
 def selection_mouse():
