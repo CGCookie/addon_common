@@ -46,8 +46,9 @@ from .maths import (
 # find functions of object that has key attribute
 def find_fns(obj, key):
     cls = type(obj)
+    fn_type = type(find_fns)
     members = [getattr(cls, k) for k in dir(cls)]
-    methods = [member for member in members if inspect.isfunction(member)]
+    methods = [member for member in members if type(member) == fn_type]
     return [
         (getattr(method, key), method)
         for method in methods
@@ -66,7 +67,7 @@ def still_registered(self, oplist):
         for n in oplist:
             if not hasattr(cur, n): return False
             cur = getattr(cur, n)
-        try:    StructRNA.path_resolve(self, "properties")
+        try: StructRNA.path_resolve(self, "properties")
         except:
             print('no properties!')
             return False
