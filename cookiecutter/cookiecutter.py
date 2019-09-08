@@ -74,6 +74,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
     def invoke(self, context, event):
         self._nav = False
+        self._nav_time = 0
         self._done = False
         self.context = context
 

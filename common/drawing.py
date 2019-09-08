@@ -37,6 +37,7 @@ from mathutils import Matrix
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d
 from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_origin_3d
 
+from .hasher import Hasher
 from .globals import Globals
 from .blender import get_preferences
 from .decorators import blender_version_wrapper
@@ -325,8 +326,8 @@ class Drawing:
         return self.r3d.perspective_matrix if self.r3d else None
 
     def get_view_version(self):
-        m = self.r3d.view_matrix
-        return [v for r in m for v in r] + [self.space.lens]
+        if not self.r3d: return None
+        return Hasher(self.r3d.view_matrix, self.space.lens)
 
     def get_view_matrix_buffer(self):
         if not self.r3d: return None

@@ -42,18 +42,37 @@ class Hasher:
         self.add(other)
         return self
 
+    def __str__(self):
+        return '<Hasher %s>' % str(self.get_hash())
+
+    def __hash__(self):
+        return hash(self.get_hash())
+
     def add(self, *args):
         self._digest = None
         for arg in args:
-            if type(arg) is list:
+            t = type(arg)
+            if t is list:
                 self._hasher.update(bytes('list %d' % len(arg), 'utf8'))
-                self.add(arg)
+                for a in arg: self.add(a)
+            elif t is tuple:
+                self._hasher.update(bytes('tuple %d' % len(arg), 'utf8'))
+                for a in arg: self.add(a)
+            elif t is set:
+                self._hasher.update(bytes('set %d' % len(arg), 'utf8'))
+                for a in arg: self.add(a)
+            elif t is Matrix:
+                self._hasher.update(bytes('matrix', 'utf8'))
+                self.add([v for r in arg for v in r])
+            elif t is Vector:
+                self._hasher.update(bytes('vector %d' % len(arg), 'utf8'))
+                self.add([v for v in arg])
             else:
                 self._hasher.update(bytes(str(arg), 'utf8'))
 
     def get_hash(self):
         if self._digest is None:
-            self._digest == self._hasher.hexdigest()
+            self._digest = self._hasher.hexdigest()
         return self._digest
 
     def __eq__(self, other):
@@ -99,6 +118,16 @@ def hash_object(obj:bpy.types.Object):
 def hash_bmesh(bme:BMesh):
     if bme is None: return None
     assert type(bme) is BMesh, 'Only call hash_bmesh on BMesh objects!'
+
+    bme.verts.ensure_lookup_table()
+    bme.edges.ensure_lookup_table()
+    bme.faces.ensure_lookup_table()
+    return Hasher(
+        [list(v.co) + list(v.normal) + [v.select] for v in bme.verts],
+        [[v.index for v in e.verts] + [e.select] for e in bme.edges],
+        [[v.index for v in f.verts] + [f.select] for f in bme.faces],
+        )
+
     counts = (len(bme.verts), len(bme.edges), len(bme.faces))
     bbox   = BBox(from_bmverts=bme.verts)
     vsum   = tuple(sum((v.co for v in bme.verts), Vector((0,0,0))))
