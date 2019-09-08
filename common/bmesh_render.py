@@ -111,16 +111,16 @@ def glColor(color):
         bgl.glColor4f(*color)
 
 @blender_version_wrapper('<', '2.80')
-def glSetDefaultOptions(opts=None):
+def glSetDefaultOptions():
+    bgl.glDisable(bgl.GL_LIGHTING)
     bgl.glEnable(bgl.GL_MULTISAMPLE)
     bgl.glEnable(bgl.GL_BLEND)
-    bgl.glDisable(bgl.GL_LIGHTING)
     bgl.glEnable(bgl.GL_DEPTH_TEST)
     bgl.glEnable(bgl.GL_POINT_SMOOTH)
     bgl.glEnable(bgl.GL_LINE_SMOOTH)
     bgl.glHint(bgl.GL_LINE_SMOOTH_HINT, bgl.GL_NICEST)
 @blender_version_wrapper('>=', '2.80')
-def glSetDefaultOptions(opts=None):
+def glSetDefaultOptions():
     bgl.glEnable(bgl.GL_MULTISAMPLE)
     bgl.glEnable(bgl.GL_BLEND)
     bgl.glEnable(bgl.GL_DEPTH_TEST)
@@ -210,7 +210,7 @@ def triangulateFace(verts):
         yield (v0, v1, v2)
 
 
-@profiler.profile
+@profiler.function
 def glDrawBMFaces(lbmf, opts=None, enableShader=True):
     opts_ = opts or {}
     nosel = opts_.get('no selection', False)
@@ -223,7 +223,7 @@ def glDrawBMFaces(lbmf, opts=None, enableShader=True):
     bmeshShader.assign('focus_mult', opts_.get('focus mult', 1.0))
     bmeshShader.assign('use_selection', 0.0 if nosel else 1.0)
 
-    @profiler.profile
+    @profiler.function
     def render_general(sx, sy, sz):
         bmeshShader.assign('vert_scale', (sx, sy, sz))
         bmeshShader.assign('selected', 0.0)
@@ -261,7 +261,7 @@ def glDrawBMFaces(lbmf, opts=None, enableShader=True):
                     bmeshShader.assign('vert_pos', c1)
                     bmeshShader.assign('vert_pos', c2)
 
-    @profiler.profile
+    @profiler.function
     def render_triangles(sx, sy, sz):
         # optimized for triangle-only meshes
         # (source meshes that have been triangulated)
@@ -373,7 +373,7 @@ class BGLBufferedRender:
         bgl.glDeleteBuffers(4, self.vbos)
         del self.vbos
 
-    @profiler.profile
+    @profiler.function
     def buffer(self, pos, norm, sel, idx):
         sizeOfFloat, sizeOfInt = 4, 4
         self.count = 0
@@ -443,7 +443,7 @@ class BGLBufferedRender:
             self.count = len(pos)
             self.render_indices = False
 
-    @profiler.profile
+    @profiler.function
     def _check_error(self, title):
         if not self.DEBUG_CHKERR:
             return
@@ -467,7 +467,7 @@ class BGLBufferedRender:
         else:
             print('ERROR (%s): code %d' % (title, err))
 
-    @profiler.profile
+    @profiler.function
     def _draw(self, sx, sy, sz):
         bmeshShader.assign('vert_scale', (sx, sy, sz))
         if self.DEBUG_PRINT:
@@ -483,7 +483,7 @@ class BGLBufferedRender:
             bgl.glDrawArrays(self.gltype, 0, self.count)
             self._check_error('_draw: glDrawArrays (%d)' % self.count)
 
-    @profiler.profile
+    @profiler.function
     def draw(self, opts):
         if self.count == 0:
             return
@@ -545,7 +545,7 @@ class BGLBufferedRender:
         bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, 0)
 
 
-@profiler.profile
+@profiler.function
 def glDrawSimpleFaces(lsf, opts=None, enableShader=True):
     opts_ = opts or {}
     nosel = opts_.get('no selection', False)
@@ -558,7 +558,7 @@ def glDrawSimpleFaces(lsf, opts=None, enableShader=True):
     bmeshShader.assign('use_selection', 0.0 if nosel else 1.0)
     bmeshShader.assign('selected', 0.0)
 
-    @profiler.profile
+    @profiler.function
     def render(sx, sy, sz):
         bmeshShader.assign('vert_scale', (sx, sy, sz))
         for sf in lsf:
@@ -616,7 +616,7 @@ def glDrawBMEdge(bme, opts=None, enableShader=True):
     glDrawBMEdges([bme], opts=opts, enableShader=enableShader)
 
 
-@profiler.profile
+@profiler.function
 def glDrawBMEdges(lbme, opts=None, enableShader=True):
     opts_ = opts or {}
     if opts_.get('line width', 1.0) <= 0.0:
@@ -630,7 +630,7 @@ def glDrawBMEdges(lbme, opts=None, enableShader=True):
 
     bmeshShader.assign('use_selection', 0.0 if nosel else 1.0)
 
-    @profiler.profile
+    @profiler.function
     def render(sx, sy, sz):
         bmeshShader.assign('vert_scale', (sx, sy, sz))
         for bme in lbme:
@@ -690,7 +690,7 @@ def glDrawBMVert(bmv, opts=None, enableShader=True):
     glDrawBMVerts([bmv], opts=opts, enableShader=enableShader)
 
 
-@profiler.profile
+@profiler.function
 def glDrawBMVerts(lbmv, opts=None, enableShader=True):
     opts_ = opts or {}
     if opts_.get('point size', 1.0) <= 0.0:
@@ -706,7 +706,7 @@ def glDrawBMVerts(lbmv, opts=None, enableShader=True):
         bmeshShader.enable()
     bmeshShader.assign('use_selection', 0.0 if nosel else 1.0)
 
-    @profiler.profile
+    @profiler.function
     def render(sx, sy, sz):
         bmeshShader.assign('vert_scale', Vector((sx, sy, sz)))
         for bmv in lbmv:
@@ -756,7 +756,7 @@ def glDrawBMVerts(lbmv, opts=None, enableShader=True):
 
 
 class BMeshRender():
-    @profiler.profile
+    @profiler.function
     def __init__(self, obj, xform=None):
         self.calllist = None
         if type(obj) is bpy.types.Object:
@@ -788,7 +788,7 @@ class BMeshRender():
     def dirty(self):
         self.is_dirty = True
 
-    @profiler.profile
+    @profiler.function
     def clean(self, opts=None):
         if not self.is_dirty: return
 
@@ -804,7 +804,7 @@ class BMeshRender():
         bgl.glDepthRange(0, 1)
         bgl.glEndList()
 
-    @profiler.profile
+    @profiler.function
     def draw(self, opts=None):
         try:
             self.clean(opts=opts)

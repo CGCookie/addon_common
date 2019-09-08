@@ -23,6 +23,7 @@ import bpy
 from bpy.types import Operator
 
 from ..common.debug import debugger
+from ..common.profiler import profiler
 from ..common.useractions import Actions
 
 from .cookiecutter_fsm import CookieCutter_FSM
@@ -98,6 +99,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
     def modal(self, context, event):
         self.context = context
         self.event = event
+
+        profiler.printfile()
 
         if self._done:
             self.actions_end()

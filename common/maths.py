@@ -561,7 +561,7 @@ class Plane(Entity3D):
     def triangle_intersect(self, points: List[Point]):
         return abs(sum(self.side(p) for p in points)) != 3
 
-    @profiler.profile
+    @profiler.function
     def triangle_intersection(self, points: List[Point]):
         l = len(points)
         assert l == 3, 'triangle intersection on non triangle (%d)' % (l,)
@@ -615,7 +615,7 @@ class Plane(Entity3D):
     def edge_intersect(self, points: List[Point]):
         return abs(sum(self.side(p) for p in points)) != 2
 
-    @profiler.profile
+    @profiler.function
     def edge_intersection(self, points: List[Point]):
         s0, s1 = map(self.side, points)
         if abs(s0 + s1) == 2:
@@ -1443,7 +1443,7 @@ class Accel2D:
         verts = [v for e in edges for v in e.verts]
         return Accel2D(verts, edges, [], Point_to_Point2D)
 
-    @profiler.profile
+    @profiler.function
     def __init__(self, verts, edges, faces, Point_to_Point2D):
         self.verts = list(verts) if verts else []
         self.edges = list(edges) if edges else []
@@ -1470,42 +1470,39 @@ class Accel2D:
             self.max = Point2D((1, 1))
         self.size = self.max - self.min
 
-        pr = profiler.start('inserting verts')
-        for (v, v2d) in zip(verts, self.v2Ds):
-            i, j = self.compute_ij(v2d)
-            self._put(i, j, v)
-        pr.done()
+        with profiler.code('inserting verts'):
+            for (v, v2d) in zip(verts, self.v2Ds):
+                i, j = self.compute_ij(v2d)
+                self._put(i, j, v)
 
-        pr = profiler.start('inserting edges')
-        for e in edges:
-            v0, v1 = self.map_v_v2D[e.verts[0]], self.map_v_v2D[e.verts[1]]
-            ij0, ij1 = self.compute_ij(v0), self.compute_ij(v1)
-            mini, minj = min(ij0[0], ij1[0]), min(ij0[1], ij1[1])
-            maxi, maxj = max(ij0[0], ij1[0]), max(ij0[1], ij1[1])
-            for i in range(mini, maxi + 1):
-                for j in range(minj, maxj + 1):
-                    self._put(i, j, e)
-            # v0,v1 = e.verts
-            # self._put_edge(e, self.map_v_v2D[v0], self.map_v_v2D[v1])
-        pr.done()
+        with profiler.code('inserting edges'):
+            for e in edges:
+                v0, v1 = self.map_v_v2D[e.verts[0]], self.map_v_v2D[e.verts[1]]
+                ij0, ij1 = self.compute_ij(v0), self.compute_ij(v1)
+                mini, minj = min(ij0[0], ij1[0]), min(ij0[1], ij1[1])
+                maxi, maxj = max(ij0[0], ij1[0]), max(ij0[1], ij1[1])
+                for i in range(mini, maxi + 1):
+                    for j in range(minj, maxj + 1):
+                        self._put(i, j, e)
+                # v0,v1 = e.verts
+                # self._put_edge(e, self.map_v_v2D[v0], self.map_v_v2D[v1])
 
-        pr = profiler.start('inserting faces')
-        for f in faces:
-            v2ds = [self.map_v_v2D[v] for v in f.verts]
-            if not v2ds:
-                continue
-            ijs = list(map(self.compute_ij, v2ds))
-            mini, minj = min(i for (i, j) in ijs), min(j for (i, j) in ijs)
-            maxi, maxj = max(i for (i, j) in ijs), max(j for (i, j) in ijs)
-            for i in range(mini, maxi + 1):
-                for j in range(minj, maxj + 1):
-                    self._put(i, j, f)
-            # v0 = v2ds[0]
-            # for v1,v2 in zip(v2ds[1:-1],v2ds[2:]):
-            #    self._put_face(f, v0, v1, v2)
-        pr.done()
+        with profiler.code('inserting faces'):
+            for f in faces:
+                v2ds = [self.map_v_v2D[v] for v in f.verts]
+                if not v2ds:
+                    continue
+                ijs = list(map(self.compute_ij, v2ds))
+                mini, minj = min(i for (i, j) in ijs), min(j for (i, j) in ijs)
+                maxi, maxj = max(i for (i, j) in ijs), max(j for (i, j) in ijs)
+                for i in range(mini, maxi + 1):
+                    for j in range(minj, maxj + 1):
+                        self._put(i, j, f)
+                # v0 = v2ds[0]
+                # for v1,v2 in zip(v2ds[1:-1],v2ds[2:]):
+                #    self._put_face(f, v0, v1, v2)
 
-    @profiler.profile
+    @profiler.function
     def compute_ij(self, v2d):
         n = v2d - self.min
         i = int(self.bin_cols * n.x / self.size.x)
@@ -1523,7 +1520,7 @@ class Accel2D:
         t = (i, j)
         return self.bins.get(t, set())
 
-    @profiler.profile
+    @profiler.function
     def clean_invalid(self):
         self.bins = {
             t: {o for o in objs if o.is_valid}
@@ -1575,7 +1572,7 @@ class Accel2D:
             self._put_face(f, v1, v12, v01, depth=depth + 1)
             self._put_face(f, v2, v20, v12, depth=depth + 1)
 
-    @profiler.profile
+    @profiler.function
     def get(self, v2d, within):
         delta = Vec2D((within, within))
         i0, j0 = self.compute_ij(v2d - delta)
@@ -1586,17 +1583,17 @@ class Accel2D:
                 l |= self._get(i, j)
         return {v for v in l if v.is_valid}
 
-    @profiler.profile
+    @profiler.function
     def get_verts(self, v2d, within):
         vert_type = self.vert_type
         return {g for g in self.get(v2d, within) if type(g) is vert_type}
 
-    @profiler.profile
+    @profiler.function
     def get_edges(self, v2d, within):
         edge_type = self.edge_type
         return {g for g in self.get(v2d, within) if type(g) is edge_type}
 
-    @profiler.profile
+    @profiler.function
     def get_faces(self, v2d, within):
         face_type = self.face_type
         return {g for g in self.get(v2d, within) if type(g) is face_type}
@@ -1630,13 +1627,13 @@ class Accel2D:
             working |= {(i-1,j-1), (i,j-1), (i+1,j-1), (i-1,j), (i+1,j), (i-1,j+1), (i,j+1), (i+1,j+1)}
         return Point_to_Point2D(bv.co)
 
-    @profiler.profile
+    @profiler.function
     def nearest_face(self, v2d):
         ########################################
         # XXXX: ONLY FINDING FACE UNDER V2D!!! #
         ########################################
 
-        @profiler.profile
+        @profiler.function
         def intersect_face(bmf):
             pts = [Point_to_Point2D(bmv.co) for bmv in bmf.verts]
             pts = [pt for pt in pts if pt]

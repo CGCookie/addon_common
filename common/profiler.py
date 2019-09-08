@@ -20,8 +20,9 @@ Created by Jonathan Denning, Jonathan Williamson, and Patrick Moore
 '''
 
 import os
-import inspect
 import time
+import inspect
+import contextlib
 
 from .globals import Globals
 
@@ -143,7 +144,7 @@ class Profiler:
         self._clear = True
         self.clear_handler()
 
-    def start(self, text=None, addFile=True):
+    def start(self, text=None, addFile=True, dblBack=False):
         # assert not Profiler._broken
         if Profiler._broken:
             print('Profiler broken. Ignoring')
@@ -152,6 +153,7 @@ class Profiler:
             return ProfilerHelper_Ignore()
 
         frame = inspect.currentframe().f_back
+        if dblBack: frame = frame.f_back
         filename = os.path.basename(frame.f_code.co_filename)
         linenum = frame.f_lineno
         fnname = frame.f_code.co_name
@@ -167,7 +169,28 @@ class Profiler:
         # self.printout()
         pass
 
-    def profile(self, fn):
+    def add_note(self, *args, **kwargs):
+        self.start(*args, dblBack=True, **kwargs).done()
+
+    @contextlib.contextmanager
+    def code(self, *args, enabled=True, **kwargs):
+        if not Profiler._enabled or not enabled:
+            yield None
+            return
+        try:
+            pr = self.start(*args, dblBack=True, **kwargs)
+            yield pr
+            pr.done()
+        except Exception as exc:
+            pr.done()
+            print('Caught exception while profiling:', args, kwargs)
+            Globals.debugger.print_exception()
+            raise e
+
+    def function(self, fn):
+        if not Profiler._enabled:
+            return fn
+
         frame = inspect.currentframe().f_back
         f_locals = frame.f_locals
         filename = os.path.basename(frame.f_code.co_filename)
