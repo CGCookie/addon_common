@@ -48,6 +48,67 @@ from .debug import dprint, debugger
 from .utils import find_fns
 
 
+class Cursors:
+    # https://docs.blender.org/api/current/bpy.types.Window.html#bpy.types.Window.cursor_set
+    _cursors = {
+
+        # blender cursors
+        'DEFAULT':      'DEFAULT',
+        'NONE':         'NONE',
+        'WAIT':         'WAIT',
+        'CROSSHAIR':    'CROSSHAIR',
+        'MOVE_X':       'MOVE_X',
+        'MOVE_Y':       'MOVE_Y',
+        'KNIFE':        'KNIFE',
+        'TEXT':         'TEXT',
+        'PAINT_BRUSH':  'PAINT_BRUSH',
+        'HAND':         'HAND',
+        'SCROLL_X':     'SCROLL_X',
+        'SCROLL_Y':     'SCROLL_Y',
+        'EYEDROPPER':   'EYEDROPPER',
+
+        # lower case version of blender cursors
+        'default':      'DEFAULT',
+        'none':         'NONE',
+        'wait':         'WAIT',
+        'crosshair':    'CROSSHAIR',
+        'move_x':       'MOVE_X',
+        'move_y':       'MOVE_Y',
+        'knife':        'KNIFE',
+        'text':         'TEXT',
+        'paint_brush':  'PAINT_BRUSH',
+        'hand':         'HAND',
+        'scroll_x':     'SCROLL_X',
+        'scroll_y':     'SCROLL_Y',
+        'eyedropper':   'EYEDROPPER',
+    }
+
+    @staticmethod
+    def __getattr__(cursor):
+        assert cursor in Cursors._cursors
+        return Cursors._cursors.get(cursor, 'DEFAULT')
+
+    @staticmethod
+    def set(cursor):
+        cursor = Cursors._cursors.get(cursor, 'DEFAULT')
+        for wm in bpy.data.window_managers:
+            for win in wm.windows:
+                win.cursor_modal_set(cursor)
+
+    @property
+    @staticmethod
+    def cursor(): return 'DEFAULT'   # TODO: how to get??
+    @cursor.setter
+    @staticmethod
+    def cursor(cursor): Cursors.set(cursor)
+
+    @staticmethod
+    def warp(x, y): bpy.context.window.cursor_warp(x, y)
+
+Globals.set(Cursors())
+
+
+
 class Drawing:
     _instance = None
     _dpi_mult = 1
@@ -96,12 +157,7 @@ class Drawing:
         self.window = window
 
     @staticmethod
-    def set_cursor(cursor):
-        # DEFAULT, NONE, WAIT, CROSSHAIR, MOVE_X, MOVE_Y, KNIFE, TEXT,
-        # PAINT_BRUSH, HAND, SCROLL_X, SCROLL_Y, SCROLL_XY, EYEDROPPER
-        for wm in bpy.data.window_managers:
-            for win in wm.windows:
-                win.cursor_modal_set(cursor)
+    def set_cursor(cursor): Cursors.set(cursor)
 
     def scale(self, s): return s * self._dpi_mult if s is not None else None
     def unscale(self, s): return s / self._dpi_mult if s is not None else None

@@ -2358,7 +2358,7 @@ class UI_Document(UI_Document_FSM):
 
         if change_cursor and self._under_mouse and self._under_mouse._tagName != 'body':
             cursor = self._under_mouse._computed_styles.get('cursor', 'default')
-            Globals.drawing.set_cursor(convert_token_to_cursor(cursor))
+            Globals.cursors.set(convert_token_to_cursor(cursor))
 
         if self._under_mouse == self._last_under_mouse: return
 
@@ -2376,7 +2376,7 @@ class UI_Document(UI_Document_FSM):
 
     @UI_Document_FSM.FSM_State('main', 'enter')
     def modal_main_enter(self):
-        Globals.drawing.set_cursor('DEFAULT')
+        Globals.cursors.set('DEFAULT')
 
     @UI_Document_FSM.FSM_State('main')
     def modal_main(self):
@@ -2413,7 +2413,7 @@ class UI_Document(UI_Document_FSM):
         self._scroll_point = self._mouse
         self._scroll_last = RelPoint2D((e.scrollLeft, e.scrollTop))
         self.ignore_hover_change = True
-        Globals.drawing.set_cursor('SCROLL_Y')
+        Globals.cursors.set('SCROLL_Y')
 
     @UI_Document_FSM.FSM_State('scroll')
     def modal_scroll(self):

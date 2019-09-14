@@ -23,9 +23,11 @@ def get_state(state, substate):
 class FSM:
     def __init__(self):
         self.wrapper = self._create_wrapper()
+        self.onlyinstate_wrapper = self._create_onlyinstate_wrapper()
 
     def _create_wrapper(self):
         fsm = self
+        seen = set()
         class FSM_State:
             def __init__(self, state, substate='main'):
                 self.state = state
@@ -34,6 +36,9 @@ class FSM:
             def __call__(self, fn):
                 self.fn = fn
                 self.fnname = fn.__name__
+                if self.fnname in seen:
+                    print('FSM Warning: detected two functions with same name: "%s"' % self.fnname)
+                seen.add(self.fnname)
                 def run(*args, **kwargs):
                     try:
                         return fn(*args, **kwargs)
@@ -50,6 +55,32 @@ class FSM:
                 # print('%s: registered %s as %s' % (str(fsm), self.fnname, run.fsmstate_full))
                 return run
         return FSM_State
+
+    def _create_onlyinstate_wrapper(self):
+        fsm = self
+        class FSM_OnlyInState:
+            def __init__(self, state, default=None):
+                self.state = state
+                self.default = default
+            def __call__(self, fn):
+                self.fn = fn
+                self.fnname = fn.__name__
+                def run(*args, **kwargs):
+                    if fsm.state != self.state:
+                        return self.default
+                    try:
+                        return fn(*args, **kwargs)
+                    except Exception as e:
+                        print('Caught exception in function "%s" ("%s", "%s")' % (
+                            self.fnname, self.state, self.substate
+                        ))
+                        debugger.print_exception()
+                        print(e)
+                        return self.default
+                run.fnname = self.fnname
+                run.fsmstate = self.state
+                return run
+        return FSM_OnlyInState
 
     def init(self, obj, start='main'):
         self._obj = obj
