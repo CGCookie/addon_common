@@ -30,7 +30,7 @@ from ..common.blender import toggle_screen_header, toggle_screen_toolbar, toggle
 
 
 class CookieCutter_Blender:
-    def blenderui_init(self):
+    def _cc_blenderui_init(self):
         self._area = self.context.area
         self._space = self.context.space_data
         self._window = self.context.window
@@ -41,7 +41,7 @@ class CookieCutter_Blender:
         self.panels_store()
         self.overlays_store()
 
-    def blenderui_end(self):
+    def _cc_blenderui_end(self):
         self.overlays_restore()
         self.panels_restore()
         self.manipulator_restore()
@@ -79,7 +79,7 @@ class CookieCutter_Blender:
     #########################################
     # Panels
 
-    def panels_get_details(self):
+    def _cc_panels_get_details(self):
         # regions for 3D View:
         #     279: [ HEADER, TOOLS, TOOL_PROPS, UI,  WINDOW ]
         #     280: [ HEADER, TOOLS, UI,         HUD, WINDOW ]
@@ -93,7 +93,7 @@ class CookieCutter_Blender:
         return (rgn_header, rgn_toolshelf, rgn_properties, rgn_hud)
 
     def panels_store(self):
-        rgn_header,rgn_toolshelf,rgn_properties,rgn_hud = self.panels_get_details()
+        rgn_header,rgn_toolshelf,rgn_properties,rgn_hud = self._cc_panels_get_details()
         show_header,show_toolshelf,show_properties = rgn_header.height>1, rgn_toolshelf.width>1, rgn_properties.width>1
         show_hud = rgn_hud.width>1 if rgn_hud else False
         self._show_header = show_header
@@ -102,7 +102,7 @@ class CookieCutter_Blender:
         self._show_hud = show_hud
 
     def panels_restore(self):
-        rgn_header,rgn_toolshelf,rgn_properties,rgn_hud = self.panels_get_details()
+        rgn_header,rgn_toolshelf,rgn_properties,rgn_hud = self._cc_panels_get_details()
         show_header,show_toolshelf,show_properties = rgn_header.height>1, rgn_toolshelf.width>1, rgn_properties.width>1
         show_hud = rgn_hud.width>1 if rgn_hud else False
         ctx = {
@@ -118,7 +118,7 @@ class CookieCutter_Blender:
         if self._show_hud and not show_hud: toggle_screen_lastop(ctx)
 
     def panels_hide(self):
-        rgn_header,rgn_toolshelf,rgn_properties,rgn_hud = self.panels_get_details()
+        rgn_header,rgn_toolshelf,rgn_properties,rgn_hud = self._cc_panels_get_details()
         show_header,show_toolshelf,show_properties = rgn_header.height>1, rgn_toolshelf.width>1, rgn_properties.width>1
         show_hud = rgn_hud.width>1 if rgn_hud else False
         ctx = {

@@ -64,20 +64,28 @@ class CookieCutter_UI:
     drawcallbacks = DrawCallbacks()
     Draw = drawcallbacks.wrapper
 
-    def ui_init(self):
+    def _cc_ui_init(self):
         self.document = Globals.ui_document # UI_Document(self.context)
         self.document.init(self.context)
         self.drawing = Globals.drawing
-        self.drawing.set_region(bpy.context.space_data, bpy.context.region, bpy.context.space_data.region_3d, bpy.context.window)
-        self.blenderui_init()
+        self.drawing.set_region(bpy.context.area, bpy.context.space_data, bpy.context.region, bpy.context.space_data.region_3d, bpy.context.window)
+        self._cc_blenderui_init()
         self.drawcallbacks.init(self)
+        self._ignore_ui_events = False
         self._area.tag_redraw()
+
+    @property
+    def ignore_ui_events(self):
+        return self._ignore_ui_events
+    @ignore_ui_events.setter
+    def ignore_ui_events(self, v):
+        self._ignore_ui_events = bool(v)
 
     def _draw_pre3d(self):  self.drawcallbacks.pre3d()
     def _draw_post3d(self): self.drawcallbacks.post3d()
     def _draw_post2d(self): self.drawcallbacks.post2d()
 
-    def ui_start(self):
+    def _cc_ui_start(self):
         def preview():
             self._draw_pre3d()
         def postview():
@@ -103,21 +111,22 @@ class CookieCutter_UI:
         self._handle_postpixel = self._space.draw_handler_add(postpixel, tuple(), 'WINDOW', 'POST_PIXEL')
         self._area.tag_redraw()
 
-    def ui_update(self):
+    def _cc_ui_update(self):
         # print('\x1b[2J', end='')
         # print('\033c', end='')
         # print('\n' * 2, end='')
         # print('--------- ' + str(random.random()))
         self.drawing.update_dpi()
-        #self._area.tag_redraw()
+        if self._ignore_ui_events:
+            return False
         ret = self.document.update(self.context, self.event)
         # ret = self.wm.modal(self.context, self.event)
         #if self.wm.has_focus(): return True
         if ret and 'hover' in ret: return True
         return False
 
-    def ui_end(self):
-        self.blenderui_end()
+    def _cc_ui_end(self):
+        self._cc_blenderui_end()
         self._space.draw_handler_remove(self._handle_preview,   'WINDOW')
         self._space.draw_handler_remove(self._handle_postview,  'WINDOW')
         self._space.draw_handler_remove(self._handle_postpixel, 'WINDOW')
@@ -130,7 +139,7 @@ class CookieCutter_UI:
     # Region Darkening
 
     @blender_version_wrapper("<=", "2.79")
-    def region_draw_cover(self):
+    def _cc_region_draw_cover(self):
         bgl.glPushAttrib(bgl.GL_ALL_ATTRIB_BITS)
         bgl.glMatrixMode(bgl.GL_PROJECTION)
         bgl.glPushMatrix()
@@ -147,7 +156,7 @@ class CookieCutter_UI:
         bgl.glPopMatrix()
         bgl.glPopAttrib()
     @blender_version_wrapper(">=", "2.80")
-    def region_draw_cover(self):
+    def _cc_region_draw_cover(self):
         bgl.glEnable(bgl.GL_BLEND)
         bgl.glDisable(bgl.GL_DEPTH_TEST)
         shader.bind()
@@ -172,14 +181,14 @@ class CookieCutter_UI:
         s = SpaceView3D
         for a in ['TOOLS', 'UI', 'HEADER', 'TOOL_PROPS']:
             try:
-                cb = s.draw_handler_add(self.region_draw_cover, tuple(), a, 'POST_PIXEL')
+                cb = s.draw_handler_add(self._cc_region_draw_cover, tuple(), a, 'POST_PIXEL')
                 self._postpixel_callbacks += [(s, a, cb)]
             except:
                 pass
         for s in spaces:
             for a in areas:
                 try:
-                    cb = s.draw_handler_add(self.region_draw_cover, tuple(), a, 'POST_PIXEL')
+                    cb = s.draw_handler_add(self._cc_region_draw_cover, tuple(), a, 'POST_PIXEL')
                     self._postpixel_callbacks += [(s, a, cb)]
                 except:
                     pass

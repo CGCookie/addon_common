@@ -25,7 +25,6 @@ import bgl
 import ctypes
 
 from .globals import Globals
-from .drawing import Drawing
 from .debug import dprint
 
 from ..ext.bgl_ext import VoidBufValue
@@ -44,7 +43,7 @@ DEBUG_PRINT = False
 
 vbv_zero = VoidBufValue(0)
 buf_zero = vbv_zero.buf    #bgl.Buffer(bgl.GL_BYTE, 1, [0])
-
+Globals.buf_zero = buf_zero
 
 class Shader():
     @staticmethod
@@ -291,9 +290,9 @@ class Shader():
             print('assign (enable=%s) vertattrib pointer: %s (%s,%d,%s) = %d (%dx%s,normalized=%s,stride=%d)' % (str(enable), varName, q, l, t, vbo, size, self.gltype_names[gltype], str(normalized),stride))
         bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, vbo)
         bgl.glVertexAttribPointer(l, size, gltype, normalized, stride, buf)
-        if self.checkErrors:
-            self.drawing.glCheckError('vertexAttribPointer %s' % varName)
+        if self.checkErrors: self.drawing.glCheckError('vertexAttribPointer %s' % varName)
         if enable: bgl.glEnableVertexAttribArray(l)
+        if self.checkErrors: self.drawing.glCheckError('vertexAttribPointer %s' % varName)
         bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, 0)
 
     def disableVertexAttribArray(self, varName):

@@ -33,16 +33,17 @@ from concurrent.futures import ThreadPoolExecutor
 import bpy
 import bgl
 from bpy.types import BoolProperty
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d
 from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_origin_3d
 
 from .hasher import Hasher
 from .globals import Globals
-from .blender import get_preferences
+from .shaders import Shader
+from .blender import get_preferences, bversion
 from .decorators import blender_version_wrapper
 from .fontmanager import FontManager as fm
-from .maths import Point2D, Vec2D, Point, Ray, Direction, mid
+from .maths import Point2D, Vec2D, Point, Ray, Direction, mid, Color
 from .profiler import profiler
 from .debug import dprint, debugger
 from .utils import find_fns
@@ -109,6 +110,45 @@ Globals.set(Cursors())
 
 
 
+
+if bversion() >= "2.80":
+    import gpu
+    from gpu_extras.batch import batch_for_shader
+
+    # https://docs.blender.org/api/blender2.8/gpu.html#triangle-with-custom-shader
+    vshader_lineseg = '''
+        uniform mat4 MVPMatrix;
+        uniform vec2 pos0;
+        uniform vec2 pos1;
+        uniform float width;
+        in vec2 pos;
+        out float dist;
+        void main() {
+            vec2 v01 = pos1 - pos0;
+            vec2 d01 = normalize(v01);
+            vec2 perp = vec2(-d01.y, d01.x);
+            vec2 p = pos0 + (pos.x * v01) + (width * (pos.y - 0.5) * perp);
+            gl_Position = MVPMatrix * vec4(p, 0.0, 1.0);
+            dist = length(v01) * pos.x;
+        }
+    '''
+    fshader_lineseg = '''
+        uniform vec2 stipple;
+        uniform float stippleOffset;
+        uniform vec4 color;
+        in float dist;
+        void main() {
+            float s = mod(dist + stippleOffset, stipple.x + stipple.y);
+            if(s > stipple.x) discard;
+            gl_FragColor = color;
+        }
+    '''
+    shader_lineseg = gpu.types.GPUShader(vshader_lineseg, fshader_lineseg)
+    # create batch to draw large triangle that covers entire clip space (-1,-1)--(+1,+1)
+    batch_lineseg = batch_for_shader(shader_lineseg, 'TRIS', {"pos": [(0,0), (1,0), (1,1), (0,0), (1,1), (0,1)]})
+
+
+
 class Drawing:
     _instance = None
     _dpi_mult = 1
@@ -142,7 +182,7 @@ class Drawing:
     def __init__(self):
         assert hasattr(self, '_creating'), "Do not instantiate directly.  Use Drawing.get_instance()"
 
-        self.space,self.rgn,self.r3d,self.window = None,None,None,None
+        self.area,self.space,self.rgn,self.r3d,self.window = None,None,None,None,None
         # self.font_id = 0
         self.fontsize = None
         self.fontsize_scaled = None
@@ -150,7 +190,8 @@ class Drawing:
         self.size_cache = {}
         self.set_font_size(12)
 
-    def set_region(self, space, rgn, r3d, window):
+    def set_region(self, area, space, rgn, r3d, window):
+        self.area = area
         self.space = space
         self.rgn = rgn
         self.r3d = r3d
@@ -258,80 +299,31 @@ class Drawing:
         if enable: self.enable_stipple()
         else: self.disable_stipple()
 
-    def text_draw2D(self, text, pos:Point2D, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
+    @blender_version_wrapper('<', '2.80')
+    def text_color_set(self, color, fontid):
+        if color is not None: bgl.glColor4f(*color)
+    @blender_version_wrapper('>=', '2.80')
+    def text_color_set(self, color, fontid):
+        if color is not None: fm.color(color, fontid=fontid)
+
+    def text_draw2D(self, text, pos:Point2D, *, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
         if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
 
         lines = str(text).splitlines()
         l,t = round(pos[0]),round(pos[1])
-        lh = self.line_height
-        lb = self.line_base
+        lh,lb = self.line_height,self.line_base
 
-        if dropshadow: self.text_draw2D(text, (l+1,t-1), color=dropshadow, fontsize=fontsize, fontid=fontid, lineheight=lineheight)
+        if dropshadow:
+            self.text_draw2D(text, (l+1,t-1), color=dropshadow, fontsize=fontsize, fontid=fontid, lineheight=lineheight)
 
         bgl.glEnable(bgl.GL_BLEND)
-        if color is not None:
-            # bgl.glColor4f(*color) # 2.79
-            fm.color(color, fontid=fontid) # 2.80
+        self.text_color_set(color, fontid)
         for line in lines:
             fm.draw(line, xyz=(l, t - lb, 0), fontid=fontid)
-            if lineheight: t -= lh # self.get_line_height(line)
-            else: t -= self.get_text_height(line)
+            t -= lh if lineheight else self.get_text_height(line)
 
         if fontsize: self.set_font_size(size_prev, fontid=fontid)
 
-    def text_draw2D_simple(self, text, pos:Point2D, color=None):
-        l,t = round(pos[0]),round(pos[1])
-        lh = self.line_height
-        lb = self.line_base
-
-        bgl.glEnable(bgl.GL_BLEND)
-        if color is not None:
-            # bgl.glColor4f(*color) # 2.79
-            fm.color(color, fontid=fontid) # 2.80
-        fm.draw(line, xyz=(l, t - lb, 0), fontid=fontid)
-
-
-    @blender_version_wrapper('<=','2.79')
-    def text_draw2D_simple(self, text, pos:Point2D, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
-        if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
-
-        lines = str(text).splitlines()
-        l,t = round(pos[0]),round(pos[1])
-        lh = self.line_height
-        lb = self.line_base
-
-        if dropshadow: self.text_draw2D_simple(text, (l+1,t-1), color=dropshadow, fontsize=fontsize, fontid=fontid, lineheight=lineheight)
-
-        bgl.glEnable(bgl.GL_BLEND)
-        if color is not None: bgl.glColor4f(*color)
-        for line in lines:
-            th = self.get_line_height(line) if lineheight else self.get_text_height(line)
-            fm.draw(line, xyz=(l, t-lb, 0), fontid=fontid)
-            # blf.position(self.font_id, l, t - lb, 0)
-            # blf.draw(self.font_id, line)
-            t -= lh
-
-        if fontsize: self.set_font_size(size_prev, fontid=fontid)
-
-    @blender_version_wrapper('>=', '2.80')
-    def text_draw2D_simple(self, text, pos:Point2D, color=None, dropshadow=None, fontsize=None, fontid=None, lineheight=True):
-        if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
-
-        lines = str(text).splitlines()
-        l,t = round(pos[0]),round(pos[1])
-        lh = self.line_height
-        lb = self.line_base
-
-        if dropshadow: self.text_draw2D_simple(text, (l+1,t-1), color=dropshadow, fontsize=fontsize, fontid=fontid, lineheight=lineheight)
-
-        bgl.glEnable(bgl.GL_BLEND)
-        if color is not None: fm.color(color, fontid=fontid)
-        for line in lines:
-            th = self.get_line_height(line) if lineheight else self.get_text_height(line)
-            fm.draw(line, xyz=(l, t-lb, 0), fontid=fontid)
-            t -= lh
-
-        if fontsize: self.set_font_size(size_prev, fontid=fontid)
 
     def get_mvp_matrix(self, view3D=True):
         '''
@@ -443,6 +435,7 @@ class Drawing:
             # blf.position(self.font_id, l, y, 0)
             # blf.draw(self.font_id, line)
 
+    @blender_version_wrapper('<', '2.80')
     def glCheckError(self, title):
         err = bgl.glGetError()
         if err == bgl.GL_NO_ERROR: return
@@ -461,6 +454,23 @@ class Drawing:
         else:
             print('ERROR (%s): code %d' % (title, err))
         traceback.print_stack()
+    @blender_version_wrapper('>=', '2.80')
+    def glCheckError(self, title):
+        err = bgl.glGetError()
+        if err == bgl.GL_NO_ERROR: return
+
+        derrs = {
+            bgl.GL_INVALID_ENUM: 'invalid enum',
+            bgl.GL_INVALID_VALUE: 'invalid value',
+            bgl.GL_INVALID_OPERATION: 'invalid operation',
+            bgl.GL_OUT_OF_MEMORY: 'out of memory',
+            bgl.GL_INVALID_FRAMEBUFFER_OPERATION: 'invalid framebuffer operation',
+        }
+        if err in derrs:
+            print('ERROR (%s): %s' % (title, derrs[err]))
+        else:
+            print('ERROR (%s): code %d' % (title, err))
+        traceback.print_stack()
 
     def Point2D_to_Ray(self, p2d):
         o = Point(region_2d_to_origin_3d(self.rgn, self.r3d, p2d))
@@ -469,6 +479,69 @@ class Drawing:
 
     def Point_to_Point2D(self, p3d):
         return Point2D(location_3d_to_region_2d(self.rgn, self.r3d, p3d))
+
+    # draw line segment in screen space
+    @blender_version_wrapper('<', '2.80')
+    def draw2D_line(self, p0:Point2D, p1:Point2D, color:Color, *, width=1, stipple=None, offset=0):
+        if not hasattr(Drawing, '_line_data'):
+            sizeOfFloat, sizeOfInt = 4, 4
+            vbos = bgl.Buffer(bgl.GL_INT, 1)
+            bgl.glGenBuffers(1, vbos)
+            vbo_weights = vbos[0]
+            bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, vbo_weights)
+            weights = [[0,0], [1,0], [1,1], [0,0], [1,1], [0,1]]
+            weightsSize = [len(weights), len(weights[0])]
+            buf_weights = bgl.Buffer(bgl.GL_FLOAT, weightsSize, weights)
+            bgl.glBufferData(bgl.GL_ARRAY_BUFFER, weightsSize[0] * weightsSize[1] * sizeOfFloat, buf_weights, bgl.GL_STATIC_DRAW)
+            del buf_weights
+            bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, 0)
+            shader = Shader.load_from_file('linesegment', 'linesegment.glsl')
+            Drawing._line_data = {
+                'vbos': vbos,
+                'vbo_weights': vbo_weights,
+                'gltype': bgl.GL_TRIANGLES,
+                'shader': shader,
+                'size_weights': weightsSize,
+            }
+        width = self.scale(width)
+        stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
+        offset = self.scale(offset)
+        d = Drawing._line_data
+        shader = d['shader']
+
+        shader.enable()
+        shader.assign('uScreenSize', (self.area.width, self.area.height))
+        shader.assign('uPos0', p0)
+        shader.assign('uPos1', p1)
+        shader.assign('uColor', color)
+        shader.assign('uWidth', width)
+        shader.assign('uStipple', stipple)
+        shader.assign('uStippleOffset', offset)
+        mvpmatrix_buffer = bgl.Buffer(bgl.GL_FLOAT, [4,4], self.get_pixel_matrix())
+        shader.assign('uMVPMatrix', mvpmatrix_buffer)
+        shader.vertexAttribPointer(d['vbo_weights'], 'aWeight', d['size_weights'][1], bgl.GL_FLOAT)
+        bgl.glDrawArrays(d['gltype'], 0, d['size_weights'][0])
+        shader.disableVertexAttribArray('aWeight')
+        shader.disable()
+
+    # draw line segment in screen space
+    @blender_version_wrapper('>=', '2.80')
+    def draw2D_line(self, p0:Point2D, p1:Point2D, color:Color, *, width=1, stipple=None, offset=0):
+        width = self.scale(width)
+        stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
+        offset = self.scale(offset)
+        shader_lineseg.bind()
+        shader_lineseg.uniform_float('pos0', p0)
+        shader_lineseg.uniform_float('pos1', p1)
+        shader_lineseg.uniform_float('color', color)
+        shader_lineseg.uniform_float('width', width)
+        shader_lineseg.uniform_float('stipple', stipple)
+        shader_lineseg.uniform_float('stippleOffset', offset)
+        shader_lineseg.uniform_float('MVPMatrix', self.get_pixel_matrix())
+        batch_lineseg.draw(shader_lineseg)
+        gpu.shader.unbind()
+
+
 
 Drawing.initialize()
 

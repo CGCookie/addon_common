@@ -77,10 +77,11 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self._nav_time = 0
         self._done = False
         self.context = context
+        self.event = None
 
-        self.fsm_init()
-        self.ui_init()
-        self.actions_init()
+        self._cc_fsm_init()
+        self._cc_ui_init()
+        self._cc_actions_init()
 
         try:
             self.start()
@@ -89,7 +90,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
             debugger.print_exception()
             raise e
 
-        self.ui_start()
+        self._cc_ui_start()
 
         self.context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
@@ -104,8 +105,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         profiler.printfile()
 
         if self._done:
-            self.actions_end()
-            self.ui_end()
+            self._cc_actions_end()
+            self._cc_ui_end()
             try:
                 if self._done == 'commit':
                     self.end_commit()
@@ -124,9 +125,9 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
         ret = None
 
-        self.actions_update()
+        self._cc_actions_update()
 
-        if self.ui_update():
+        if self._cc_ui_update():
             ret = {'RUNNING_MODAL'}
         else:
             # allow window actions to pass through to Blender
@@ -151,17 +152,17 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
         if ret: return ret
 
-        self.fsm_update()
+        self._cc_fsm_update()
         return {'RUNNING_MODAL'}
 
-    def actions_init(self):
+    def _cc_actions_init(self):
         self.actions = Actions(self.context, self.default_keymap)
         self._timer = self.context.window_manager.event_timer_add(1.0 / 120, window=self.context.window)
 
-    def actions_update(self):
+    def _cc_actions_update(self):
         self.actions.update(self.context, self.event, self._timer, print_actions=False)
 
-    def actions_end(self):
+    def _cc_actions_end(self):
         self.context.window_manager.event_timer_remove(self._timer)
         del self._timer
 

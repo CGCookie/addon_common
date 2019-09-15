@@ -2121,8 +2121,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     ts = self._parent._textshadow
                     if ts != 'none':
                         tsx,tsy,tsc = ts
-                        Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+tsx, self._t-tsy), color=tsc)
-                    Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
+                        Globals.drawing.text_draw2D(self._innerTextAsIs, (self._l+tsx, self._t-tsy), color=tsc)
+                    Globals.drawing.text_draw2D(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
                     # no need to reset prev size, since parent will do that
 
             elif self._src == 'image':

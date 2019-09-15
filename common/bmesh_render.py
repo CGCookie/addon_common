@@ -459,8 +459,7 @@ class BGLBufferedRender:
             bgl.GL_STACK_OVERFLOW: 'stack overflow',
             bgl.GL_STACK_UNDERFLOW: 'stack underflow',
             bgl.GL_OUT_OF_MEMORY: 'out of memory',
-            bgl.GL_INVALID_FRAMEBUFFER_OPERATION:
-                'invalid framebuffer operation',
+            bgl.GL_INVALID_FRAMEBUFFER_OPERATION: 'invalid framebuffer operation',
         }
         if err in derrs:
             print('ERROR (%s): %s' % (title, derrs[err]))
@@ -506,14 +505,11 @@ class BGLBufferedRender:
         bmeshShader.assign('normal_offset', opts.get('normal offset', 0.0))
         bmeshShader.assign('constrain_offset', 1.0 if opts.get('constrain offset', True) else 0.0)
 
-        bmeshShader.vertexAttribPointer(
-            self.vbo_pos,  'vert_pos',  3, bgl.GL_FLOAT, buf=buf_zero)
+        bmeshShader.vertexAttribPointer(self.vbo_pos,  'vert_pos',  3, bgl.GL_FLOAT)
         self._check_error('draw: vertex attrib array pos')
-        bmeshShader.vertexAttribPointer(
-            self.vbo_norm, 'vert_norm', 3, bgl.GL_FLOAT, buf=buf_zero)
+        bmeshShader.vertexAttribPointer(self.vbo_norm, 'vert_norm', 3, bgl.GL_FLOAT)
         self._check_error('draw: vertex attrib array norm')
-        bmeshShader.vertexAttribPointer(
-            self.vbo_sel,  'selected',  1, bgl.GL_FLOAT, buf=buf_zero)
+        bmeshShader.vertexAttribPointer(self.vbo_sel,  'selected',  1, bgl.GL_FLOAT)
         self._check_error('draw: vertex attrib array sel')
         bgl.glBindBuffer(bgl.GL_ELEMENT_ARRAY_BUFFER, self.vbo_idx)
         self._check_error('draw: element array buffer idx')

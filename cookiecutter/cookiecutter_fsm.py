@@ -20,9 +20,9 @@ class CookieCutter_FSM:
     fsm = FSM()
     FSM_State = fsm.wrapper
 
-    def fsm_init(self):
+    def _cc_fsm_init(self):
         self.fsm.init(self, start='main')
 
-    def fsm_update(self):
+    def _cc_fsm_update(self):
         self.fsm.update()
 
