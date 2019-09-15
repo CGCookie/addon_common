@@ -139,6 +139,10 @@ def matrix_vector_mult(mat, vec): return mat * vec
 @blender_version_wrapper('>=', '2.80')
 def matrix_vector_mult(mat, vec): return mat @ vec
 
+@blender_version_wrapper('<', '2.80')
+def quat_vector_mult(quat, vec): return quat * vec
+@blender_version_wrapper('>=', '2.80')
+def quat_vector_mult(quat, vec): return quat @ vec
 
 #############################################################
 # TODO: generalize these functions to be add_object, etc.
