@@ -148,37 +148,27 @@ def quat_vector_mult(quat, vec): return quat @ vec
 # TODO: generalize these functions to be add_object, etc.
 
 @blender_version_wrapper('<=','2.79')
-def set_object_layers(o):
-    o.layers = list(bpy.context.scene.layers)
+def set_object_layers(o): o.layers = list(bpy.context.scene.layers)
 @blender_version_wrapper('>=','2.80')
-def set_object_layers(o):
-    print('unhandled: set_object_layers')
-    pass
+def set_object_layers(o): print('unhandled: set_object_layers')
 
 @blender_version_wrapper('<=','2.79')
-def set_object_selection(o, sel):
-    o.select = sel
+def set_object_selection(o, sel): o.select = sel
 @blender_version_wrapper('>=','2.80')
-def set_object_selection(o, sel):
-    o.select_set('SELECT' if sel else 'DESELECT')
+def set_object_selection(o, sel): o.select_set('SELECT' if sel else 'DESELECT')
 
 @blender_version_wrapper('<=','2.79')
-def link_object(o):
-    bpy.context.scene.objects.link(o)
+def link_object(o): bpy.context.scene.objects.link(o)
 @blender_version_wrapper('>=','2.80')
-def link_object(o):
-    bpy.context.scene.collection.objects.link(o)
+def link_object(o): bpy.context.scene.collection.objects.link(o)
 
 @blender_version_wrapper('<=','2.79')
-def set_active_object(o):
-    bpy.context.scene.objects.active = o
+def set_active_object(o): bpy.context.scene.objects.active = o
 @blender_version_wrapper('>=','2.80')
-def set_active_object(o):
-    bpy.context.window.view_layer.objects.active = o
+def set_active_object(o): bpy.context.window.view_layer.objects.active = o
 
 @blender_version_wrapper('<=', '2.79')
-def toggle_screen_header(ctx):
-    bpy.ops.screen.header(ctx)
+def toggle_screen_header(ctx): bpy.ops.screen.header(ctx)
 @blender_version_wrapper('>=', '2.80')
 def toggle_screen_header(ctx):
     space = ctx['space_data'] if type(ctx) is dict else ctx.space_data
