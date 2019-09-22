@@ -13,6 +13,8 @@ https://github.com/CGCookie/retopoflow
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+import inspect
+
 from ..common.debug import debugger
 from ..common.utils import find_fns
 
@@ -37,7 +39,10 @@ class FSM:
                 self.fn = fn
                 self.fnname = fn.__name__
                 if self.fnname in seen:
-                    print('FSM Warning: detected two functions with same name: "%s"' % self.fnname)
+                    print('FSM Warning: detected multiple functions with same name: "%s"' % self.fnname)
+                    st = inspect.stack()
+                    f = st[1]
+                    print('  %s:%d' % (f.filename, f.lineno))
                 seen.add(self.fnname)
                 def run(*args, **kwargs):
                     try:
