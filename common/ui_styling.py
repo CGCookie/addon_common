@@ -107,7 +107,7 @@ Things to think about:
 
 '''
 
-token_attribute = r'\[(?P<key>[-a-zA-Z_]+)((?P<op>=)"(?P<val>[^"]+)")?\]'
+token_attribute = r'\[(?P<key>[-a-zA-Z_]+)((?P<op>=)"(?P<val>[^"]*)")?\]'
 
 token_rules = [
     ('ignore', skip_token, [

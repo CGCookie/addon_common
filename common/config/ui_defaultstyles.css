@@ -127,6 +127,7 @@ span {
     border-width: 0px;
 }
 
+/* make sure we handle cases correctly! */
 input {
     background: red;
 }
@@ -194,62 +195,6 @@ dialog.framed > div.inside {
     border-color: rgba(0,0,0,1.0) rgba(0,0,0,0.25) rgba(0,0,0,0.25) rgba(0,0,0,0.25);
     padding: 5px 2px 2px 2px;
 }
-
-span.inputtext {
-    margin: 0px;
-    position: relative; /*relative;*/
-    left: 0px;
-    top: 0px;
-    width: 100%;
-    min-height: 28px;
-    padding: 0px;
-    display: block;
-    background: rgba(160,160,160, 0.50);
-    /*background-color: rgba(255,255,255,0.5);*/
-    border-width: 1px;
-    border-radius: 4px;
-    border-color: black;
-}
-span.inputtext:hover {
-    background-color: rgba(160,160,160,1.00);
-}
-
-input[type="text"] {
-    position: relative; /* necessary for cursor! */
-    left: 0px;
-    top: 0px;
-    background-color: transparent;
-    white-space: pre;
-    display: block;
-    width: 100%;
-    min-height: 26px;
-    margin: 0px;
-    padding: 3px;
-    border-width: 5px;
-    border-color: transparent;
-    color: black;
-    overflow-x: scroll;
-    cursor: text;
-}
-input[type="text"]:focus {
-    background-color: rgba(255, 255, 255, 1.0);
-    border-color: hsla(200, 100%, 62.5%, 1.0);
-}
-
-input[type="text"] span.inputtextcursor {
-    position: absolute;
-    margin: 0px;
-    padding: 0px;
-    border-width: 0px;
-    left: 0px;
-    top: 0px;
-    display: none;
-    color: hsla(200, 100%, 12.5%, 1.0); /* l=62.5% */
-}
-input[type="text"]:focus span.inputtextcursor {
-    display: inline;
-}
-
 
 /**********************/
 /*   INPUT CHECKBOX   */
@@ -444,7 +389,72 @@ div.mdown li > span {
 
 
 
-div.labeledinputtext-container {
+
+
+/**********************/
+/*   INPUT TEXT   */
+
+
+*.inputtext-container {
+    margin: 0px;
+    position: relative; /*relative;*/
+    left: 0px;
+    top: 0px;
+    width: 100%;
+    min-height: 28px;
+    padding: 0px;
+    display: block;
+    background: rgba(160,160,160, 0.50);
+    /*background-color: rgba(255,255,255,0.5);*/
+    border-width: 1px;
+    border-radius: 4px;
+    border-color: black;
+}
+*.inputtext-container:hover {
+    background-color: rgba(160,160,160,1.00);
+}
+
+*.inputtext-container > *.inputtext-input {
+    position: relative; /* necessary for cursor! */
+    left: 0px;
+    top: 0px;
+    background-color: transparent;
+    white-space: pre;
+    display: block;
+    width: 100%;
+    min-height: 26px;
+    margin: 0px;
+    padding: 3px;
+    border-width: 2px;
+    border-color: transparent;
+    color: black;
+    overflow-x: scroll;
+    cursor: text;
+}
+*.inputtext-container > *.inputtext-input:focus {
+    background-color: rgba(255, 255, 255, 1.0);
+    border-color: hsla(200, 100%, 62.5%, 1.0);
+}
+
+*.inputtext-cursor {
+    position: absolute;
+    margin: 0px;
+    padding: 0px;
+    border-width: 0px;
+    left: 0px;
+    top: 0px;
+    display: none;
+    color: hsla(200, 100%, 12.5%, 1.0); /* l=62.5% */
+}
+
+*.inputtext-input:focus > *.inputtext-cursor {
+    display: inline;
+}
+
+
+
+
+*.labeledinputtext-container {
     margin: 2px;
     border: 0px;
     padding: 0px;
@@ -452,7 +462,7 @@ div.labeledinputtext-container {
     width: 100%;
     background: transparent;
 }
-div.labeledinputtext-container > div.labeledinputtext-label-container {
+*.labeledinputtext-container > *.labeledinputtext-label-container {
     margin: 0px;
     border: 0px;
     padding: 4px 0px 0px 0px;
@@ -460,7 +470,7 @@ div.labeledinputtext-container > div.labeledinputtext-label-container {
     width: 50%;
     background: transparent;
 }
-div.labeledinputtext-container > div.labeledinputtext-label-container > label {
+*.labeledinputtext-container > *.labeledinputtext-label-container > *.labeledinputtext-label {
     margin: 0px;
     border: 0px;
     padding: 0px;
@@ -468,14 +478,14 @@ div.labeledinputtext-container > div.labeledinputtext-label-container > label {
     width: 100%;
     background: transparent;
 }
-div.labeledinputtext-container > div.labeledinputtext-input-container {
+*.labeledinputtext-container > *.labeledinputtext-input-container {
     margin: 0px;
     border: 0px;
     padding: 0px;
     display: inline;
     width: 50%;
 }
-div.labeledinputtext-container > div.labeledinputtext-input-container > span.inputtext {
+*.labeledinputtext-container > *.labeledinputtext-input-container > *.inputtext-container {
     margin: 0px;
     border: 0px;
     padding: 0px;

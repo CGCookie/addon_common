@@ -42,6 +42,7 @@ from .ui_utilities import (
 )
 from .ui_styling import UI_Styling
 
+from .boundvar import BoundVar
 from .globals import Globals
 from .decorators import blender_version_wrapper
 from .maths import Point2D, Vec2D, clamp, mid, Color, Box2D, Size2D
@@ -80,6 +81,7 @@ See top comment in `ui_utilities.py` for links to useful resources.
 
 
 # all html tags: https://www.w3schools.com/tags/
+
 
 
 def button(**kwargs):
@@ -155,12 +157,13 @@ def input_checkbox(**kwargs):
     return ui_proxy
 
 def labeled_input_text(label, **kwargs):
-    kw_container = helper_argsplitter({'parent'}, kwargs)
+    kw_container = helper_argsplitter({'parent', 'id'}, kwargs)
     ui_container = UI_Element(tagName='div', classes='labeledinputtext-container', **kw_container)
-    ui_left  = UI_Element(tagName='div', classes='labeledinputtext-label-container', parent=ui_container)
-    ui_right = UI_Element(tagName='div', classes='labeledinputtext-input-container', parent=ui_container)
-    ui_label = UI_Element(tagName='label', innerText=label, parent=ui_left)
+    ui_left  = UI_Element(tagName='div',   classes='labeledinputtext-label-container', parent=ui_container)
+    ui_label = UI_Element(tagName='label', classes='labeledinputtext-label', innerText=label, parent=ui_left)
+    ui_right = UI_Element(tagName='div',   classes='labeledinputtext-input-container', parent=ui_container)
     ui_input = input_text(parent=ui_right, **kwargs)
+
     ui_proxy = UI_Proxy(ui_container)
     ui_proxy.translate_map('label', 'innerText', ui_label)
     ui_proxy.map('value', ui_input)
@@ -171,16 +174,17 @@ def input_text(**kwargs):
     #       can we get by with just input and inner span (cursor)?
     kwargs.setdefault('value', '')
     kw_container = helper_argsplitter({'parent'}, kwargs)
-    ui_container = UI_Element(tagName='span', classes='inputtext', **kw_container)
-    ui_input  = UI_Element(tagName='input', type='text', can_focus=True, parent=ui_container, **kwargs)
-    ui_cursor = UI_Element(tagName='span', classes='inputtextcursor',    parent=ui_input, innerText='|')
+    ui_container = UI_Element(tagName='span', classes='inputtext-container', **kw_container)
+    ui_input  = UI_Element(tagName='input', classes='inputtext-input', type='text', can_focus=True, parent=ui_container, **kwargs)
+    ui_cursor = UI_Element(tagName='span', classes='inputtext-cursor', parent=ui_input, innerText='|')
 
     data = {'orig': None, 'text': None, 'idx': 0, 'pos': None}
     def preclean():
         if data['text'] is None:
-            ui_input.innerText = ui_input.value
+            ui_input.innerText = str(ui_input.value)
         else:
             ui_input.innerText = data['text']
+        #print(ui_input, type(ui_input.innerText), ui_input.innerText, type(ui_input.value), ui_input.value)
     def postflow():
         if data['text'] is None: return
         data['pos'] = ui_input.get_text_pos(data['idx'])
@@ -204,12 +208,13 @@ def input_text(**kwargs):
             ui_input.scrollLeft = ui_input.scrollLeft + dx
             ui_input._setup_ltwh()
     def focus(e):
-        data['orig'] = data['text'] = ui_input.value
+        data['orig'] = data['text'] = str(ui_input.value)
         data['idx'] = 0 # len(data['text'])
         data['pos'] = None
     def blur(e):
         ui_input.value = data['text']
         data['text'] = None
+        #print('container:', ui_container._dynamic_full_size, ' input:', ui_input._dynamic_full_size, type(ui_input.value), ui_input.value)
     def keypress(e):
         if type(e.key) is int:
             # https://www.w3schools.com/jsref/tryit.asp?filename=tryjsref_event_key_keycode2
@@ -244,6 +249,7 @@ def input_text(**kwargs):
             data['text'] = data['text'][0:data['idx']] + e.key + data['text'][data['idx']:]
             data['idx'] += 1
         preclean()
+
     ui_input.preclean = preclean
     ui_input.postflow = postflow
     ui_cursor.postflow = cursor_postflow
@@ -254,6 +260,8 @@ def input_text(**kwargs):
     ui_proxy = UI_Proxy(ui_container)
     ui_proxy.map('value', ui_input)
     ui_proxy.map('innerText', ui_input)
+
+    preclean()
 
     return ui_proxy
 
@@ -271,6 +279,7 @@ def collapsible(label, **kwargs):
     def toggle():
         if ui_label.checked: ui_inside.add_class('collapsed')
         else:                ui_inside.del_class('collapsed')
+        ui_inside.dirty(parent=False, children=True)
     ui_label.add_eventListener('on_input', toggle)
     toggle()
 

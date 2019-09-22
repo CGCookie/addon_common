@@ -37,6 +37,7 @@ from .fsm import FSM
 
 from .useractions import Actions, kmi_to_keycode
 
+from .boundvar import BoundVar
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
 from .maths import Vec2D, Color, mid, Box2D, Size1D, Size2D, Point2D, RelPoint2D, clamp, NumberUnit
@@ -329,7 +330,7 @@ class UI_Element_Utils:
                 self._defer_dirty = True
                 ret = fn(self, *args, **kwargs)
                 self._defer_dirty = False
-                self.dirty('dirtying deferred dirtied properties now: '+cause, properties, parent=parent, children=children)
+                self._dirty('dirtying deferred dirtied properties now: '+cause, properties, parent=parent, children=children)
                 return ret
             return wrapped
         return wrapper
@@ -509,7 +510,7 @@ class UI_Element_Properties:
         if self._tagName == ntagName: return
         self._tagName = ntagName
         self._styling_default = None
-        self.dirty('changing tagName can affect children styles', parent=True, children=True)
+        self._dirty('changing tagName can affect children styles', parent=True, children=True)
 
     @property
     def innerText(self):
@@ -518,8 +519,9 @@ class UI_Element_Properties:
     def innerText(self, nText):
         if self._innerText == nText: return
         self._innerText = nText
-        self.dirty('changing innerText changes content', 'content')
-        self.dirty_flow()
+        self._dirty('changing innerText changes content', 'content')
+        self._dirty('changing innerText changes size', 'size')
+        self._dirty_flow()
 
     @property
     def innerTextAsIs(self):
@@ -529,7 +531,8 @@ class UI_Element_Properties:
         v = str(v) if v is not None else None
         if self._innerTextAsIs == v: return
         self._innerTextAsIs = v
-        self.dirty('changing innerTextAsIs changes content', 'content')
+        self._dirty('changing innerTextAsIs changes content', 'content')
+        self._dirty('changing innerTextAsIs changes size', 'size')
 
     @property
     def parent(self):
@@ -560,10 +563,15 @@ class UI_Element_Properties:
         ret.extend(e for child in self._children for e in child.getElementsByName(element_name))
         return ret
 
+
+    ######################################3
+    # children methods
+
     @property
     def children(self):
         return list(self._children)
-    def append_child(self, child):
+
+    def _append_child(self, child):
         assert child
         if child in self._children:
             # attempting to add existing child?
@@ -573,26 +581,35 @@ class UI_Element_Properties:
             child._parent.delete_child(child)
         self._children.append(child)
         child._parent = self
-        child.dirty('appending child to parent', parent=False, children=True)
-        self.dirty('appending new child changes content', 'content')
+        child._dirty('appending child to parent', parent=False, children=True)
+        self._dirty('appending new child changes content', 'content')
         return child
-    def delete_child(self, child):
+    def append_child(self, child): return self._append_child(child)
+
+    def _delete_child(self, child):
         assert child
         if type(child) is UI_Proxy:
             child = child._default_element
         assert child in self._children, 'attempting to delete child that does not exist?'
         self._children.remove(child)
         child._parent = None
-        child.dirty('deleting child from parent')
-        self.dirty('deleting child changes content', 'content')
+        child._dirty('deleting child from parent')
+        self._dirty('deleting child changes content', 'content')
+    def delete_child(self, child): self._delete_child(child)
+
     @UI_Element_Utils.defer_dirty('clearing children')
-    def clear_children(self):
+    def _clear_children(self):
         for child in list(self._children):
-            self.delete_child(child)
+            self._delete_child(child)
+    def clear_children(self): self._clear_children()
 
-    def count_children(self):
+    def _count_children(self):
         return sum(1+child.count_children() for child in self._children)
+    def count_children(self): return self._count_children(self)
 
+
+    #########################################
+    # style methods
 
     @property
     def style(self):
@@ -601,16 +618,16 @@ class UI_Element_Properties:
     def style(self, style):
         self._style_str = str(style or '')
         self._styling_custom = None
-        self.dirty('changing style for %s affects style' % str(self), 'style', parent=False, children=False)
+        self._dirty('changing style for %s affects style' % str(self), 'style', parent=False, children=False)
         if self._parent:
-            self.dirty('changing style for %s affects parent content' % str(self), 'content', parent=True, children=False)
+            self._dirty('changing style for %s affects parent content' % str(self), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
     def add_style(self, style):
         self._style_str = '%s;%s' % (self._style_str, str(style or ''))
         self._styling_custom = None
-        self.dirty('adding style for %s affects style' % str(self), 'style', parent=False, children=False)
+        self._dirty('adding style for %s affects style' % str(self), 'style', parent=False, children=False)
         if self._parent:
-            self.dirty('adding style for %s affects parent content' % str(self), 'content', parent=True, children=False)
+            self._dirty('adding style for %s affects parent content' % str(self), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
 
     @property
@@ -621,9 +638,9 @@ class UI_Element_Properties:
         nid = '' if nid is None else nid.strip()
         if self._id == nid: return
         self._id = nid
-        self.dirty('changing id for %s affects styles' % str(self), 'style', parent=False, children=True)
+        self._dirty('changing id for %s affects styles' % str(self), 'style', parent=False, children=True)
         if self._parent:
-            self.dirty('changing id for %s affects parent content' % str(self), 'content', parent=True, children=False)
+            self._dirty('changing id for %s affects parent content' % str(self), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
 
     @property
@@ -656,63 +673,76 @@ class UI_Element_Properties:
         if self._classes_str == classes_str: return
         self._classes_str = classes_str
         self._classes = classes
-        self.dirty('changing classes to %s for %s affects style' % (classes_str, str(self)), 'style', parent=False, children=True)
+        self._dirty('changing classes to %s for %s affects style' % (classes_str, str(self)), 'style', parent=False, children=True)
         if self._parent:
-            self.dirty('changing classes to %s for %s affects parent content' % (classes_str, str(self)), 'content', parent=True, children=False)
+            self._dirty('changing classes to %s for %s affects parent content' % (classes_str, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
     def add_class(self, cls):
         assert ' ' not in cls, 'cannot add class "%s" to "%s" because it has a space in it' % (cls, self._tagName)
         if cls in self._classes: return
         self._classes.append(cls)
         self._classes_str = ' '.join(self._classes)
-        self.dirty('adding class "%s" for %s affects style' % (str(cls), str(self)), 'style', parent=False, children=True)
-        self.dirty('adding class "%s" for %s affects content' % (str(cls), str(self)), 'content', parent=False, children=True)
+        self._dirty('adding class "%s" for %s affects style' % (str(cls), str(self)), 'style', parent=False, children=True)
+        self._dirty('adding class "%s" for %s affects content' % (str(cls), str(self)), 'content', parent=False, children=True)
         if self._parent:
-            self.dirty('adding class "%s" for %s affects parent content' % (cls, str(self)), 'content', parent=True, children=False)
+            self._dirty('adding class "%s" for %s affects parent content' % (cls, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
     def del_class(self, cls):
         assert ' ' not in cls, 'cannot del class "%s" from "%s" because it has a space in it' % (cls, self._tagName)
         if cls not in self._classes: return
         self._classes.remove(cls)
         self._classes_str = ' '.join(self._classes)
-        self.dirty('deleting class "%s" for %s affects style' % (cls, str(self)), 'style', parent=False, children=True)
-        self.dirty('deleting class "%s" for %s affects content' % (str(cls), str(self)), 'content', parent=False, children=True)
+        self._dirty('deleting class "%s" for %s affects style' % (cls, str(self)), 'style', parent=False, children=True)
+        self._dirty('deleting class "%s" for %s affects content' % (str(cls), str(self)), 'content', parent=False, children=True)
         if self._parent:
-            self.dirty('deleting class "%s" for %s affects parent content' % (cls, str(self)), 'content', parent=True, children=False)
+            self._dirty('deleting class "%s" for %s affects parent content' % (cls, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
+
+
+    ###################################
+    # pseudoclasses methods
 
     @property
     def pseudoclasses(self):
         return set(self._pseudoclasses)
-    def clear_pseudoclass(self):
+
+    def _clear_pseudoclass(self):
         if not self._pseudoclasses: return
         self._pseudoclasses = set()
-        self.dirty('clearing psuedoclasses for %s affects style' % str(self), 'style', parent=False, children=True)
+        self._dirty('clearing psuedoclasses for %s affects style' % str(self), 'style', parent=False, children=True)
         if self._parent:
-            self.dirty('clearing psuedoclasses for %s affects parent content' % str(self), 'content', parent=True, children=False)
+            self._dirty('clearing psuedoclasses for %s affects parent content' % str(self), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
-    def add_pseudoclass(self, pseudo):
+    def clear_pseudoclass(self): return self._clear_pseudoclass()
+
+    def _add_pseudoclass(self, pseudo):
         if pseudo in self._pseudoclasses: return
         self._pseudoclasses.add(pseudo)
 
         if pseudo == 'disabled':
-            self.del_pseudoclass('active')
-            self.del_pseudoclass('focus')
+            self._del_pseudoclass('active')
+            self._del_pseudoclass('focus')
             # TODO: on_blur?
-        self.dirty('adding psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=True)
+        self._dirty('adding psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=True)
         if self._parent:
-            self.dirty('adding pseudoclass %s for %s affects parent content' % (pseudo, str(self)), 'content', parent=True, children=False)
+            self._dirty('adding pseudoclass %s for %s affects parent content' % (pseudo, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
-    def del_pseudoclass(self, pseudo):
+    def add_pseudoclass(self, pseudo): self._add_pseudoclass(pseudo)
+
+    def _del_pseudoclass(self, pseudo):
         if pseudo not in self._pseudoclasses: return
         self._pseudoclasses.discard(pseudo)
 
-        self.dirty('deleting psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=True)
+        self._dirty('deleting psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=True)
         if self._parent:
-            self.dirty('deleting psuedoclass %s for %s affects parent content' % (pseudo, str(self)), 'content', parent=True, children=False)
+            self._dirty('deleting psuedoclass %s for %s affects parent content' % (pseudo, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
-    def has_pseudoclass(self, pseudo):
+    def del_pseudoclass(self, pseudo): self._del_pseudoclass(pseudo)
+
+    def _has_pseudoclass(self, pseudo):
         return pseudo in self._pseudoclasses
+    def has_pseudoclass(self, psuedo): return self._has_pseudoclass(pseudo)
+
     @property
     def is_active(self): return 'active' in self._pseudoclasses
     @property
@@ -722,9 +752,10 @@ class UI_Element_Properties:
     @property
     def is_disabled(self): return 'disabled' in self._pseudoclasses
 
-    def blur(self):
+    def _blur(self):
         if 'focus' not in self._pseudoclasses: return
         ui_document.blur()
+    def blur(self): self._blur()
 
     @property
     def pseudoelement(self):
@@ -734,7 +765,7 @@ class UI_Element_Properties:
         v = v or ''
         if self._pseudoelement == v: return
         self._pseudoelement = v
-        self.dirty('changing psuedoelement affects style', parent=True, children=False)
+        self._dirty('changing psuedoelement affects style', parent=True, children=False)
 
     @property
     def src(self):
@@ -748,7 +779,7 @@ class UI_Element_Properties:
         if self._src_str == v: return
         self._src_str = v
         self._src = None    # force reload of image
-        self.dirty('changing src affects content', 'content', parent=True, children=False)
+        self._dirty('changing src affects content', 'content', parent=True, children=False)
 
     @property
     def title(self):
@@ -756,13 +787,13 @@ class UI_Element_Properties:
     @title.setter
     def title(self, v):
         self._title = v
-        self.dirty('title changed', parent=True, children=False)
+        self._dirty('title changed', parent=True, children=False)
 
     def reposition(self, left=None, top=None, bottom=None, right=None):
         if left is not None: self._style_left = left
         if top  is not None: self._style_top  = top
         self._absolute_pos = None
-        self.update_position()
+        self._update_position()
         tag_redraw_all()
 
     @property
@@ -781,7 +812,7 @@ class UI_Element_Properties:
     def style_left(self, v):
         if self._style_left == v: return
         self._style_left = v
-        self.dirty_flow()
+        self._dirty_flow()
 
     @property
     def top(self):
@@ -799,7 +830,7 @@ class UI_Element_Properties:
     def style_top(self, v):
         if self._style_top == v: return
         self._style_top = v
-        self.dirty_flow()
+        self._dirty_flow()
 
     # @property
     # def top(self):
@@ -807,7 +838,7 @@ class UI_Element_Properties:
     # @top.setter
     # def top(self, v):
     #     self._style_top = v
-    #     self.dirty_flow()
+    #     self._dirty_flow()
 
     @property
     def right(self):
@@ -815,7 +846,7 @@ class UI_Element_Properties:
     @right.setter
     def right(self, v):
         self._style_right = v
-        self.dirty_flow()
+        self._dirty_flow()
     @property
     def style_right(self):
         if self._style_right is not None: return self._style_right
@@ -824,7 +855,7 @@ class UI_Element_Properties:
     def style_right(self, v):
         if self._style_right == v: return
         self._style_right = v
-        self.dirty_flow()
+        self._dirty_flow()
 
     @property
     def bottom(self):
@@ -832,7 +863,7 @@ class UI_Element_Properties:
     @bottom.setter
     def bottom(self, v):
         self._style_bottom = v
-        self.dirty_flow()
+        self._dirty_flow()
     @property
     def style_bottom(self):
         if self._style_bottom is not None: return self._style_bottom
@@ -841,7 +872,7 @@ class UI_Element_Properties:
     def style_bottom(self, v):
         if self_style_bottom == v: return
         self._style_bottom = v
-        self.dirty_flow()
+        self._dirty_flow()
 
     @property
     def width(self):
@@ -858,7 +889,7 @@ class UI_Element_Properties:
     def style_width(self, v):
         if self._style_width == v: return
         self._style_width = v
-        self.dirty_flow()
+        self._dirty_flow()
 
     @property
     def height(self):
@@ -875,7 +906,7 @@ class UI_Element_Properties:
     def style_height(self, v):
         if self._style_height == v: return
         self._style_height = v
-        self.dirty_flow()
+        self._dirty_flow()
 
     @property
     def left_pixels(self):
@@ -965,7 +996,7 @@ class UI_Element_Properties:
     @is_visible.setter
     def is_visible(self, v):
         self._is_visible = v
-        self.dirty('changing visibility can affect style', 'style', children=True)
+        self._dirty('changing visibility can affect style', 'style', children=True)
 
     @property
     def is_scrollable(self):
@@ -997,19 +1028,36 @@ class UI_Element_Properties:
     @type.setter
     def type(self, v):
         self._type = v
-        self.dirty('Changing type can affect style', 'style', children=True)
-        self.dirty_styling()
+        self._dirty('Changing type can affect style', 'style', children=True)
+        self._dirty_styling()
 
     @property
     def value(self):
-        return self._value
+        if self._value_bound:
+            return self._value.value
+        else:
+            return self._value
     @value.setter
     def value(self, v):
-        if self._value == v: return
-        self._value = v
-        self.dispatch_event('on_input')
-        self.dirty('Changing value can affect style and content')
+        if self._value_bound:
+            self._value.value = v
+        elif self._value != v:
+            self._value = v
+            self._value_change()
+
+    def _value_change(self):
+        self._dispatch_event('on_input')
+        self._dirty('Changing value can affect style and content')
         #self.dirty_styling()
+    def value_bind(self, boundvar):
+        self._value = boundvar
+        self._value.on_change(self._value_change)
+        self._value_bound = True
+    def value_unbind(self, v=None):
+        p = self._value
+        self._value = v
+        self._value_bound = False
+        return p
 
     @property
     def checked(self):
@@ -1019,8 +1067,8 @@ class UI_Element_Properties:
         v = "checked" if v else None
         if self._checked == v: return
         self._checked = v
-        self.dispatch_event('on_input')
-        self.dirty('Changing checked can affect style and content', 'style', children=True)
+        self._dispatch_event('on_input')
+        self._dirty('Changing checked can affect style and content', 'style', children=True)
         #self.dirty_styling()
 
     @property
@@ -1053,7 +1101,7 @@ class UI_Element_Properties:
 
 class UI_Element_Dirtiness:
     @profiler.function
-    def dirty(self, cause=None, properties=None, parent=True, children=False):
+    def _dirty(self, cause=None, properties=None, parent=True, children=False):
         if cause is None: cause = 'Unspecified cause'
         parent &= self._parent is not None
         parent &= self._parent != self
@@ -1066,20 +1114,22 @@ class UI_Element_Dirtiness:
         self._dirty_causes.append(cause)
         if parent:   self._dirty_propagation['parent']   |= properties
         if children: self._dirty_propagation['children'] |= properties
-        self.propagate_dirtiness()
+        self._propagate_dirtiness()
         # print('%s had %s dirtied, because %s' % (str(self), str(properties), str(cause)))
         tag_redraw_all()
+    def dirty(self, *args, **kwargs): self._dirty(*args, **kwargs)
 
     @profiler.function
-    def dirty_styling(self):
+    def _dirty_styling(self):
         self._computed_styles = {}
         self._styling_default = None
         self._styling_parent = None
         self._styling_custom = None
         for child in self._children_all: child.dirty_styling()
         if self._parent is None:
-            self.dirty('Dirtying style cache', children=True)
+            self._dirty('Dirtying style cache', children=True)
         tag_redraw_all()
+    def dirty_styling(self): self._dirty_styling()
 
     def add_dirty_callback(self, child, properties):
         if type(properties) is str: properties = [properties]
@@ -1090,30 +1140,31 @@ class UI_Element_Dirtiness:
         if self._parent: self._parent.add_dirty_callback(self, properties)
 
     @profiler.function
-    def dirty_flow(self, parent=True, children=True):
-        if self._dirty_flow: return
+    def _dirty_flow(self, parent=True, children=True):
+        if self._dirtying_flow: return
         parent &= self._parent is not None and not self._do_not_dirty_parent
-        self._dirty_flow = True
+        self._dirtying_flow = True
         if parent and self._parent:
-            self._parent.dirty_flow(parent=True, children=False)
+            self._parent._dirty_flow(parent=True, children=False)
         if children:
             for child in self._children_all:
-                child.dirty_flow(parent=False, children=True)
+                child._dirty_flow(parent=False, children=True)
         tag_redraw_all()
+    def dirty_flow(self, *args, **kwargs): self._dirty_flow(*args, **kwargs)
 
     @property
     def is_dirty(self):
         return bool(self._dirty_properties) or bool(self._dirty_propagation['parent']) or bool(self._dirty_propagation['children'])
 
     @profiler.function
-    def propagate_dirtiness(self):
+    def _propagate_dirtiness(self):
         if self._dirty_propagation['defer']: return
         if self._dirty_propagation['parent']:
             if self._parent:
                 cause = ' -> '.join('%s'%cause for cause in (self._dirty_causes+[
                     '"propagating dirtiness (%s) from %s to parent %s"' % (str(self._dirty_propagation['parent']), str(self), str(self._parent))
                 ]))
-                self._parent.dirty(
+                self._parent._dirty(
                     cause=cause,
                     properties=self._dirty_propagation['parent'],
                     parent=True,
@@ -1127,7 +1178,7 @@ class UI_Element_Dirtiness:
                 cause = ' -> '.join('%s'%cause for cause in (self._dirty_causes+[
                     '"propagating dirtiness (%s) from %s to child %s"' % (str(self._dirty_propagation['children']), str(self), str(child)),
                 ]))
-                child.dirty(
+                child._dirty(
                     cause=cause,
                     properties=self._dirty_propagation['children'],
                     parent=False,
@@ -1135,6 +1186,7 @@ class UI_Element_Dirtiness:
                 )
             self._dirty_propagation['children'].clear()
         self._dirty_causes = []
+    def propagate_dirtiness(self): self._propagate_dirtiness()
 
     @property
     def defer_dirty_propagation(self):
@@ -1142,7 +1194,7 @@ class UI_Element_Dirtiness:
     @defer_dirty_propagation.setter
     def defer_dirty_propagation(self, v):
         self._dirty_propagation['defer'] = bool(v)
-        self.propagate_dirtiness()
+        self._propagate_dirtiness()
 
     def _call_preclean(self):
         if self.is_dirty and self._preclean: self._preclean()
@@ -1153,8 +1205,9 @@ class UI_Element_Dirtiness:
     def _call_postflow(self):
         if self._postflow: self._postflow()
         for child in self._children_all: child._call_postflow()
+
     @profiler.function
-    def clean(self, depth=0):
+    def _clean(self, depth=0):
         '''
         No need to clean if
         - already clean,
@@ -1168,6 +1221,7 @@ class UI_Element_Dirtiness:
         for child in self._children_all: child.clean(depth=depth+1)
         self._call_postclean()
         assert not self.is_dirty, '%s is still dirty after cleaning: %s' % (str(self), str(self._dirty_properties))
+    def clean(self, *args, **kwargs): self._clean(*args, **kwargs)
 
 
 class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
@@ -1188,6 +1242,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # attribs
         self._type          = None
         self._value         = None
+        self._value_bound   = False
         self._checked       = None
         self._name          = None
 
@@ -1290,7 +1345,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             'blocks',                           # children are grouped into blocks
             'size',                             # force recalculations of size
         }
-        self._dirty_flow = True
+        self._dirtying_flow = True
         self._dirty_causes = []
         self._dirty_callbacks = {}
         self._dirty_propagation = {             # contains deferred dirty propagation for parent and children; parent will be dirtied later
@@ -1331,6 +1386,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 # append each child
                 for child in kwargs['children']:
                     self.append_child(child)
+            elif k == 'value' and isinstance(v, BoundVar):
+                self.value_bind(v)
             elif hasattr(self, k):
                 # need to test that a setter exists for the property
                 class_attr = getattr(type(self), k, None)
@@ -1345,17 +1402,17 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             else:
                 print('Unhandled pair (%s,%s)' % (k,str(v)))
         self._defer_clean = False
-        self.dirty('initially dirty')
+        self._dirty('initially dirty')
 
     def __repr__(self):
         return self.__str__()
 
     def __str__(self):
-        info = ['tagName', 'id', 'classes', 'type', 'innerText', 'innerTextAsIs']
+        info = ['tagName', 'id', 'classes', 'type', 'innerText', 'innerTextAsIs', 'value']
         info = [(k, getattr(self, k)) for k in info if hasattr(self, k)]
         info = ['%s="%s"' % (k, str(v)) for k,v in info if v]
         if self.is_dirty: info += ['dirty']
-        return '<UI_Element %s>' % ' '.join(info)
+        return '<%s>' % ' '.join(['UI_Element'] + info)
 
     @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content'})
     @profiler.function
@@ -1363,7 +1420,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         '''
         rebuilds self._selector and computes the stylesheet, propagating computation to children
         '''
-        if self._defer_clean: return
+
+        if self._defer_clean:
+            return
         if 'style' not in self._dirty_properties:
             for e in self._dirty_callbacks.get('style', []): e._compute_style()
             self._dirty_callbacks['style'] = set()
@@ -1478,8 +1537,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._computed_styles_after.get('content',  None) if self._computed_styles_after  else None,
         )
         if style_content_hash != getattr(self, '_style_content_hash', None):
-            self.dirty('style change might have changed content (::before / ::after)', 'content')
-            self.dirty_flow()
+            self._dirty('style change might have changed content (::before / ::after)', 'content')
+            self._dirty_flow()
             self._style_content_hash = style_content_hash
 
         style_size_hash = Hasher(
@@ -1492,8 +1551,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             ]},
         )
         if style_size_hash != getattr(self, '_style_size_hash', None):
-            self.dirty('style change might have changed size', 'size')
-            self.dirty_flow()
+            self._dirty('style change might have changed size', 'size')
+            self._dirty_flow()
             self._style_size_hash = style_size_hash
 
         self._dirty_properties.discard('style')
@@ -1504,9 +1563,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     @UI_Element_Utils.add_cleaning_callback('content', {'blocks'})
     @profiler.function
     def _compute_content(self):
-        if self._defer_clean: return
+        if self._defer_clean:
+            return
         if not self.is_visible:
             self._dirty_properties.discard('content')
+            self._innerTextWrapped = None
+            self._innerTextAsIs = None
             return
         if 'content' not in self._dirty_properties:
             for e in self._dirty_callbacks.get('content', []): e._compute_content()
@@ -1519,7 +1581,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if content_before is not None:
             # TODO: cache this!!
             self._child_before = UI_Element(tagName=self._tagName, innerText=content_before, pseudoelement='before', _parent=self)
-            self._child_before.clean()
+            self._child_before._clean()
         else:
             self._child_before = None
 
@@ -1527,7 +1589,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if content_after:
             # TODO: cache this!!
             self._child_after = UI_Element(tagName=self._tagName, innerText=content_after, pseudoelement='after', _parent=self)
-            self._child_after.clean()
+            self._child_after._clean()
         else:
             self._child_after = None
 
@@ -1546,6 +1608,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             }
             # TODO: if whitespace:pre, then make self NOT wrap
             innerTextWrapped = helper_wraptext(**textwrap_opts)
+            # print(self, id(self), self._innerTextWrapped, innerTextWrapped)
             rewrap = False
             rewrap |= self._innerTextWrapped != innerTextWrapped
             rewrap |= any(textwrap_opts[k] != self._textwrap_opts.get(k,None) for k in textwrap_opts.keys())
@@ -1592,7 +1655,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._children_text_min_size = Size2D(width=0, height=0)
                 with profiler.code('cleaning text children'):
                     for child in self._children_text:
-                        child.clean()
+                        child._clean()
                         self._children_text_min_size.width  = max(self._children_text_min_size.width,  child._static_content_size.width)
                         self._children_text_min_size.height = max(self._children_text_min_size.height, child._static_content_size.height)
 
@@ -1621,8 +1684,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         for child in self._children_all: child._compute_content()
 
         # content changes might have changed size
-        self.dirty('content changes might have affected blocks', 'blocks')
-        self.dirty_flow()
+        self._dirty('content changes might have affected blocks', 'blocks')
+        self._dirty_flow()
         self._dirty_properties.discard('content')
         self._dirty_callbacks['content'] = set()
 
@@ -1650,7 +1713,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _compute_blocks(self):
         # split up all children into layout blocks
 
-        if self._defer_clean: return
+        if self._defer_clean:
+            return
         if not self.is_visible:
             self._dirty_properties.discard('blocks')
             return
@@ -1683,8 +1747,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             child._compute_blocks()
 
         # content changes might have changed size
-        self.dirty('block changes might have changed size', 'size')
-        self.dirty_flow()
+        self._dirty('block changes might have changed size', 'size')
+        self._dirty_flow()
         self._dirty_properties.discard('blocks')
         self._dirty_callbacks['blocks'] = set()
 
@@ -1696,7 +1760,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     @UI_Element_Utils.add_cleaning_callback('size')
     @profiler.function
     def _compute_static_content_size(self):
-        if self._defer_clean: return
+        if self._defer_clean:
+            return
         if not self.is_visible:
             self._dirty_properties.discard('size')
             return
@@ -1740,12 +1805,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             pass
 
         self._dirty_properties.discard('size')
-        self.dirty_flow()
+        self._dirty_flow()
         self._dirty_callbacks['size'] = set()
         self.defer_dirty_propagation = False
 
     @profiler.function
-    def layout(self, **kwargs):
+    def _layout(self, **kwargs):
         # layout each block into lines.  if a content box of child element is too wide to fit in line and
         # child is not only element on the current line, then end current line, start a new line, relayout the child.
         # this function does not set the final position and size for element.
@@ -1767,7 +1832,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # given size might by inf. given can be ignored due to style. constraints applied at end.
         # positioning (with definitive size) should happen
 
-        if not self.is_visible: return
+        if not self.is_visible:
+            return
 
         first_on_line  = kwargs['first_on_line']    # is self the first UI_Element on the current line?
         fitting_size   = kwargs['fitting_size']     # size from parent that we should try to fit in (only max)
@@ -1786,9 +1852,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._document_elem = document_elem
         self._nonstatic_elem = nonstatic_elem
 
-        self.update_position()
+        self._update_position()
 
-        if not self._dirty_flow: return
+        if not self._dirtying_flow:
+            return
 
         dpi_mult      = Globals.drawing.get_dpi_mult()
         display       = styles.get('display', 'block')
@@ -1911,8 +1978,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                             cur_line = []
                             line_width = 0
                             line_height = 0
-                            element.dirty_flow(parent=False, children=True)
-                            #element._dirty_flow = True
+                            element._dirty_flow(parent=False, children=True)
+                            #element._dirtying_flow = True
                 if cur_line:
                     lines.append(cur_line)
                     accum_height += line_height
@@ -1943,10 +2010,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self._tmp_max_width = max_width
 
-        self._dirty_flow = False
+        self._dirtying_flow = False
+    def layout(self, *args, **kwargs): return self._layout(*args, **kwargs)
 
     @profiler.function
-    def update_position(self):
+    def _update_position(self):
         styles    = self._computed_styles
         style_pos = styles.get('position', 'static')
         pl,pt     = self.left_pixels,self.top_pixels
@@ -1965,7 +2033,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             else:
                 mbp_left = self._relative_element._mbp_left
                 mbp_top = self._relative_element._mbp_top
-            # if self._dirty_flow: print(self,pt,pr,pb,pl)
+            # if self._dirtying_flow: print(self,pt,pr,pb,pl)
             if pl == 'auto':
                 # if pr != 'auto': print(self, self._relative_element._fitting_size, pr)
                 # if pr != 'auto' and self._relative_element._fitting_size:
@@ -1993,9 +2061,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._relative_element = self._parent
             self._relative_pos = RelPoint2D(self._fitting_pos)
             self._relative_offset = RelPoint2D((0, 0))
+    def update_position(self): return self._update_position()
 
     @profiler.function
-    def set_view_size(self, size:Size2D):
+    def _set_view_size(self, size:Size2D):
         # parent is telling us how big we will be.  note: this does not trigger a reflow!
         # TODO: clamp scroll
         # TODO: handle vertical and horizontal element alignment
@@ -2003,6 +2072,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._absolute_size = size
         self.scrollLeft = self.scrollLeft
         self.scrollTop = self.scrollTop
+    def set_view_size(self, *args, **kwargs): return self._set_view_size(*args, **kwargs)
 
     @UI_Element_Utils.add_option_callback('layout:flexbox')
     def layout_flexbox(self):
@@ -2091,7 +2161,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._b = self._t - (self._h - 1)
 
     @profiler.function
-    def draw(self, depth=0):
+    def _draw(self, depth=0):
         if not self.is_visible: return
 
         self._setup_ltwh()
@@ -2152,14 +2222,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     with profiler.code('drawing innerText'):
                         size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
                         Globals.drawing.set_font_color(self._fontid, self._fontcolor)
-                        for child in self._children_all: child.draw(depth + 1)
+                        for child in self._children_all: child._draw(depth + 1)
                         Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
                 else:
-                    for child in self._children_all: child.draw(depth+1)
+                    for child in self._children_all: child._draw(depth+1)
 
                 # ScissorStack.pop()
 
         ScissorStack.pop()
+    def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
 
     @profiler.function
     def get_under_mouse(self, p:Point2D):
@@ -2180,20 +2251,22 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     ################################################################################
     # event-related functionality
 
-    def add_eventListener(self, event, callback, useCapture=False):
+    def _add_eventListener(self, event, callback, useCapture=False):
         assert event in self._events, 'Attempting to add unhandled event handler type "%s"' % event
         sig = signature(callback)
         old_callback = callback
         if len(sig.parameters) == 0:
             callback = lambda e: old_callback()
         self._events[event] += [(useCapture, callback, old_callback)]
+    def add_eventListener(self, *args, **kwargs): self._add_eventListener(*args, **kwargs)
 
-    def remove_eventListener(self, event, callback):
+    def _remove_eventListener(self, event, callback):
         # returns True if callback was successfully removed
         assert event in self._events, 'Attempting to remove unhandled event handler type "%s"' % event
         l = len(self._events[event])
         self._events[event] = [(capture,cb,old_cb) for (capture,cb,old_cb) in self._events[event] if old_cb != callback]
         return l != len(self._events[event])
+    def remove_eventListener(self, *args, **kwargs): return self._remove_eventListener(*args, **kwargs)
 
     def _fire_event(self, event, details):
         ph = details.event_phase
@@ -2206,7 +2279,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 if not cap: cb(details)
 
     @profiler.function
-    def dispatch_event(self, event, mouse=None, key=None, ui_event=None):
+    def _dispatch_event(self, event, mouse=None, key=None, ui_event=None):
         if mouse is None: mouse = ui_document.actions.mouse
         if ui_event is None: ui_event = UI_Event(target=self, mouse=mouse, key=key)
         path = self.get_pathToRoot()[1:] # skipping first item, which is self
@@ -2216,6 +2289,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._fire_event(event, ui_event)
         ui_event.event_phase = 'bubbling'
         for cur in path: cur._fire_event(event, ui_event)
+    def dispatch_event(self, *args, **kwargs): return self._dispatch_event(*args, **kwargs)
 
     ################################################################################
     # the following methods can be overridden to create different types of UI
@@ -2249,10 +2323,16 @@ class UI_Proxy:
     def __dir__(self):
         return dir(self._default_element)
     def __getattr__(self, attrib):
+        # ignore mapping for attribs with _ prefix
+        if attrib.startswith('_'):
+            return getattr(self._default_element, attrib)
         ui_element = self._mapping.get(attrib, None)
         if ui_element is None: ui_element = self._default_element
         return getattr(ui_element, attrib)
     def __setattr__(self, attrib, val):
+        # ignore mapping for attribs with _ prefix
+        if attrib.startswith('_'):
+            return setattr(self._default_element, attrib, val)
         if attrib in self.__dict__:
             self.__dict__[attrib] = val
             return val
@@ -2348,8 +2428,15 @@ class UI_Document(UI_Document_FSM):
     def _addrem_pseudoclass(self, pseudoclass, remove_from=None, add_to=None):
         rem = set(remove_from.get_pathToRoot()) if remove_from else set()
         add = set(add_to.get_pathToRoot()) if add_to else set()
-        for e in rem - add: e.del_pseudoclass(pseudoclass)
-        for e in add - rem: e.add_pseudoclass(pseudoclass)
+        for e in rem - add: e._del_pseudoclass(pseudoclass)
+        for e in add - rem: e._add_pseudoclass(pseudoclass)
+
+    def _debug_print(self, ui_from):
+        # debug print!
+        path = ui_from.get_pathToRoot()
+        for i,ui_elem in enumerate(reversed(path)):
+            print('%s%s'   % ('  '*i, str(ui_elem)))
+            print('%s  %s' % ('  '*i, ui_elem._selector))
 
     @profiler.function
     def handle_hover(self, change_cursor=True):
@@ -2363,15 +2450,15 @@ class UI_Document(UI_Document_FSM):
         if self._under_mouse == self._last_under_mouse: return
 
         self._addrem_pseudoclass('hover', remove_from=self._last_under_mouse, add_to=self._under_mouse)
-        if self._last_under_mouse: self._last_under_mouse.dispatch_event('on_mouseleave')
-        if self._under_mouse: self._under_mouse.dispatch_event('on_mouseenter')
+        if self._last_under_mouse: self._last_under_mouse._dispatch_event('on_mouseleave')
+        if self._under_mouse: self._under_mouse._dispatch_event('on_mouseenter')
 
     @profiler.function
     def handle_mousemove(self, ui_element=None):
         ui_element = ui_element or self._under_mouse
         if ui_element is None: return
         if self._last_mouse.x == self._mouse.x and self._last_mouse.y == self._mouse.y: return
-        ui_element.dispatch_event('on_mousemove')
+        ui_element._dispatch_event('on_mousemove')
 
 
     @UI_Document_FSM.FSM_State('main', 'enter')
@@ -2385,6 +2472,9 @@ class UI_Document(UI_Document_FSM):
 
         if self._lmb and not self._last_lmb:
             return 'mousedown'
+
+        if self._rmb and not self._last_rmb and self._under_mouse:
+            self._debug_print(self._under_mouse)
 
         self.handle_hover()
         self.handle_mousemove()
@@ -2438,8 +2528,8 @@ class UI_Document(UI_Document_FSM):
         can_enter &= bool(self._under_mouse) and not self._under_mouse.is_disabled
         if UI_Document.allow_disabled_to_blur and not can_enter and self._focus:
             # blur previous
-            self._focus.del_pseudoclass('focus')
-            self._focus.dispatch_event('on_blur')
+            self._focus._del_pseudoclass('focus')
+            self._focus._dispatch_event('on_blur')
             self._focus = None
         return can_enter
 
@@ -2454,7 +2544,7 @@ class UI_Document(UI_Document_FSM):
         self._under_mousedown = self._under_mouse
         self._addrem_pseudoclass('active', add_to=self._under_mousedown)
         # self._under_mousedown.add_pseudoclass('active')
-        self._under_mousedown.dispatch_event('on_mousedown')
+        self._under_mousedown._dispatch_event('on_mousedown')
 
     @UI_Document_FSM.FSM_State('mousedown')
     def modal_mousedown(self):
@@ -2466,22 +2556,22 @@ class UI_Document(UI_Document_FSM):
 
     @UI_Document_FSM.FSM_State('mousedown', 'exit')
     def modal_mousedown_exit(self):
-        self._under_mousedown.dispatch_event('on_mouseup')
+        self._under_mousedown._dispatch_event('on_mouseup')
         if self._under_mouse == self._under_mousedown:
             # CLICK!
             dblclick = True
             dblclick &= self._under_mousedown == self._last_under_click
             dblclick &= time.time() < self._last_click_time + self.doubleclick_time
-            self._under_mousedown.dispatch_event('on_mouseclick')
+            self._under_mousedown._dispatch_event('on_mouseclick')
             self._last_under_click = self._under_mousedown
             if dblclick:
-                self._under_mousedown.dispatch_event('on_mousedblclick')
+                self._under_mousedown._dispatch_event('on_mousedblclick')
                 # self._last_under_click = None
             if self._under_mousedown.forId:
                 # send mouseclick events to ui_element indicated by forId!
                 ui_for = self._under_mousedown.get_root().getElementById(self._under_mousedown.forId)
                 if ui_for is None: return
-                ui_for.dispatch_event('mouseclick', ui_event=e)
+                ui_for._dispatch_event('mouseclick', ui_event=e)
             self._last_click_time = time.time()
         else:
             self._last_under_click = None
@@ -2491,8 +2581,8 @@ class UI_Document(UI_Document_FSM):
 
     def blur(self):
         if self._focus is None: return
-        self._focus.del_pseudoclass('focus')
-        self._focus.dispatch_event('on_blur')
+        self._focus._del_pseudoclass('focus')
+        self._focus._dispatch_event('on_blur')
         self._focus = None
 
     def focus(self, ui_element):
@@ -2500,8 +2590,8 @@ class UI_Document(UI_Document_FSM):
         if self._focus == ui_element: return
         self.blur()
         self._focus = ui_element
-        self._focus.add_pseudoclass('focus')
-        self._focus.dispatch_event('on_focus')
+        self._focus._add_pseudoclass('focus')
+        self._focus._dispatch_event('on_focus')
 
     @UI_Document_FSM.FSM_State('focus', 'enter')
     def modal_focus_enter(self):
@@ -2513,6 +2603,8 @@ class UI_Document(UI_Document_FSM):
     def modal_focus(self):
         if self.actions.pressed('LEFTMOUSE', unpress=False):
             return 'mousedown'
+        if self.actions.pressed('RIGHTMOUSE'):
+            self._debug_print(self._focus)
         # if self.actions.pressed('ESC'):
         #     self.blur()
         #     return 'main'
@@ -2529,10 +2621,10 @@ class UI_Document(UI_Document_FSM):
             if self._last_pressed != pressed:
                 self._last_press_start = cur
                 self._last_press_time = 0
-                self._focus.dispatch_event('on_keypress', key=pressed)
+                self._focus._dispatch_event('on_keypress', key=pressed)
             elif cur >= self._last_press_start + UI_Document.key_repeat_delay and cur >= self._last_press_time + UI_Document.key_repeat_pause:
                 self._last_press_time = cur
-                self._focus.dispatch_event('on_keypress', key=pressed)
+                self._focus._dispatch_event('on_keypress', key=pressed)
         self._last_pressed = pressed
 
         if not self._focus: return 'main'
@@ -2549,194 +2641,194 @@ class UI_Document(UI_Document_FSM):
 
         if (w,h) != self._last_sz:
             self._last_sz = (w,h)
-            self._body.dirty_flow()
+            self._body._dirty_flow()
             # self._body.dirty('region size changed', 'style', children=True)
-        self._body.clean()
-        self._body.layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
-        self._body.set_view_size(sz)
+        self._body._clean()
+        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
+        self._body._set_view_size(sz)
         self._body._call_postflow()
-        self._body.layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
-        self._body.set_view_size(sz)
-        self._body.draw()
+        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
+        self._body._set_view_size(sz)
+        self._body._draw()
 
         ScissorStack.end()
 
 ui_document = Globals.set(UI_Document())
 
 
-class UI_Document_old:
-    '''
-    This is the main manager of the UI system.
-    '''
+# class UI_Document_old:
+#     '''
+#     This is the main manager of the UI system.
+#     '''
 
-    def __init__(self, **kwargs):
-        self.drawing = Globals.drawing
-        self.windows = []
-        self.windows_unfocus = None
-        self.active = None
-        self.active_last = None
-        self.focus = None
-        self.focus_darken = True
-        self.focus_close_on_leave = True
-        self.focus_close_distance = self.drawing.scale(30)
+#     def __init__(self, **kwargs):
+#         self.drawing = Globals.drawing
+#         self.windows = []
+#         self.windows_unfocus = None
+#         self.active = None
+#         self.active_last = None
+#         self.focus = None
+#         self.focus_darken = True
+#         self.focus_close_on_leave = True
+#         self.focus_close_distance = self.drawing.scale(30)
 
-        self.tooltip_delay = 0.75
-        self.tooltip_value = None
-        self.tooltip_time = time.time()
-        self.tooltip_show = kwargs.get('show tooltips', True)
-        self.tooltip_window = UI_Dialog(None, {'bgcolor':(0,0,0,0.75), 'visible':False})
-        self.tooltip_label = self.tooltip_window.add(UI_Label('foo bar'))
-        self.tooltip_offset = Vec2D((15, -15))
+#         self.tooltip_delay = 0.75
+#         self.tooltip_value = None
+#         self.tooltip_time = time.time()
+#         self.tooltip_show = kwargs.get('show tooltips', True)
+#         self.tooltip_window = UI_Dialog(None, {'bgcolor':(0,0,0,0.75), 'visible':False})
+#         self.tooltip_label = self.tooltip_window.add(UI_Label('foo bar'))
+#         self.tooltip_offset = Vec2D((15, -15))
 
-        self.interval_id = 0
-        self.intervals = {}
+#         self.interval_id = 0
+#         self.intervals = {}
 
-    def set_show_tooltips(self, v):
-        self.tooltip_show = v
-        if not v: self.tooltip_window.visible = v
-    def set_tooltip_label(self, v):
-        if not v:
-            self.tooltip_window.visible = False
-            self.tooltip_value = None
-            return
-        if self.tooltip_value != v:
-            self.tooltip_window.visible = False
-            self.tooltip_value = v
-            self.tooltip_time = time.time()
-            self.tooltip_label.set_label(v)
-            return
-        if time.time() >= self.tooltip_time + self.tooltip_delay:
-            self.tooltip_window.visible = self.tooltip_show
-        # self.tooltip_window.fn_sticky.set(self.active.pos + self.active.size)
-        # self.tooltip_window.update_pos()
+#     def set_show_tooltips(self, v):
+#         self.tooltip_show = v
+#         if not v: self.tooltip_window.visible = v
+#     def set_tooltip_label(self, v):
+#         if not v:
+#             self.tooltip_window.visible = False
+#             self.tooltip_value = None
+#             return
+#         if self.tooltip_value != v:
+#             self.tooltip_window.visible = False
+#             self.tooltip_value = v
+#             self.tooltip_time = time.time()
+#             self.tooltip_label.set_label(v)
+#             return
+#         if time.time() >= self.tooltip_time + self.tooltip_delay:
+#             self.tooltip_window.visible = self.tooltip_show
+#         # self.tooltip_window.fn_sticky.set(self.active.pos + self.active.size)
+#         # self.tooltip_window.update_pos()
 
-    def create_window(self, title, options):
-        win = UI_Dialog(title, options)
-        self.windows.append(win)
-        return win
+#     def create_window(self, title, options):
+#         win = UI_Dialog(title, options)
+#         self.windows.append(win)
+#         return win
 
-    def delete_window(self, win):
-        if win.fn_event_handler: win.fn_event_handler(None, UI_Event('WINDOW', 'CLOSE'))
-        if win == self.focus: self.clear_focus()
-        if win == self.active: self.clear_active()
-        if win in self.windows: self.windows.remove(win)
-        win.delete()
+#     def delete_window(self, win):
+#         if win.fn_event_handler: win.fn_event_handler(None, UI_Event('WINDOW', 'CLOSE'))
+#         if win == self.focus: self.clear_focus()
+#         if win == self.active: self.clear_active()
+#         if win in self.windows: self.windows.remove(win)
+#         win.delete()
 
-    def clear_active(self): self.active = None
+#     def clear_active(self): self.active = None
 
-    def has_focus(self): return self.focus is not None
-    def set_focus(self, win, darken=True, close_on_leave=False):
-        self.clear_focus()
-        if win is None: return
-        win.visible = True
-        self.focus = win
-        self.focus_darken = darken
-        self.focus_close_on_leave = close_on_leave
-        self.active = win
-        self.windows_unfocus = [win for win in self.windows if win != self.focus]
-        self.windows = [self.focus]
+#     def has_focus(self): return self.focus is not None
+#     def set_focus(self, win, darken=True, close_on_leave=False):
+#         self.clear_focus()
+#         if win is None: return
+#         win.visible = True
+#         self.focus = win
+#         self.focus_darken = darken
+#         self.focus_close_on_leave = close_on_leave
+#         self.active = win
+#         self.windows_unfocus = [win for win in self.windows if win != self.focus]
+#         self.windows = [self.focus]
 
-    def clear_focus(self):
-        if self.focus is None: return
-        self.windows += self.windows_unfocus
-        self.windows_unfocus = None
-        self.active = None
-        self.focus = None
+#     def clear_focus(self):
+#         if self.focus is None: return
+#         self.windows += self.windows_unfocus
+#         self.windows_unfocus = None
+#         self.active = None
+#         self.focus = None
 
-    def draw_darken(self):
-        bgl.glPushAttrib(bgl.GL_ALL_ATTRIB_BITS)
-        bgl.glMatrixMode(bgl.GL_PROJECTION)
-        bgl.glPushMatrix()
-        bgl.glLoadIdentity()
-        bgl.glColor4f(0,0,0,0.25)    # TODO: use window background color??
-        bgl.glEnable(bgl.GL_BLEND)
-        bgl.glDisable(bgl.GL_DEPTH_TEST)
-        bgl.glBegin(bgl.GL_QUADS)   # TODO: not use immediate mode
-        bgl.glVertex2f(-1, -1)
-        bgl.glVertex2f( 1, -1)
-        bgl.glVertex2f( 1,  1)
-        bgl.glVertex2f(-1,  1)
-        bgl.glEnd()
-        bgl.glPopMatrix()
-        bgl.glPopAttrib()
+#     def draw_darken(self):
+#         bgl.glPushAttrib(bgl.GL_ALL_ATTRIB_BITS)
+#         bgl.glMatrixMode(bgl.GL_PROJECTION)
+#         bgl.glPushMatrix()
+#         bgl.glLoadIdentity()
+#         bgl.glColor4f(0,0,0,0.25)    # TODO: use window background color??
+#         bgl.glEnable(bgl.GL_BLEND)
+#         bgl.glDisable(bgl.GL_DEPTH_TEST)
+#         bgl.glBegin(bgl.GL_QUADS)   # TODO: not use immediate mode
+#         bgl.glVertex2f(-1, -1)
+#         bgl.glVertex2f( 1, -1)
+#         bgl.glVertex2f( 1,  1)
+#         bgl.glVertex2f(-1,  1)
+#         bgl.glEnd()
+#         bgl.glPopMatrix()
+#         bgl.glPopAttrib()
 
-    def draw_postpixel(self, context):
-        ScissorStack.start(context)
-        bgl.glEnable(bgl.GL_BLEND)
-        if self.focus:
-            for win in self.windows_unfocus:
-                win.draw_postpixel()
-            if self.focus_darken:
-                self.draw_darken()
-            self.focus.draw_postpixel()
-        else:
-            for win in self.windows:
-                win.draw_postpixel()
-        self.tooltip_window.draw_postpixel()
-        ScissorStack.end()
+#     def draw_postpixel(self, context):
+#         ScissorStack.start(context)
+#         bgl.glEnable(bgl.GL_BLEND)
+#         if self.focus:
+#             for win in self.windows_unfocus:
+#                 win.draw_postpixel()
+#             if self.focus_darken:
+#                 self.draw_darken()
+#             self.focus.draw_postpixel()
+#         else:
+#             for win in self.windows:
+#                 win.draw_postpixel()
+#         self.tooltip_window.draw_postpixel()
+#         ScissorStack.end()
 
-    def register_interval_callback(self, fn_callback, interval):
-        self.interval_id += 1
-        self.intervals[self.interval_id] = {
-            'callback': fn_callback,
-            'interval': interval,
-            'next': 0,
-        }
-        return self.interval_id
+#     def register_interval_callback(self, fn_callback, interval):
+#         self.interval_id += 1
+#         self.intervals[self.interval_id] = {
+#             'callback': fn_callback,
+#             'interval': interval,
+#             'next': 0,
+#         }
+#         return self.interval_id
 
-    def unregister_interval_callback(self, interval_id):
-        del self.intervals[self.interval_id]
+#     def unregister_interval_callback(self, interval_id):
+#         del self.intervals[self.interval_id]
 
-    def update(self):
-        cur_time = time.time()
-        for interval_id in self.intervals:
-            interval = self.intervals[interval_id]
-            if interval['next'] > cur_time: continue
-            interval['callback']()
-            interval['next'] = cur_time + interval['interval']
+#     def update(self):
+#         cur_time = time.time()
+#         for interval_id in self.intervals:
+#             interval = self.intervals[interval_id]
+#             if interval['next'] > cur_time: continue
+#             interval['callback']()
+#             interval['next'] = cur_time + interval['interval']
 
-    def modal(self, context, event):
-        if event.type == 'MOUSEMOVE':
-            mouse = Point2D((float(event.mouse_region_x), float(event.mouse_region_y)))
-            self.tooltip_window.fn_sticky.set(mouse + self.tooltip_offset)
-            self.tooltip_window.update_pos()
-            if self.focus and self.focus_close_on_leave:
-                d = self.focus.distance(mouse)
-                if d > self.focus_close_distance:
-                    self.delete_window(self.focus)
+#     def modal(self, context, event):
+#         if event.type == 'MOUSEMOVE':
+#             mouse = Point2D((float(event.mouse_region_x), float(event.mouse_region_y)))
+#             self.tooltip_window.fn_sticky.set(mouse + self.tooltip_offset)
+#             self.tooltip_window.update_pos()
+#             if self.focus and self.focus_close_on_leave:
+#                 d = self.focus.distance(mouse)
+#                 if d > self.focus_close_distance:
+#                     self.delete_window(self.focus)
 
-        ret = {}
+#         ret = {}
 
-        if self.active and self.active.state != 'main':
-            ret = self.active.modal(context, event)
-            if not ret: self.active = None
-        elif self.focus:
-            ret = self.focus.modal(context, event)
-        else:
-            self.active = None
-            for win in reversed(self.windows):
-                ret = win.modal(context, event)
-                if ret:
-                    self.active = win
-                    break
+#         if self.active and self.active.state != 'main':
+#             ret = self.active.modal(context, event)
+#             if not ret: self.active = None
+#         elif self.focus:
+#             ret = self.focus.modal(context, event)
+#         else:
+#             self.active = None
+#             for win in reversed(self.windows):
+#                 ret = win.modal(context, event)
+#                 if ret:
+#                     self.active = win
+#                     break
 
-        if self.active != self.active_last:
-            if self.active_last and self.active_last.fn_event_handler:
-                self.active_last.fn_event_handler(context, UI_Event('HOVER', 'LEAVE'))
-            if self.active and self.active.fn_event_handler:
-                self.active.fn_event_handler(context, UI_Event('HOVER', 'ENTER'))
-        self.active_last = self.active
+#         if self.active != self.active_last:
+#             if self.active_last and self.active_last.fn_event_handler:
+#                 self.active_last.fn_event_handler(context, UI_Event('HOVER', 'LEAVE'))
+#             if self.active and self.active.fn_event_handler:
+#                 self.active.fn_event_handler(context, UI_Event('HOVER', 'ENTER'))
+#         self.active_last = self.active
 
-        if self.active:
-            if self.active.fn_event_handler:
-                self.active.fn_event_handler(context, event)
-            if self.active:
-                tooltip = self.active.get_tooltip()
-                self.set_tooltip_label(tooltip)
-        else:
-            self.set_tooltip_label(None)
+#         if self.active:
+#             if self.active.fn_event_handler:
+#                 self.active.fn_event_handler(context, event)
+#             if self.active:
+#                 tooltip = self.active.get_tooltip()
+#                 self.set_tooltip_label(tooltip)
+#         else:
+#             self.set_tooltip_label(None)
 
-        return ret
+#         return ret
 
 
 
