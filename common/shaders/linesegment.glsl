@@ -3,7 +3,8 @@ uniform mat4 uMVPMatrix;
 
 uniform vec2 uPos0;
 uniform vec2 uPos1;
-uniform vec4 uColor;
+uniform vec4 uColor0;
+uniform vec4 uColor1;
 uniform float uWidth;
 
 uniform vec2 uStipple;
@@ -41,6 +42,10 @@ void main() {
 
 void main() {
     float s = mod(vDist + uStippleOffset, uStipple.x + uStipple.y);
-    if(s > uStipple.x) discard;
-    gl_FragColor = uColor;
+    if(s <= uStipple.x) {
+        gl_FragColor = uColor0;
+    } else {
+        gl_FragColor = uColor1;
+        if(uColor1.a <= 0) discard;
+    }
 }

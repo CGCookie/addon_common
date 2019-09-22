@@ -116,34 +116,65 @@ if bversion() >= "2.80":
     from gpu_extras.batch import batch_for_shader
 
     # https://docs.blender.org/api/blender2.8/gpu.html#triangle-with-custom-shader
-    vshader_lineseg = '''
+    uniforms = '''
+        uniform vec2 screensize;
         uniform mat4 MVPMatrix;
         uniform vec2 pos0;
         uniform vec2 pos1;
+        uniform vec2 stipple;
+        uniform float stippleOffset;
+        uniform vec4 color0;
+        uniform vec4 color1;
         uniform float width;
+    '''
+    vshader = uniforms + '''
         in vec2 pos;
-        out float dist;
+        noperspective out vec2 vpos;
+        noperspective out vec2 cpos;
+        noperspective out float dist;
         void main() {
             vec2 v01 = pos1 - pos0;
             vec2 d01 = normalize(v01);
             vec2 perp = vec2(-d01.y, d01.x);
-            vec2 p = pos0 + (pos.x * v01) + (width * (pos.y - 0.5) * perp);
+            vec2 cp = pos0 + (pos.x * v01);
+            vec2 p = cp + ((width+2.0) * (pos.y - 0.5) * perp);
+            vec4 pcp = MVPMatrix * vec4(cp, 0.0, 1.0);
             gl_Position = MVPMatrix * vec4(p, 0.0, 1.0);
             dist = length(v01) * pos.x;
+            vpos = vec2(gl_Position.x * screensize.x, gl_Position.y * screensize.y);
+            cpos = vec2(pcp.x * screensize.x, pcp.y * screensize.y);
         }
     '''
-    fshader_lineseg = '''
-        uniform vec2 stipple;
-        uniform float stippleOffset;
-        uniform vec4 color;
+    fshader = uniforms + '''
+        in vec2 vpos;
+        in vec2 cpos;
         in float dist;
         void main() {
-            float s = mod(dist + stippleOffset, stipple.x + stipple.y);
-            if(s > stipple.x) discard;
-            gl_FragColor = color;
+            // stipple
+            if(stipple.y <= 0) {        // stipple disabled
+                gl_FragColor = color0;
+            } else {
+                float t = stipple.x + stipple.y;
+                float s = mod(dist + stippleOffset, t);
+                float sd = s - stipple.x;
+                if(s <= 0.5 || s >= t - 0.5) {
+                    gl_FragColor = mix(color1, color0, mod(s + 0.5, t));
+                } else if(s >= stipple.x - 0.5 && s <= stipple.x + 0.5) {
+                    gl_FragColor = mix(color0, color1, s - (stipple.x - 0.5));
+                } else if(s < stipple.x) {
+                    gl_FragColor = color0;
+                } else {
+                    gl_FragColor = color1;
+                }
+            }
+            // antialias along edge of line
+            float cdist = length(cpos - vpos);
+            if(cdist > width) {
+                gl_FragColor.a *= clamp(1.0 - (cdist - width), 0.0, 1.0);
+            }
         }
     '''
-    shader_lineseg = gpu.types.GPUShader(vshader_lineseg, fshader_lineseg)
+    shader_lineseg = gpu.types.GPUShader(vshader, fshader)
     # create batch to draw large triangle that covers entire clip space (-1,-1)--(+1,+1)
     batch_lineseg = batch_for_shader(shader_lineseg, 'TRIS', {"pos": [(0,0), (1,0), (1,1), (0,0), (1,1), (0,1)]})
 
@@ -482,7 +513,10 @@ class Drawing:
 
     # draw line segment in screen space
     @blender_version_wrapper('<', '2.80')
-    def draw2D_line(self, p0:Point2D, p1:Point2D, color:Color, *, width=1, stipple=None, offset=0):
+    def draw2D_line(self, p0:Point2D, p1:Point2D, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
+        # TODO: better test this!
+        print('THIS IS NOT TESTED!')
+        if color1 is None: color1 = (0,0,0,0)
         if not hasattr(Drawing, '_line_data'):
             sizeOfFloat, sizeOfInt = 4, 4
             vbos = bgl.Buffer(bgl.GL_INT, 1)
@@ -513,7 +547,8 @@ class Drawing:
         shader.assign('uScreenSize', (self.area.width, self.area.height))
         shader.assign('uPos0', p0)
         shader.assign('uPos1', p1)
-        shader.assign('uColor', color)
+        shader.assign('uColor0', color0)
+        shader.assign('uColor1', color1)
         shader.assign('uWidth', width)
         shader.assign('uStipple', stipple)
         shader.assign('uStippleOffset', offset)
@@ -526,14 +561,17 @@ class Drawing:
 
     # draw line segment in screen space
     @blender_version_wrapper('>=', '2.80')
-    def draw2D_line(self, p0:Point2D, p1:Point2D, color:Color, *, width=1, stipple=None, offset=0):
+    def draw2D_line(self, p0:Point2D, p1:Point2D, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
+        if color1 is None: color1 = (0,0,0,0)
         width = self.scale(width)
         stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
         offset = self.scale(offset)
         shader_lineseg.bind()
+        shader_lineseg.uniform_float('screensize', (self.area.width, self.area.height))
         shader_lineseg.uniform_float('pos0', p0)
         shader_lineseg.uniform_float('pos1', p1)
-        shader_lineseg.uniform_float('color', color)
+        shader_lineseg.uniform_float('color0', color0)
+        shader_lineseg.uniform_float('color1', color1)
         shader_lineseg.uniform_float('width', width)
         shader_lineseg.uniform_float('stipple', stipple)
         shader_lineseg.uniform_float('stippleOffset', offset)
