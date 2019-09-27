@@ -26,6 +26,7 @@ import time
 import random
 import traceback
 import functools
+import contextlib
 import urllib.request
 from itertools import chain
 from concurrent.futures import ThreadPoolExecutor
@@ -587,10 +588,10 @@ Drawing.initialize()
 
 class ScissorStack:
     buf = bgl.Buffer(bgl.GL_INT, 4)
-    region_box = None                   # (l,b,w,h) of region in window-coords
     is_started = False
     scissor_test_was_enabled = False
-    stack = None                        # stack of (l,b,w,h) in region-coordinates, because viewport is set to region
+    stack = None                        # stack of (l,t,w,h) in region-coordinates, because viewport is set to region
+    msg_stack = None
 
     @staticmethod
     def start(context):
@@ -599,18 +600,21 @@ class ScissorStack:
         # region pos and size are window-coordinates
         rgn = context.region
         rl,rb,rw,rh = rgn.x, rgn.y, rgn.width, rgn.height
-        ScissorStack.region_box = (rl, rb, rw, rh)
+        rt = rb + rh - 1
 
         # remember the current scissor box settings so we can return to them when done
         ScissorStack.scissor_test_was_enabled = (bgl.glIsEnabled(bgl.GL_SCISSOR_TEST) == bgl.GL_TRUE)
         if ScissorStack.scissor_test_was_enabled:
             bgl.glGetIntegerv(bgl.GL_SCISSOR_BOX, ScissorStack.buf)
             pl, pb, pw, ph = ScissorStack.buf
-            ScissorStack.stack = [(pl, pb, pw, ph)]
+            pt = pb + ph - 1
+            ScissorStack.stack = [(pl, pt, pw, ph)]
+            ScissorStack.msg_stack = ['init']
             # don't need to enable, because we are already scissoring!
             # TODO: this is not tested!
         else:
-            ScissorStack.stack = [(0, 0, rw, rh)]
+            ScissorStack.stack = [(0, rh - 1, rw, rh)]
+            ScissorStack.msg_stack = ['init']
             bgl.glEnable(bgl.GL_SCISSOR_TEST)
 
         # we're ready to go!
@@ -626,10 +630,12 @@ class ScissorStack:
     @staticmethod
     def _set_scissor():
         assert ScissorStack.is_started, 'Attempting to set scissor settings with non-started ScissorStack'
-        bgl.glScissor(*ScissorStack.stack[-1])
+        l,t,w,h = ScissorStack.stack[-1]
+        b = t - (h - 1)
+        bgl.glScissor(l, b, w, h)
 
     @staticmethod
-    def push(nl, nt, nw, nh, clamp=True):
+    def push(nl, nt, nw, nh, msg='', clamp=True):
         # note: pos and size are already in region-coordinates, but it is specified from top-left corner
 
         assert ScissorStack.is_started, 'Attempting to push to a non-started ScissorStack!'
@@ -640,15 +646,18 @@ class ScissorStack:
 
         if clamp:
             # get previous scissor box
-            pl, pb, pw, ph = ScissorStack.stack[-1]
+            pl, pt, pw, ph = ScissorStack.stack[-1]
             pr = pl + (pw - 1)
-            pt = pb + (ph - 1)
+            pb = pt - (ph - 1)
             # clamp new box to previous (extra +1/-1 is to handle 0-sized width/height if boxes do not intersect)
-            cl, cr, ct, cb = mid(nl,pl,pr), mid(nr+1,pl,pr)-1, mid(nt+1,pt,pb)-1, mid(nb,pt,pb)
+            #cl, cr, ct, cb = mid(nl,pl,pr), mid(nr+1,pl,pr)-1, mid(nt+1,pt,pb)-1, mid(nb,pt,pb)
+            cl, cr, ct, cb = mid(nl,pl,pr), mid(nr,pl,pr), mid(nt,pt,pb), mid(nb,pt,pb)
             cw, ch = max(0, cr - cl + 1), max(0, ct - cb + 1)
-            ScissorStack.stack.append((int(cl), int(cb), int(cw), int(ch)))
+            ScissorStack.stack.append((int(cl), int(ct), int(cw), int(ch)))
+            ScissorStack.msg_stack.append(msg)
         else:
-            ScissorStack.stack.append((int(nl), int(nb), int(nw), int(nh)))
+            ScissorStack.stack.append((int(nl), int(nt), int(nw), int(nh)))
+            ScissorStack.msg_stack.append(msg)
 
         ScissorStack._set_scissor()
 
@@ -656,26 +665,50 @@ class ScissorStack:
     def pop():
         assert len(ScissorStack.stack) > 1, 'Attempting to pop from empty ScissorStack!'
         ScissorStack.stack.pop()
+        ScissorStack.msg_stack.pop()
         ScissorStack._set_scissor()
+
+    @staticmethod
+    @contextlib.contextmanager
+    def wrap(*args, disabled=False, **kwargs):
+        if disabled:
+            yield None
+            return
+        try:
+            ScissorStack.push(*args, **kwargs)
+            yield None
+            ScissorStack.pop()
+        except Exception as e:
+            ScissorStack.pop()
+            print('Caught exception while scissoring:', args, kwargs)
+            Globals.debugger.print_exception()
+            raise e
 
     @staticmethod
     def get_current_view():
         assert ScissorStack.is_started
         assert ScissorStack.stack
-        l, b, w, h = ScissorStack.stack[-1]
-        r, t = l + (w - 1), b + (h - 1)
+        l, t, w, h = ScissorStack.stack[-1]
+        r, b = l + (w - 1), t - (h - 1)
         return (l, t, w, h)
 
     @staticmethod
+    def print_view_stack():
+        for i,st in enumerate(ScissorStack.stack):
+            l, t, w, h = st
+            r, b = l + (w - 1), t - (h - 1)
+            print(('  '*i) + str((l,t,w,h)) + ' ' + ScissorStack.msg_stack[i])
+
+    @staticmethod
     def is_visible():
-        vl,vb,vw,vh = ScissorStack.get_current_view()
+        vl,vt,vw,vh = ScissorStack.get_current_view()
         return vw > 0 and vh > 0
 
     @staticmethod
     def is_box_visible(l, t, w, h):
-        vl, vb, vw, vh = ScissorStack.get_current_view()
+        vl, vt, vw, vh = ScissorStack.get_current_view()
         if vw <= 0 or vh <= 0: return False
-        vr, vt = vl + (vw - 1), vb + (vh - 1)
+        vr, vb = vl + (vw - 1), vt - (vh - 1)
         r, b = l + (w - 1), t - (h - 1)
         return not (l > vr or r < vl or t < vb or b > vt)
 

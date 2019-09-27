@@ -181,7 +181,7 @@ class Profiler:
             pr = self.start(*args, dblBack=True, **kwargs)
             yield pr
             pr.done()
-        except Exception as exc:
+        except Exception as e:
             pr.done()
             print('Caught exception while profiling:', args, kwargs)
             Globals.debugger.print_exception()

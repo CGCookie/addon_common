@@ -222,7 +222,7 @@ class UI_Draw:
             shader.bind()
             shader.uniform_float("uMVPMatrix", get_pixel_matrix())
 
-        def draw(left, top, width, height, dpi_mult, style, texture_id):
+        def draw(left, top, width, height, dpi_mult, style, texture_id, background_override):
             nonlocal shader, batch
             def get_v(style_key):
                 v = style[style_key]
@@ -249,7 +249,10 @@ class UI_Draw:
             shader.uniform_float('border_right_color',  get_v('border-right-color'))
             shader.uniform_float('border_top_color',    get_v('border-top-color'))
             shader.uniform_float('border_bottom_color', get_v('border-bottom-color'))
-            shader.uniform_float('background_color',    get_v('background-color'))
+            if background_override:
+                shader.uniform_float('background_color',    background_override)
+            else:
+                shader.uniform_float('background_color',    get_v('background-color'))
             if texture_id == -1:
                 shader.uniform_float('using_image', 0)
             else:
@@ -278,8 +281,8 @@ class UI_Draw:
         ''' only need to call once every redraw '''
         UI_Draw._update()
 
-    def draw(self, left, top, width, height, dpi_mult, style, texture_id=-1):
-        UI_Draw._draw(left, top, width, height, dpi_mult, style, texture_id)
+    def draw(self, left, top, width, height, dpi_mult, style, texture_id=-1, background_override=None):
+        UI_Draw._draw(left, top, width, height, dpi_mult, style, texture_id, background_override)
 
 
 ui_draw = Globals.set(UI_Draw())
@@ -521,6 +524,7 @@ class UI_Element_Properties:
         self._innerText = nText
         self._dirty('changing innerText changes content', 'content')
         self._dirty('changing innerText changes size', 'size')
+        self._new_content = True
         self._dirty_flow()
 
     @property
@@ -583,6 +587,7 @@ class UI_Element_Properties:
         child._parent = self
         child._dirty('appending child to parent', parent=False, children=True)
         self._dirty('appending new child changes content', 'content')
+        self._new_content = True
         return child
     def append_child(self, child): return self._append_child(child)
 
@@ -595,12 +600,14 @@ class UI_Element_Properties:
         child._parent = None
         child._dirty('deleting child from parent')
         self._dirty('deleting child changes content', 'content')
+        self._new_content = True
     def delete_child(self, child): self._delete_child(child)
 
     @UI_Element_Utils.defer_dirty('clearing children')
     def _clear_children(self):
         for child in list(self._children):
             self._delete_child(child)
+        self._new_content = True
     def clear_children(self): self._clear_children()
 
     def _count_children(self):
@@ -779,6 +786,7 @@ class UI_Element_Properties:
         if self._src_str == v: return
         self._src_str = v
         self._src = None    # force reload of image
+        self._new_content = True
         self._dirty('changing src affects content', 'content', parent=True, children=False)
 
     @property
@@ -1345,6 +1353,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             'blocks',                           # children are grouped into blocks
             'size',                             # force recalculations of size
         }
+        self._new_content = True
         self._dirtying_flow = True
         self._dirty_causes = []
         self._dirty_callbacks = {}
@@ -1354,6 +1363,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             'children': set(),                  # set of properties to dirty for children
         }
         self._defer_clean = False               # set to True to defer cleaning (useful when many changes are occurring)
+        self._clean_debugging = {}
         self._do_not_dirty_parent = False
 
         ########################################################
@@ -1428,6 +1438,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._dirty_callbacks['style'] = set()
             return
 
+        self._clean_debugging['style'] = time.time()
+
         self.defer_dirty_propagation = True
 
         # rebuild up full selector
@@ -1495,17 +1507,30 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         dpi_mult = Globals.drawing.get_dpi_mult()
         self._style_cache = {}
         sc = self._style_cache
-        sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = self._get_style_trbl('margin',  scale=dpi_mult)
-        sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = self._get_style_trbl('padding', scale=dpi_mult)
-        sc['border-width']        = self._get_style_num('border-width', 0, scale=dpi_mult)
-        sc['border-radius']       = self._computed_styles.get('border-radius', 0)
-        sc['border-left-color']   = self._computed_styles.get('border-left-color',   Color.transparent)
-        sc['border-right-color']  = self._computed_styles.get('border-right-color',  Color.transparent)
-        sc['border-top-color']    = self._computed_styles.get('border-top-color',    Color.transparent)
-        sc['border-bottom-color'] = self._computed_styles.get('border-bottom-color', Color.transparent)
-        sc['background-color']    = self._computed_styles.get('background-color',    Color.transparent)
-        sc['width'] = self._computed_styles.get('width', 'auto')
-        sc['height'] = self._computed_styles.get('height', 'auto')
+        if self._innerTextAsIs is None:
+            sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = self._get_style_trbl('margin',  scale=dpi_mult)
+            sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = self._get_style_trbl('padding', scale=dpi_mult)
+            sc['border-width']        = self._get_style_num('border-width', 0, scale=dpi_mult)
+            sc['border-radius']       = self._computed_styles.get('border-radius', 0)
+            sc['border-left-color']   = self._computed_styles.get('border-left-color',   Color.transparent)
+            sc['border-right-color']  = self._computed_styles.get('border-right-color',  Color.transparent)
+            sc['border-top-color']    = self._computed_styles.get('border-top-color',    Color.transparent)
+            sc['border-bottom-color'] = self._computed_styles.get('border-bottom-color', Color.transparent)
+            sc['background-color']    = self._computed_styles.get('background-color',    Color.transparent)
+            sc['width'] = self._computed_styles.get('width', 'auto')
+            sc['height'] = self._computed_styles.get('height', 'auto')
+        else:
+            sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = 0, 0, 0, 0
+            sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = 0, 0, 0, 0
+            sc['border-width']        = 0
+            sc['border-radius']       = 0
+            sc['border-left-color']   = Color.transparent
+            sc['border-right-color']  = Color.transparent
+            sc['border-top-color']    = Color.transparent
+            sc['border-bottom-color'] = Color.transparent
+            sc['background-color']    = Color.transparent
+            sc['width'] = 'auto'
+            sc['height'] = 'auto'
 
         fontfamily = self._computed_styles.get('font-family', 'sans-serif')
         fontstyle = self._computed_styles.get('font-style', 'normal')
@@ -1575,6 +1600,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._dirty_callbacks['content'] = set()
             return
 
+        self._clean_debugging['content'] = time.time()
+
         self.defer_dirty_propagation = True
 
         content_before = self._computed_styles_before.get('content', None) if self._computed_styles_before else None
@@ -1582,19 +1609,26 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             # TODO: cache this!!
             self._child_before = UI_Element(tagName=self._tagName, innerText=content_before, pseudoelement='before', _parent=self)
             self._child_before._clean()
+            self._new_content = True
         else:
-            self._child_before = None
+            if self._child_before:
+                self._child_before = None
+                self._new_content = True
 
         content_after  = self._computed_styles_after.get('content', None)  if self._computed_styles_after  else None
         if content_after:
             # TODO: cache this!!
             self._child_after = UI_Element(tagName=self._tagName, innerText=content_after, pseudoelement='after', _parent=self)
             self._child_after._clean()
+            self._new_content = True
         else:
-            self._child_after = None
+            if self._child_after:
+                self._child_after = None
+                self._new_content = True
 
         if self._src and not self.src:
             self._src = None
+            self._new_content = True
 
         if self._innerText is not None:
             # TODO: cache this!!
@@ -1658,6 +1692,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         child._clean()
                         self._children_text_min_size.width  = max(self._children_text_min_size.width,  child._static_content_size.width)
                         self._children_text_min_size.height = max(self._children_text_min_size.height, child._static_content_size.height)
+                self._new_content = True
 
         elif self.src: # and not self._src:
             self._image_data = load_texture(self.src)
@@ -1666,9 +1701,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._children_text = []
             self._children_text_min_size = None
             self._innerTextWrapped = None
+            self._new_content = True
 
         else:
-            self._children_text = []
+            if self._children_text:
+                self._new_content = True
+                self._children_text = []
             self._children_text_min_size = None
             self._innerTextWrapped = None
 
@@ -1684,8 +1722,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         for child in self._children_all: child._compute_content()
 
         # content changes might have changed size
-        self._dirty('content changes might have affected blocks', 'blocks')
-        self._dirty_flow()
+        if self._new_content:
+            self._dirty('content changes might have affected blocks', 'blocks')
+            self._dirty_flow()
+            self._new_content = False
         self._dirty_properties.discard('content')
         self._dirty_callbacks['content'] = set()
 
@@ -1723,6 +1763,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._dirty_callbacks['blocks'] = set()
             return
 
+        self._clean_debugging['blocks'] = time.time()
+
         self.defer_dirty_propagation = True
 
         if self._computed_styles.get('display', 'inline') == 'flexbox':
@@ -1731,17 +1773,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         else:
             # collect children into blocks
             self._blocks = []
-            blocked_inlines = None
+            blocked_inlines = False
             for child in self._children_all:
                 d = child._computed_styles.get('display', 'inline')
                 if d == 'inline':
                     if not blocked_inlines:
-                        blocked_inlines = []
-                        self._blocks.append(blocked_inlines)
-                    blocked_inlines.append(child)
+                        blocked_inlines = True
+                        self._blocks.append([child])
+                    else:
+                        self._blocks[-1].append(child)
                 else:
+                    blocked_inlines = False
                     self._blocks.append([child])
-                    blocked_inlines = None
 
         for child in self._children_all:
             child._compute_blocks()
@@ -1769,6 +1812,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             for e in self._dirty_callbacks.get('size', []): e._compute_static_content_size()
             self._dirty_callbacks['size'] = set()
             return
+
+        self._clean_debugging['size'] = time.time()
 
         self.defer_dirty_propagation = True
 
@@ -1857,6 +1902,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if not self._dirtying_flow:
             return
 
+        self._clean_debugging['layout'] = time.time()
+
         dpi_mult      = Globals.drawing.get_dpi_mult()
         display       = styles.get('display', 'block')
         is_nonstatic  = style_pos in {'absolute','relative','fixed','sticky'}
@@ -1902,8 +1949,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if self._static_content_size:
             # self has static content size
+            # self has no children
             dw = self._static_content_size.width
             dh = self._static_content_size.height
+            #if self._src_str:
+            #    print(self._src_str, (dw, dh), (min_width, min_height), (width, height), (max_width, max_height))
 
         else:
             # self has no static content, so flow and size is determined from children
@@ -1927,9 +1977,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             accum_height = 0    # sum heights for all lines
             for block in self._blocks:
                 # each block might be wrapped onto multiple lines
-                cur_line = []
-                line_width = 0
-                line_height = 0
+                new_line = True
+                cur_line = None
                 for element in block:
                     if not element.is_visible: continue
                     position = element._computed_styles.get('position', 'static')
@@ -1938,7 +1987,14 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     sy = element._computed_styles.get('overflow-y', 'visible')
                     processed = False
                     while not processed:
-                        first_child = not cur_line
+                        if new_line:
+                            cur_line = []
+                            line_width = 0
+                            line_height = 0
+                            first_child = True
+                            new_line = False
+                        else:
+                            first_child = False
                         rw = (inside_size.width  if inside_size.width  is not None else (inside_size.max_width  if inside_size.max_width  is not None else float('inf'))) - line_width
                         rh = (inside_size.height if inside_size.height is not None else (inside_size.max_height if inside_size.max_height is not None else float('inf'))) - accum_height
                         # rw = float('inf') if inside_size.max_width  is None else (inside_size.max_width  - line_width)
@@ -1946,7 +2002,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         if overflow_y in {'scroll','auto'}: rh = float('inf')
                         remaining = Size2D(max_width=rw, max_height=rh)
                         pos = Point2D((mbp_left + line_width, -(mbp_top + accum_height)))
-                        element.layout(
+                        element._layout(
                             first_on_line=first_child,
                             fitting_size=remaining,
                             fitting_pos=pos,
@@ -1966,7 +2022,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                             if sx == 'scroll': w = remaining.clamp_width(w)
                             if sy == 'scroll': h = remaining.clamp_height(h)
                             sz = Size2D(width=w, height=h)
-                            element.set_view_size(sz)
+                            element._set_view_size(sz)
                             line_width += w
                             line_height = max(line_height, h)
                             processed = True
@@ -1975,9 +2031,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                             lines.append(cur_line)
                             accum_height += line_height
                             accum_width = max(accum_width, line_width)
-                            cur_line = []
-                            line_width = 0
-                            line_height = 0
+                            new_line = True
                             element._dirty_flow(parent=False, children=True)
                             #element._dirtying_flow = True
                 if cur_line:
@@ -2072,6 +2126,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._absolute_size = size
         self.scrollLeft = self.scrollLeft
         self.scrollTop = self.scrollTop
+        #if self._src_str:
+        #    print(self._src_str, self._dynamic_full_size, self._dynamic_content_size, self._absolute_size)
     def set_view_size(self, *args, **kwargs): return self._set_view_size(*args, **kwargs)
 
     @UI_Element_Utils.add_option_callback('layout:flexbox')
@@ -2164,9 +2220,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _draw(self, depth=0):
         if not self.is_visible: return
 
+        if False:
+            t = max(0, 1 - (time.time() - self._clean_debugging.get('layout', 0)) / 1)
+            background_override = Color((t, t/2, 0, 0.5))
+        else:
+            background_override = None
+
         self._setup_ltwh()
 
-        if self._innerTextAsIs is not None and self._parent._textshadow != 'none':
+        if False and self._innerTextAsIs and self._parent._textshadow != 'none':
             tsx,tsy,tsc = self._parent._textshadow
             ol = min(tsx, 0)
             ot = max(-tsy, 0)
@@ -2174,7 +2236,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             oh = abs(tsy)
         else: ol,ot,ow,oh = 0,0,0,0
 
-        ScissorStack.push(self._l+ol, self._t+ot, self._w+ow, self._h+oh)
+        ScissorStack.push(self._l+ol, self._t+ot, self._w+ow, self._h+oh, str(self))
         bgl.glEnable(bgl.GL_BLEND)
 
         dpi_mult = Globals.drawing.get_dpi_mult()
@@ -2186,6 +2248,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if ScissorStack.is_box_visible(self._l+ol, self._t+ot, self._w+ow, self._h+oh):
             if self._innerTextAsIs is not None:
                 with profiler.code('drawing text'):
+                    if False:
+                        st = dict(self._style_cache)
+                        st['border-width'] = 1
+                        st['border-left-color'] = [1,1,1,0.5]
+                        st['border-right-color'] = [1,1,1,0.5]
+                        st['border-top-color'] = [1,1,1,0.5]
+                        st['border-bottom-color'] = [1,1,1,0.5]
+                        st['padding-left'] = -1
+                        st['padding-right'] = -1
+                        st['padding-top'] = -1
+                        st['padding-bottom'] = -1
+                        ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, st)
                     # need to set font size each time, but not certain why...
                     Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
                     ts = self._parent._textshadow
@@ -2197,37 +2271,55 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
             elif self._src == 'image':
                 with profiler.code('drawing mbp + image'):
-                    ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, self._image_data['texid'])
+                    if False:
+                        st = dict(self._style_cache)
+                        st['border-width'] = 1
+                        st['border-left-color'] = [1,1,1,0.5]
+                        st['border-right-color'] = [1,1,1,0.5]
+                        st['border-top-color'] = [1,1,1,0.5]
+                        st['border-bottom-color'] = [1,1,1,0.5]
+                        st['padding-left'] = -1
+                        st['padding-right'] = -1
+                        st['padding-top'] = -1
+                        st['padding-bottom'] = -1
+                        ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, st)
+                    ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, self._image_data['texid'], background_override=background_override)
+                #print(self._src_str, (self._l, self._t, self._w, self._h), self._dynamic_full_size, self._dynamic_content_size)
+                #ScissorStack.print_view_stack()
+
 
             else:
                 with profiler.code('drawing mbp'):
-                    ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache)
+                    ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, background_override=background_override)
 
             with profiler.code('drawing children'):
                 if False:
                     # include padding
                     il = round(self._l + (margin_left + border_width + padding_left))
-                    it = round(self._t - (margin_top  - border_width - padding_top))
+                    it = round(self._t - (margin_top  + border_width + padding_top))
                     iw = round(self._w - (margin_left + border_width + padding_left + padding_right + border_width + margin_right))
                     ih = round(self._h - (margin_top  + border_width + padding_top + padding_bottom + border_width + margin_bottom))
-                else:
+                elif True:
                     # do not include padding
                     il = round(self._l + (margin_left + border_width))
                     it = round(self._t - (margin_top  + border_width))
                     iw = round(self._w - (margin_left + border_width + border_width + margin_right))
                     ih = round(self._h - (margin_top  + border_width + border_width + margin_bottom))
-                # ScissorStack.push(il, it, iw, ih)
-
-                if self._innerText is not None:
-                    with profiler.code('drawing innerText'):
-                        size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
-                        Globals.drawing.set_font_color(self._fontid, self._fontcolor)
-                        for child in self._children_all: child._draw(depth + 1)
-                        Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
                 else:
-                    for child in self._children_all: child._draw(depth+1)
+                    il = round(self._l + (padding_left + border_width))
+                    it = round(self._t - (padding_top  + border_width))
+                    iw = round(self._w - (padding_left + border_width + border_width + padding_right))
+                    ih = round(self._h - (padding_top  + border_width + border_width + padding_bottom))
 
-                # ScissorStack.pop()
+                with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=False):
+                    if self._innerText is not None:
+                        with profiler.code('drawing innerText'):
+                            size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
+                            Globals.drawing.set_font_color(self._fontid, self._fontcolor)
+                            for child in self._children_all: child._draw(depth + 1)
+                            Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
+                    else:
+                        for child in self._children_all: child._draw(depth+1)
 
         ScissorStack.pop()
     def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
