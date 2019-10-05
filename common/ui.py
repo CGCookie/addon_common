@@ -265,6 +265,14 @@ def input_text(**kwargs):
 
     return ui_proxy
 
+def collection(label, **kwargs):
+    ui_container = UI_Element(tagName='div', classes='collection', **kwargs)
+    ui_label = div(innerText=label, classes='header', parent=ui_container)
+    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container)
+    ui_proxy = UI_Proxy(ui_container)
+    ui_proxy.map(['children','append_child','delete_child','clear_children'], ui_inside)
+    return ui_proxy
+
 
 def collapsible(label, **kwargs):
     helper_argtranslate('collapsed', 'checked', kwargs)
@@ -348,7 +356,7 @@ def markdown(mdown, **kwargs):
     return ui_container
 
 
-def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, closeable=True, moveable=True, **kwargs):
+def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, closeable=True, moveable=True, hide_on_close=False, **kwargs):
     # TODO: always add header, and use UI_Proxy translate+map "label" to change header
     ui_document = Globals.ui_document
     ui_dialog = UI_Element(tagName='dialog', classes='framed', **kwargs)
@@ -356,6 +364,9 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
     ui_header = UI_Element(tagName='div', classes='dialog-header', parent=ui_dialog)
     if closeable:
         def close():
+            if hide_on_close:
+                ui_dialog.is_visible = False
+                return
             if ui_dialog._parent is None: return
             if ui_dialog._parent == ui_dialog: return
             ui_dialog._parent.delete_child(ui_dialog)

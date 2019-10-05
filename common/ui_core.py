@@ -1009,6 +1009,7 @@ class UI_Element_Properties:
     def is_visible(self, v):
         self._is_visible = v
         self._dirty('changing visibility can affect style', 'style', children=True)
+        self._dirty_styling()
 
     @property
     def is_scrollable(self):
