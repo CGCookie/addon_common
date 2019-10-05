@@ -2527,8 +2527,12 @@ class UI_Document(UI_Document_FSM):
         # debug print!
         path = ui_from.get_pathToRoot()
         for i,ui_elem in enumerate(reversed(path)):
-            print('%s%s'   % ('  '*i, str(ui_elem)))
-            print('%s  %s' % ('  '*i, ui_elem._selector))
+            def tprint(*args, extra=0, **kwargs):
+                print('  '*(i+extra), end='')
+                print(*args, **kwargs)
+            tprint(str(ui_elem))
+            tprint(ui_elem._selector, extra=1)
+            tprint(ui_elem._l, ui_elem._t, ui_elem._w, ui_elem._h, extra=1)
 
     @profiler.function
     def handle_hover(self, change_cursor=True):

@@ -477,7 +477,6 @@ div.mdown li > span {
     display: block;
     width: 100%;
     background: transparent;
-    /*height: 36px; background: white;*/
 }
 *.labeledinputtext-container > *.labeledinputtext-input-container {
     margin: 0px;
@@ -492,6 +491,10 @@ div.mdown li > span {
     padding: 0px;
     display: block;
     width: 100%;
-    max-height: 22px;
+    /*max-height: 22px;*/
+    height: 26px;
 }
-
+*.labeledinputtext-container > *.labeledinputtext-input-container > *.inputtext-container > *.inputtext-input {
+    margin: 0px;
+    white-space: pre;
+}
