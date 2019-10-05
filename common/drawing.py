@@ -47,7 +47,7 @@ from .fontmanager import FontManager as fm
 from .maths import Point2D, Vec2D, Point, Ray, Direction, mid, Color
 from .profiler import profiler
 from .debug import dprint, debugger
-from .utils import find_fns
+from .utils import find_fns,iter_pairs
 
 
 class Cursors:
@@ -658,6 +658,27 @@ class Drawing:
         shader_2D_lineseg.uniform_float('stippleOffset', offset)
         shader_2D_lineseg.uniform_float('MVPMatrix', self.get_pixel_matrix())
         batch_2D_lineseg.draw(shader_2D_lineseg)
+        gpu.shader.unbind()
+
+    @blender_version_wrapper('>=', '2.80')
+    def draw2D_linestrip(self, points, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
+        if color1 is None: color1 = (0,0,0,0)
+        width = self.scale(width)
+        stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
+        offset = self.scale(offset)
+        shader_2D_lineseg.bind()
+        shader_2D_lineseg.uniform_float('screensize', (self.area.width, self.area.height))
+        shader_2D_lineseg.uniform_float('color0', color0)
+        shader_2D_lineseg.uniform_float('color1', color1)
+        shader_2D_lineseg.uniform_float('width', width)
+        shader_2D_lineseg.uniform_float('stipple', stipple)
+        shader_2D_lineseg.uniform_float('MVPMatrix', self.get_pixel_matrix())
+        for p0,p1 in iter_pairs(points, False):
+            shader_2D_lineseg.uniform_float('pos0', p0)
+            shader_2D_lineseg.uniform_float('pos1', p1)
+            shader_2D_lineseg.uniform_float('stippleOffset', offset)
+            offset += (p1 - p0).length
+            batch_2D_lineseg.draw(shader_2D_lineseg)
         gpu.shader.unbind()
 
     # draw circle in screen space
