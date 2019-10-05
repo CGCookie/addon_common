@@ -39,8 +39,11 @@ class BoundVar:
         self._value_str = value_str
         self._callbacks = []
         self._validators = []
+        self._disabled = False
 
     def _boundvar_interface(self, v): self._v = v
+    def _call_callbacks(self):
+        for cb in self._callbacks: cb()
 
     def __str__(self): return str(self.value)
 
@@ -48,6 +51,14 @@ class BoundVar:
         return self.value
     def set(self, value):
         self.value = value
+
+    @property
+    def disabled(self):
+        return self._disabled
+    @disabled.setter
+    def disabled(self, v):
+        self._disabled = bool(v)
+        self._call_callbacks()
 
     @property
     def value(self):
@@ -61,7 +72,7 @@ class BoundVar:
             return
         if self.value == value: return
         exec(self._value_str + ' = ' + str(value), self._f_globals, self._f_locals)
-        for cb in self._callbacks: cb()
+        self._call_callbacks()
     @property
     def value_as_str(self): return str(self.value)
 

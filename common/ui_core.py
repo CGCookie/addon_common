@@ -757,7 +757,11 @@ class UI_Element_Properties:
     @property
     def is_focused(self): return 'focus' in self._pseudoclasses
     @property
-    def is_disabled(self): return 'disabled' in self._pseudoclasses
+    def is_disabled(self):
+        if 'disabled' in self._pseudoclasses: return True
+        if self._value_bound: return self._value.disabled
+        return False
+        #return 'disabled' in self._pseudoclasses
 
     def _blur(self):
         if 'focus' not in self._pseudoclasses: return
@@ -1460,6 +1464,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             sel_id = '#%s' % self._id if self._id else ''
             sel_cls = ''.join('.%s' % c for c in self._classes)
             sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
+            if self._value_bound and self._value.disabled: sel_pseudo += ':disabled'
             sel_attribs = ''.join('[%s]' % p for p in attribs if getattr(self,p) is not None)
             sel_attribvals = ''.join('[%s="%s"]' % (p,str(getattr(self,p))) for p in attribs if getattr(self,p) is not None)
             self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
