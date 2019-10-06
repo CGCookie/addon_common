@@ -538,9 +538,27 @@ class Drawing:
         shader.disable()
 
     @blender_version_wrapper('>=', '2.80')
+    def draw2D_point(self, pt:Point2D, color:Color, *, radius=1, border=0, borderColor=None):
+        radius = self.scale(radius)
+        border = self.scale(border)
+        if borderColor is None: borderColor = (0,0,0,0)
+        shader_2D_point.bind()
+        shader_2D_point.uniform_float('screensize', (self.area.width, self.area.height))
+        shader_2D_point.uniform_float('MVPMatrix', self.get_pixel_matrix())
+        shader_2D_point.uniform_float('radius', radius)
+        shader_2D_point.uniform_float('border', border)
+        shader_2D_point.uniform_float('border', border)
+        shader_2D_point.uniform_float('color', color)
+        shader_2D_point.uniform_float('colorBorder', borderColor)
+        shader_2D_point.uniform_float('center', pt)
+        batch_2D_point.draw(shader_2D_point)
+        gpu.shader.unbind()
+
+    @blender_version_wrapper('>=', '2.80')
     def draw2D_points(self, pts:[Point2D], color:Color, *, radius=1, border=0, borderColor=None):
         radius = self.scale(radius)
         border = self.scale(border)
+        if borderColor is None: borderColor = (0,0,0,0)
         shader_2D_point.bind()
         shader_2D_point.uniform_float('screensize', (self.area.width, self.area.height))
         shader_2D_point.uniform_float('MVPMatrix', self.get_pixel_matrix())

@@ -1693,6 +1693,22 @@ def matrix_normal(mat):
     return d[smat]
 
 
+def rotate2D(point:Point2D, theta:float, *, origin:Point2D=None):
+    c,s = cos(theta),sin(theta)
+    x,y = point
+    if origin is None:
+        return Point2D((
+            x*c - y*s,
+            x*s + y*c,
+        ))
+    ox,oy = origin
+    x -= ox
+    y -= oy
+    return Point2D((
+        ox + (x*c - y*s),
+        oy + (x*s + y*c),
+    ))
+
 
 def get_path_length(verts):
     '''
