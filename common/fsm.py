@@ -64,14 +64,16 @@ class FSM:
     def _create_onlyinstate_wrapper(self):
         fsm = self
         class FSM_OnlyInState:
-            def __init__(self, state, default=None):
-                self.state = state
+            def __init__(self, states, default=None):
+                if type(states) is str: states = {states}
+                else: states = set(states)
+                self.states = states
                 self.default = default
             def __call__(self, fn):
                 self.fn = fn
                 self.fnname = fn.__name__
                 def run(*args, **kwargs):
-                    if fsm.state != self.state:
+                    if fsm.state not in self.states:
                         return self.default
                     try:
                         return fn(*args, **kwargs)
@@ -83,7 +85,7 @@ class FSM:
                         print(e)
                         return self.default
                 run.fnname = self.fnname
-                run.fsmstate = self.state
+                run.fsmstate = ' '.join(self.states)
                 return run
         return FSM_OnlyInState
 

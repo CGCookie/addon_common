@@ -44,7 +44,7 @@ from .shaders import Shader
 from .blender import get_preferences, bversion
 from .decorators import blender_version_wrapper
 from .fontmanager import FontManager as fm
-from .maths import Point2D, Vec2D, Point, Ray, Direction, mid, Color
+from .maths import Point2D, Vec2D, Point, Ray, Direction, mid, Color, Normal, Frame
 from .profiler import profiler
 from .debug import dprint, debugger
 from .utils import find_fns,iter_pairs
@@ -155,6 +155,19 @@ if bversion() >= "2.80":
         ]
     ]
     batch_2D_circle = batch_for_shader(shader_2D_circle, 'TRIS', {"pos": pts})
+
+    # 3D circle
+    shader_3D_circle = create_shader('circle_3D.glsl')
+    # create batch to draw large triangle that covers entire clip space (-1,-1)--(+1,+1)
+    cnt = 100
+    pts = [
+        p for i0 in range(cnt)
+        for p in [
+            ((i0+0)/cnt,0), ((i0+1)/cnt,0), ((i0+1)/cnt,1),
+            ((i0+0)/cnt,0), ((i0+1)/cnt,1), ((i0+0)/cnt,1),
+        ]
+    ]
+    batch_3D_circle = batch_for_shader(shader_3D_circle, 'TRIS', {"pos": pts})
 
 
 
@@ -680,6 +693,23 @@ class Drawing:
         shader_2D_circle.uniform_float('stippleOffset', offset)
         shader_2D_circle.uniform_float('MVPMatrix', self.get_pixel_matrix())
         batch_2D_circle.draw(shader_2D_circle)
+        gpu.shader.unbind()
+
+    @blender_version_wrapper('>=', '2.80')
+    def draw3D_circle(self, center:Point, radius:float, color:Color, *, width=1, n:Normal=None, x:Direction=None, y:Direction=None):
+        assert n is not None or x is not None or y is not None, 'Must specify at least one of n,x,y'
+        f = Frame(o=center, x=x, y=y, z=n)
+        radius = self.scale(radius)
+        width = self.scale(width)
+        shader_3D_circle.bind()
+        shader_3D_circle.uniform_float('center', f.o)
+        shader_3D_circle.uniform_float('radius', radius)
+        shader_3D_circle.uniform_float('color',  color)
+        shader_3D_circle.uniform_float('width',  width)
+        shader_3D_circle.uniform_float('plane_x', f.x)
+        shader_3D_circle.uniform_float('plane_y', f.y)
+        shader_3D_circle.uniform_float('MVPMatrix', self.get_view_matrix())
+        batch_3D_circle.draw(shader_3D_circle)
         gpu.shader.unbind()
 
 
