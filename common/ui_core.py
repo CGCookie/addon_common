@@ -2628,6 +2628,7 @@ class UI_Document(UI_Document_FSM):
     def modal_mousedown_canenter(self):
         can_enter = True
         can_enter &= bool(self._under_mouse) and not self._under_mouse.is_disabled
+        can_enter &= self._under_mouse != self._body
         if UI_Document.allow_disabled_to_blur and not can_enter and self._focus:
             # blur previous
             self._focus._del_pseudoclass('focus')
