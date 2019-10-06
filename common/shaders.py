@@ -325,10 +325,10 @@ class Shader():
             if DEBUG_PRINT:
                 print('enabling shader <==================')
                 if self.checkErrors:
-                    self.drawing.glCheckError('using program (%d) pre' % self.shaderProg)
+                    self.drawing.glCheckError('using program (%s, %d) pre' % (self.name, self.shaderProg))
             bgl.glUseProgram(self.shaderProg)
             if self.checkErrors:
-                self.drawing.glCheckError('using program (%d) post' % self.shaderProg)
+                self.drawing.glCheckError('using program (%s, %d) post' % (self.name, self.shaderProg))
 
             # special uniforms
             # - uMVPMatrix works around deprecated gl_ModelViewProjectionMatrix

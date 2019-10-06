@@ -23,6 +23,7 @@ import math
 
 from mathutils import Vector, Matrix
 
+from .blender import matrix_vector_mult
 from .maths import Point, Vec
 from .utils import iter_running_sum
 
@@ -103,7 +104,7 @@ def fit_cubicbezier(l_v, l_t):
     b_vector = Vector(b_values)
 
     # solve for the unknowns in vector x
-    v0, v1, v2, v3 = A_inv * b_vector
+    v0, v1, v2, v3 = matrix_vector_mult(A_inv, b_vector)
 
     err = compute_cubic_error(v0, v1, v2, v3, l_v, l_t) / len(l_v)
 
@@ -294,10 +295,10 @@ class CubicBezier:
         of curve mid-point and mid-point of end control points
         over half the distance between end control points
           p1 _
-            / \
-           |   \
-        p0 *    \   * p3
-                 \_/
+            / ﹨
+           |   ﹨
+        p0 *    ﹨   * p3
+                 ﹨_/
                  p2
         '''
         p0, p1, p2, p3 = Vector(self.p0), Vector(

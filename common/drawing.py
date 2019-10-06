@@ -114,149 +114,46 @@ Globals.set(Cursors())
 
 if bversion() >= "2.80":
     import gpu
+    from gpu.types import GPUShader
     from gpu_extras.batch import batch_for_shader
 
     # https://docs.blender.org/api/blender2.8/gpu.html#triangle-with-custom-shader
 
-    #########################################################################################
-    # 2D line segment
+    def create_shader(fn_glsl):
+        path_here = os.path.dirname(os.path.realpath(__file__))
+        path_shaders = os.path.join(path_here, 'shaders')
+        path_glsl = os.path.join(path_shaders, fn_glsl)
+        txt = open(path_glsl, 'rt').read()
+        lines = txt.splitlines()
+        mode = 'common'
+        source = {'common':[], 'vertex':[], 'fragment':[]}
+        for line in lines:
+            if   line == '// vertex shader':   mode = 'vertex'
+            elif line == '// fragment shader': mode = 'fragment'
+            else: source[mode].append(line)
+        vert_source = '\n'.join(source['common'] + source['vertex'])
+        frag_source = '\n'.join(source['common'] + source['fragment'])
+        return GPUShader(vert_source, frag_source)
 
-    uniforms = '''
-        uniform vec2  screensize;
-        uniform mat4  MVPMatrix;
-        uniform vec2  pos0;
-        uniform vec2  pos1;
-        uniform vec2  stipple;
-        uniform float stippleOffset;
-        uniform vec4  color0;
-        uniform vec4  color1;
-        uniform float width;
-    '''
-    vshader = uniforms + '''
-        in vec2 pos;
-        noperspective out vec2  vpos;
-        noperspective out vec2  cpos;
-        noperspective out float dist;
-        void main() {
-            vec2 v01 = pos1 - pos0;
-            vec2 d01 = normalize(v01);
-            vec2 perp = vec2(-d01.y, d01.x);
-            vec2 cp = pos0 + (pos.x * v01);
-            vec2 p = cp + ((width+2.0) * (pos.y - 0.5) * perp);
-            vec4 pcp = MVPMatrix * vec4(cp, 0.0, 1.0);
-            gl_Position = MVPMatrix * vec4(p, 0.0, 1.0);
-            dist = length(v01) * pos.x;
-            vpos = vec2(gl_Position.x * screensize.x, gl_Position.y * screensize.y);
-            cpos = vec2(pcp.x * screensize.x, pcp.y * screensize.y);
-        }
-    '''
-    fshader = uniforms + '''
-        in vec2 vpos;
-        in vec2 cpos;
-        in float dist;
-        void main() {
-            // stipple
-            if(stipple.y <= 0) {        // stipple disabled
-                gl_FragColor = color0;
-            } else {
-                float t = stipple.x + stipple.y;
-                float s = mod(dist + stippleOffset, t);
-                float sd = s - stipple.x;
-                if(s <= 0.5 || s >= t - 0.5) {
-                    gl_FragColor = mix(color1, color0, mod(s + 0.5, t));
-                } else if(s >= stipple.x - 0.5 && s <= stipple.x + 0.5) {
-                    gl_FragColor = mix(color0, color1, s - (stipple.x - 0.5));
-                } else if(s < stipple.x) {
-                    gl_FragColor = color0;
-                } else {
-                    gl_FragColor = color1;
-                }
-            }
-            // antialias along edge of line
-            float cdist = length(cpos - vpos);
-            if(cdist > width) {
-                gl_FragColor.a *= clamp(1.0 - (cdist - width), 0.0, 1.0);
-            }
-        }
-    '''
-    shader_2D_lineseg = gpu.types.GPUShader(vshader, fshader)
-    # create batch to draw large triangle that covers entire clip space (-1,-1)--(+1,+1)
+    # 2D point
+    shader_2D_point = create_shader('point_2D.glsl')
+    batch_2D_point = batch_for_shader(shader_2D_point, 'TRIS', {"pos": [(0,0), (1,0), (1,1), (0,0), (1,1), (0,1)]})
+
+    # 2D line segment
+    shader_2D_lineseg = create_shader('lineseg_2D.glsl')
     batch_2D_lineseg = batch_for_shader(shader_2D_lineseg, 'TRIS', {"pos": [(0,0), (1,0), (1,1), (0,0), (1,1), (0,1)]})
 
-
-    #########################################################################################
     # 2D circle
-
-    uniforms = '''
-        #define PI    3.14159265359
-        #define TAU   6.28318530718
-        uniform vec2  screensize;
-        uniform mat4  MVPMatrix;
-        uniform vec2  center;
-        uniform float radius;
-        uniform vec2  stipple;
-        uniform float stippleOffset;
-        uniform vec4  color0;
-        uniform vec4  color1;
-        uniform float width;
-    '''
-    vshader = uniforms + '''
-        in vec2 pos;                    // x: [0,1], ratio of circumference.  y: [0,1], inner/outer radius (width)
-        noperspective out vec2 vpos;    // position scaled by screensize
-        noperspective out vec2 cpos;    // center of line, scaled by screensize
-        noperspective out float dist;
-        void main() {
-            float circumference = TAU * radius;
-            float ang = TAU * pos.x;
-            float r = radius + (pos.y - 0.5) * (width + 2.0);
-            vec2 v = vec2(cos(ang), sin(ang));
-            vec2 p = center + r * v;
-            vec2 cp = center + radius * v;
-            vec4 pcp = MVPMatrix * vec4(cp, 0.0, 1.0);
-            gl_Position = MVPMatrix * vec4(p, 0.0, 1.0);
-            dist = circumference * pos.x;
-            vpos = vec2(gl_Position.x * screensize.x, gl_Position.y * screensize.y);
-            cpos = vec2(pcp.x * screensize.x, pcp.y * screensize.y);
-        }
-    '''
-    fshader = uniforms + '''
-        in vec2 vpos;
-        in vec2 cpos;
-        in float dist;
-        void main() {
-            // stipple
-            if(stipple.y <= 0) {        // stipple disabled
-                gl_FragColor = color0;
-            } else {
-                float t = stipple.x + stipple.y;
-                float s = mod(dist + stippleOffset, t);
-                float sd = s - stipple.x;
-                if(s <= 0.5 || s >= t - 0.5) {
-                    gl_FragColor = mix(color1, color0, mod(s + 0.5, t));
-                } else if(s >= stipple.x - 0.5 && s <= stipple.x + 0.5) {
-                    gl_FragColor = mix(color0, color1, s - (stipple.x - 0.5));
-                } else if(s < stipple.x) {
-                    gl_FragColor = color0;
-                } else {
-                    gl_FragColor = color1;
-                }
-            }
-            // antialias along edge of line
-            float cdist = length(cpos - vpos);
-            if(cdist > width) {
-                gl_FragColor.a *= clamp(1.0 - (cdist - width), 0.0, 1.0);
-            }
-        }
-    '''
-    shader_2D_circle = gpu.types.GPUShader(vshader, fshader)
+    shader_2D_circle = create_shader('circle_2D.glsl')
     # create batch to draw large triangle that covers entire clip space (-1,-1)--(+1,+1)
     cnt = 100
-    pts = []
-    for i0 in range(cnt):
-        ratio0 = i0 / cnt
-        ratio1 = (i0+1) / cnt
-        pts += [(ratio0,0), (ratio1,0), (ratio1,1)]
-        pts += [(ratio0,0), (ratio1,1), (ratio0,1)]
+    pts = [
+        p for i0 in range(cnt)
+        for p in [
+            ((i0+0)/cnt,0), ((i0+1)/cnt,0), ((i0+1)/cnt,1),
+            ((i0+0)/cnt,0), ((i0+1)/cnt,1), ((i0+0)/cnt,1),
+        ]
+    ]
     batch_2D_circle = batch_for_shader(shader_2D_circle, 'TRIS', {"pos": pts})
 
 
@@ -640,6 +537,23 @@ class Drawing:
         shader.disableVertexAttribArray('aWeight')
         shader.disable()
 
+    @blender_version_wrapper('>=', '2.80')
+    def draw2D_points(self, pts:[Point2D], color:Color, *, radius=1, border=0, borderColor=None):
+        radius = self.scale(radius)
+        border = self.scale(border)
+        shader_2D_point.bind()
+        shader_2D_point.uniform_float('screensize', (self.area.width, self.area.height))
+        shader_2D_point.uniform_float('MVPMatrix', self.get_pixel_matrix())
+        shader_2D_point.uniform_float('radius', radius)
+        shader_2D_point.uniform_float('border', border)
+        shader_2D_point.uniform_float('border', border)
+        shader_2D_point.uniform_float('color', color)
+        shader_2D_point.uniform_float('colorBorder', borderColor)
+        for pt in pts:
+            shader_2D_point.uniform_float('center', pt)
+            batch_2D_point.draw(shader_2D_point)
+        gpu.shader.unbind()
+
     # draw line segment in screen space
     @blender_version_wrapper('>=', '2.80')
     def draw2D_line(self, p0:Point2D, p1:Point2D, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
@@ -659,6 +573,54 @@ class Drawing:
         shader_2D_lineseg.uniform_float('MVPMatrix', self.get_pixel_matrix())
         batch_2D_lineseg.draw(shader_2D_lineseg)
         gpu.shader.unbind()
+
+    @blender_version_wrapper('>=', '2.80')
+    def draw2D_lines(self, points, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
+        self.glCheckError('starting draw2D_lines')
+        if color1 is None: color1 = (0,0,0,0)
+        width = self.scale(width)
+        stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
+        offset = self.scale(offset)
+        shader_2D_lineseg.bind()
+        shader_2D_lineseg.uniform_float('screensize', (self.area.width, self.area.height))
+        shader_2D_lineseg.uniform_float('color0', color0)
+        shader_2D_lineseg.uniform_float('color1', color1)
+        shader_2D_lineseg.uniform_float('width', width)
+        shader_2D_lineseg.uniform_float('stipple', stipple)
+        shader_2D_lineseg.uniform_float('stippleOffset', offset)    # TODO: should offset be a list?
+        shader_2D_lineseg.uniform_float('MVPMatrix', self.get_pixel_matrix())
+        for i in range(len(points)//2):
+            p0,p1 = points[i*2:i*2+2]
+            if p0 is None or p1 is None: continue
+            shader_2D_lineseg.uniform_float('pos0', p0)
+            shader_2D_lineseg.uniform_float('pos1', p1)
+            batch_2D_lineseg.draw(shader_2D_lineseg)
+        gpu.shader.unbind()
+        self.glCheckError('done with draw2D_lines')
+
+    @blender_version_wrapper('>=', '2.80')
+    def draw3D_lines(self, points, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
+        self.glCheckError('starting draw2D_lines')
+        if color1 is None: color1 = (0,0,0,0)
+        width = self.scale(width)
+        stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
+        offset = self.scale(offset)
+        shader_2D_lineseg.bind()
+        shader_2D_lineseg.uniform_float('screensize', (self.area.width, self.area.height))
+        shader_2D_lineseg.uniform_float('color0', color0)
+        shader_2D_lineseg.uniform_float('color1', color1)
+        shader_2D_lineseg.uniform_float('width', width)
+        shader_2D_lineseg.uniform_float('stipple', stipple)
+        shader_2D_lineseg.uniform_float('stippleOffset', offset)    # TODO: should offset be a list?
+        shader_2D_lineseg.uniform_float('MVPMatrix', self.get_view_matrix())
+        for i in range(len(points)//2):
+            p0,p1 = points[i*2:i*2+2]
+            if p0 is None or p1 is None: continue
+            shader_2D_lineseg.uniform_float('pos0', p0)
+            shader_2D_lineseg.uniform_float('pos1', p1)
+            batch_2D_lineseg.draw(shader_2D_lineseg)
+        gpu.shader.unbind()
+        self.glCheckError('done with draw2D_lines')
 
     @blender_version_wrapper('>=', '2.80')
     def draw2D_linestrip(self, points, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
@@ -685,6 +647,7 @@ class Drawing:
     @blender_version_wrapper('>=', '2.80')
     def draw2D_circle(self, center:Point2D, radius:float, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
         if color1 is None: color1 = (0,0,0,0)
+        radius = self.scale(radius)
         width = self.scale(width)
         stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
         offset = self.scale(offset)
