@@ -23,7 +23,7 @@ from copy import deepcopy
 
 import bpy
 
-from .maths import Point2D
+from .maths import Point2D, Vec2D
 from .debug import dprint
 from .decorators import blender_version_wrapper
 
@@ -247,7 +247,7 @@ class Actions:
         self.context = context
         self.space = context.space_data
         self.region = context.region
-        self.size = (context.region.width,context.region.height)
+        self.size = Vec2D((context.region.width, context.region.height))
         self.r3d = context.space_data.region_3d
         self.window = context.window
 
@@ -292,7 +292,7 @@ class Actions:
 
         if context.region and hasattr(context.space_data, 'region_3d'):
             self.region = context.region
-            self.size = (context.region.width,context.region.height)
+            self.size = Vec2D((context.region.width, context.region.height))
             self.r3d = context.space_data.region_3d
 
         # # handle strange edge cases
