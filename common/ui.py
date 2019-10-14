@@ -136,7 +136,7 @@ def input_radio(**kwargs):
     ui_input.add_eventListener('on_input', on_input)
     ui_proxy = UI_Proxy(ui_input)
     ui_proxy.translate('label', 'innerText')
-    ui_proxy.map({'innerText','children','append_child','delete_child','clear_children'}, ui_label)
+    ui_proxy.map({'innerText','children','append_child','delete_child','clear_children','builder'}, ui_label)
     ui_proxy.map_to_all('title')
     return ui_proxy
 
@@ -155,7 +155,7 @@ def input_checkbox(**kwargs):
     ui_input.add_eventListener('on_mouseclick', mouseclick)
     ui_proxy = UI_Proxy(ui_input)
     ui_proxy.translate('label', 'innerText')
-    ui_proxy.map({'innerText','children','append_child','delete_child','clear_children'}, ui_label)
+    ui_proxy.map({'innerText','children','append_child','delete_child','clear_children', 'builder'}, ui_label)
     return ui_proxy
 
 def labeled_input_text(label, **kwargs):
@@ -272,7 +272,7 @@ def collection(label, **kwargs):
     ui_label = div(innerText=label, classes='header', parent=ui_container)
     ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container)
     ui_proxy = UI_Proxy(ui_container)
-    ui_proxy.map(['children','append_child','delete_child','clear_children'], ui_inside)
+    ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
     return ui_proxy
 
 
@@ -280,11 +280,12 @@ def collapsible(label, **kwargs):
     helper_argtranslate('collapsed', 'checked', kwargs)
     kwargs.setdefault('checked', True)
     kw_input = helper_argsplitter({'checked'}, kwargs)
+    kw_inside = helper_argsplitter({'children'}, kwargs)
 
     ui_container = UI_Element(tagName='div', classes='collapsible', **kwargs)
     ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id',str(random.random()))), classes='header', parent=ui_container, **kw_input)
     # ui_label = UI_Element(tagName='input', classes='header', innerText=label, type="checkbox", parent=ui_container, **kw_input)
-    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container)
+    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside)
 
     def toggle():
         if ui_label.checked: ui_inside.add_class('collapsed')
@@ -295,7 +296,7 @@ def collapsible(label, **kwargs):
 
     ui_proxy = UI_Proxy(ui_container)
     ui_proxy.translate_map('collapsed', 'checked', ui_label)
-    ui_proxy.map(['children','append_child','delete_child','clear_children'], ui_inside)
+    ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
     return ui_proxy
 
 
@@ -466,7 +467,7 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
 
     ui_proxy = UI_Proxy(ui_dialog)
     ui_proxy.translate_map('label', 'innerText', ui_label)
-    ui_proxy.map(['children','append_child','delete_child','clear_children'], ui_inside)
+    ui_proxy.map(['children','append_child','delete_child','clear_children','builder'], ui_inside)
     return ui_proxy
 
 

@@ -595,6 +595,19 @@ class UI_Element_Properties:
         return child
     def append_child(self, child): return self._append_child(child)
 
+    def builder(self, children):
+        t = type(children)
+        if t is list:
+            for child in children:
+                self.builder(child)
+        elif t is tuple:
+            child,grandchildren = children
+            self.append_child(child).builder(grandchildren)
+        elif t is UI_Element or t is UI_Proxy:
+            self.append_child(children)
+        else:
+            assert False, 'UI_Element.builder: unhandled type %s' % t
+
     def _delete_child(self, child):
         assert child
         if type(child) is UI_Proxy:
@@ -764,6 +777,7 @@ class UI_Element_Properties:
     def is_disabled(self):
         if 'disabled' in self._pseudoclasses: return True
         if self._value_bound: return self._value.disabled
+        if self._checked_bound: return self._checked.disabled
         return False
         #return 'disabled' in self._pseudoclasses
 
@@ -1087,7 +1101,6 @@ class UI_Element_Properties:
         elif self._value != v:
             self._value = v
             self._value_change()
-
     def _value_change(self):
         self._dispatch_event('on_input')
         self._dirty('Changing value can affect style and content')
@@ -1104,15 +1117,32 @@ class UI_Element_Properties:
 
     @property
     def checked(self):
-        return self._checked
+        if self._checked_bound:
+            return self._checked.value
+        else:
+            return self._checked
     @checked.setter
     def checked(self, v):
-        v = "checked" if v else None
-        if self._checked == v: return
-        self._checked = v
+        # v = "checked" if v else None
+        if self._checked_bound:
+            self._checked.value = v
+        elif self._checked != v:
+            self._checked = v
+            self._checked_change()
+    def _checked_change(self):
         self._dispatch_event('on_input')
         self._dirty('Changing checked can affect style and content', 'style', children=True)
         #self.dirty_styling()
+    def checked_bind(self, boundvar):
+        self._checked = boundvar
+        self._checked.on_change(self._checked_change)
+        self._checked_bound = True
+    def checked_unbind(self, v=None):
+        p = self._checked
+        self._checked = v
+        self._checked_bound = False
+        return p
+
 
     @property
     def preclean(self):
@@ -1287,6 +1317,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._value         = None
         self._value_bound   = False
         self._checked       = None
+        self._checked_bound = False
         self._name          = None
 
         self._was_dirty = False
@@ -1441,6 +1472,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     self.append_child(child)
             elif k == 'value' and isinstance(v, BoundVar):
                 self.value_bind(v)
+            elif k == 'checked' and isinstance(v, BoundVar):
+                self.checked_bind(v)
             elif hasattr(self, k):
                 # need to test that a setter exists for the property
                 class_attr = getattr(type(self), k, None)
@@ -1498,14 +1531,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._selector_before = None
             self._selector_after = None
         else:
-            attribs = ['type', 'value', 'checked']
+            attribs = ['type', 'value']
             sel_tagName = self._tagName
             sel_id = '#%s' % self._id if self._id else ''
             sel_cls = ''.join('.%s' % c for c in self._classes)
             sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
             if self._value_bound and self._value.disabled: sel_pseudo += ':disabled'
+            if self._checked_bound and self._checked.disabled: sel_pseudo += ':disabled'
             sel_attribs = ''.join('[%s]' % p for p in attribs if getattr(self,p) is not None)
             sel_attribvals = ''.join('[%s="%s"]' % (p,str(getattr(self,p))) for p in attribs if getattr(self,p) is not None)
+            if self.checked:
+                sel_attribs += '[checked]'
+                sel_attribvals += '[checked="checked"]'
             self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
             self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
             self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
@@ -2486,6 +2523,8 @@ class UI_Proxy:
             return getattr(self._default_element, attrib)
         if attrib in self._mapall:
             return getattr(self._default_element, attrib)
+        if attrib in self._translate:
+            attrib = self._translate[attrib]
         ui_element = self._mapping.get(attrib, None)
         if ui_element is None: ui_element = self._default_element
         return getattr(ui_element, attrib)

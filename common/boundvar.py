@@ -74,7 +74,7 @@ class BoundVar:
         exec(self._value_str + ' = ' + str(value), self._f_globals, self._f_locals)
         self._call_callbacks()
     @property
-    def value_as_str(self): return str(self.value)
+    def value_as_str(self): return str(self)
 
     def on_change(self, fn):
         self._callbacks.append(fn)
@@ -105,3 +105,43 @@ class BoundInt(BoundVar):
         except Exception:
             # ignoring all exceptions?
             raise IgnoreChange()
+
+
+class BoundFloat(BoundVar):
+    def __init__(self, value_str, *, min_value=None, max_value=None):
+        super().__init__(value_str, frame_depth=2)
+        self._min_value = min_value
+        self._max_value = max_value
+        self.add_validator(self.float_validator)
+
+    def float_validator(self, value):
+        try:
+            t = type(value)
+            if t is str:     nv = float(re.sub(r'[^\d.]', '', value))
+            elif t is int:   nv = float(value)
+            elif t is float: nv = value
+            else: assert False, 'Unhandled type of value: %s (%s)' % (str(value), str(t))
+            if self._min_value is not None: nv = max(nv, self._min_value)
+            if self._max_value is not None: nv = min(nv, self._max_value)
+            return nv
+        except ValueError as e:
+            raise IgnoreChange()
+        except Exception:
+            # ignoring all exceptions?
+            raise IgnoreChange()
+
+
+
+# class BoundBool_String(BoundVar):
+#     def __init__(self, value_str, str_value):
+#         super().__init__(value_str, frame=depth=2)
+#         self.str_value = str_value
+
+
+# class BoundBool(BoundVar):
+#     def __init__(self, value_str):
+#         super().__init__(value_str, frame_depth=2)
+
+
+# class BoundBool_InSet(BoundVar):
+#     def __init__(self, value_str, )

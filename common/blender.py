@@ -50,46 +50,62 @@ class ModifierWrapper_Mirror:
         return None
 
     def __init__(self, obj, modifier):
+        self._reading = True
         self.obj = obj
         self.mod = modifier
         self.read()
 
     @property
     def x(self):
-        return 'x' in self.symmetry
+        return 'x' in self._symmetry
     @x.setter
     def x(self, v):
-        if v: self.symmetry.add('x')
-        else: self.symmetry.discard('x')
+        if v: self._symmetry.add('x')
+        else: self._symmetry.discard('x')
+        self.write()
 
     @property
     def y(self):
-        return 'y' in self.symmetry
+        return 'y' in self._symmetry
     @y.setter
     def y(self, v):
-        if v: self.symmetry.add('y')
-        else: self.symmetry.discard('y')
+        if v: self._symmetry.add('y')
+        else: self._symmetry.discard('y')
+        self.write()
 
     @property
     def z(self):
-        return 'z' in self.symmetry
+        return 'z' in self._symmetry
     @z.setter
     def z(self, v):
-        if v: self.symmetry.add('z')
-        else: self.symmetry.discard('z')
+        if v: self._symmetry.add('z')
+        else: self._symmetry.discard('z')
+        self.write()
 
     @property
     def xyz(self):
-        return self.symmetry
+        return set(self._symmetry)
+
+    @property
+    def symmetry_threshold(self):
+        return self._symmetry_threshold
+    @symmetry_threshold.setter
+    def symmetry_threshold(self, v):
+        self._symmetry_threshold = max(0, float(v))
+        self.write()
+
 
     def enable_axis(self, axis):
-        self.symmetry.add(axis)
+        self._symmetry.add(axis)
+        self.write()
     def disable_axis(self, axis):
-        self.symmetry.discard(axis)
+        self._symmetry.discard(axis)
+        self.write()
     def disable_all(self):
-        self.symmetry.clear()
+        self._symmetry.clear()
+        self.write()
     def is_enabled_axis(self, axis):
-        return axis in self.symmetry
+        return axis in self._symmetry
 
     def set_defaults(self):
         self.mod.merge_threshold = 0.001
@@ -99,34 +115,40 @@ class ModifierWrapper_Mirror:
 
     @blender_version_wrapper('<', '2.80')
     def read(self):
-        self.symmetry = set()
-        self.x = self.mod.use_x
-        self.y = self.mod.use_y
-        self.z = self.mod.use_z
-        self.symmetry_threshold = self.mod.merge_threshold
+        self._reading = True
+        self._symmetry = set()
+        if self.mod.use_x: self._symmetry.add('x')
+        if self.mod.use_y: self._symmetry.add('y')
+        if self.mod.use_z: self._symmetry.add('z')
+        self._symmetry_threshold = self.mod.merge_threshold
         self.show_viewport = self.mod.show_viewport
+        self._reading = False
     @blender_version_wrapper('>=', '2.80')
     def read(self):
-        self.symmetry = set()
-        self.x = self.mod.use_axis[0]
-        self.y = self.mod.use_axis[1]
-        self.z = self.mod.use_axis[2]
-        self.symmetry_threshold = self.mod.merge_threshold
+        self._reading = True
+        self._symmetry = set()
+        if self.mod.use_axis[0]: self._symmetry.add('x')
+        if self.mod.use_axis[1]: self._symmetry.add('y')
+        if self.mod.use_axis[2]: self._symmetry.add('z')
+        self._symmetry_threshold = self.mod.merge_threshold
         self.show_viewport = self.mod.show_viewport
+        self._reading = False
 
     @blender_version_wrapper('<', '2.80')
     def write(self):
+        if self._reading: return
         self.mod.use_x = self.x
         self.mod.use_y = self.y
         self.mod.use_z = self.z
-        self.mod.merge_threshold = self.symmetry_threshold
+        self.mod.merge_threshold = self._symmetry_threshold
         self.mod.show_viewport = self.show_viewport
     @blender_version_wrapper('>=', '2.80')
     def write(self):
+        if self._reading: return
         self.mod.use_axis[0] = self.x
         self.mod.use_axis[1] = self.y
         self.mod.use_axis[2] = self.z
-        self.mod.merge_threshold = self.symmetry_threshold
+        self.mod.merge_threshold = self._symmetry_threshold
         self.mod.show_viewport = self.show_viewport
 
 
