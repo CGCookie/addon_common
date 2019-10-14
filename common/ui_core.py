@@ -616,7 +616,7 @@ class UI_Element_Properties:
 
     def _count_children(self):
         return sum(1+child.count_children() for child in self._children)
-    def count_children(self): return self._count_children(self)
+    def count_children(self): return self._count_children()
 
 
     #########################################
