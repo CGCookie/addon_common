@@ -144,6 +144,7 @@ token_rules = [
         r'content',
         r'object-fit',
         r'text-shadow',
+        r'z-index',
     ]),
     ('value', convert_token_to_string, [
         r'auto',

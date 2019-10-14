@@ -807,17 +807,23 @@ class UI_Element_Properties:
 
     def reposition(self, left=None, top=None, bottom=None, right=None, clamp_position=True):
         assert not bottom and not right, 'repositioning UI via bottom or right not implemented yet :('
+        changed = False
         if clamp and self._relative_element:
             w,h = self.width_pixels,self.height_pixels
             rw,rh = self._relative_element.width_pixels,self._relative_element.height_pixels
             mbpw,mbph = self._relative_element._mbp_width,self._relative_element._mbp_height
             if left is not None: left = clamp(left, 0, (rw - mbpw) - w)
             if top is not None: top = clamp(top, -(rh - mbph) + h, 0)
-        if left is not None: self._style_left = left
-        if top  is not None: self._style_top  = top
-        self._absolute_pos = None
-        self._update_position()
-        tag_redraw_all()
+        if left is not None and self._style_left != left:
+            self._style_left = left
+            changed = True
+        if top  is not None and self._style_top != top:
+            self._style_top  = top
+            changed = True
+        if changed:
+            self._absolute_pos = None
+            self._update_position()
+            tag_redraw_all()
 
     @property
     def left(self):
@@ -983,6 +989,17 @@ class UI_Element_Properties:
         return h
 
 
+    @property
+    def z_index(self):
+        if self._style_z_index is not None: return self._style_z_index
+        v = self._computed_styles.get('z-index', 0)
+        if type(v) is NumberUnit: return v.val()
+        return v
+    @z_index.setter
+    def z_index(self, v):
+        if self._style_z_index == v: return
+        self._style_z_index = v
+        self._dirty_flow()
 
 
     @property
@@ -1292,6 +1309,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._style_bottom  = None
         self._style_width   = None
         self._style_height  = None
+        self._style_z_index = None
 
         self._document_elem = None
         self._nonstatic_elem = None
@@ -1443,7 +1461,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         return self.__str__()
 
     def __str__(self):
-        info = ['tagName', 'id', 'classes', 'type', 'innerText', 'innerTextAsIs', 'value']
+        info = ['tagName', 'id', 'classes', 'type', 'innerText', 'innerTextAsIs', 'value', 'title']
         info = [(k, getattr(self, k)) for k in info if hasattr(self, k)]
         info = ['%s="%s"' % (k, str(v)) for k,v in info if v]
         if self.is_dirty: info += ['dirty']
@@ -2342,10 +2360,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         with profiler.code('drawing innerText'):
                             size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
                             Globals.drawing.set_font_color(self._fontid, self._fontcolor)
-                            for child in self._children_all: child._draw(depth + 1)
+                            l = sorted(self._children_all, key=lambda e:e.z_index)
+                            for child in l: child._draw(depth + 1)
                             Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
                     else:
-                        for child in self._children_all: child._draw(depth+1)
+                        l = sorted(self._children_all, key=lambda e:e.z_index)
+                        for child in l: child._draw(depth+1)
 
         ScissorStack.pop()
     def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
@@ -2422,18 +2442,25 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
 
 class UI_Proxy:
-    def __init__(self, default_element):
+    def __init__(self, default_element, other_elements=None):
         # NOTE: use self.__dict__ here!!!
         self.__dict__['_default_element'] = default_element
         self.__dict__['_mapping'] = {}
         self.__dict__['_translate'] = {}
+        self.__dict__['_mapall'] = set()
         self.__dict__['_all_elements'] = { default_element }
         self.__dict__['_other_elements'] = set()
+        if other_elements:
+            self._all_elements.update(other_elements)
+            self._other_elements.update(other_elements)
     def __str__(self):
         l = self._all_elements
         return '<UI_Proxy def=%s others=%s>' % (str(self._default_element), str(self._other_elements))
     def __repr__(self):
         return self.__str__()
+    def map_to_all(self, attribs):
+        if type(attribs) is str: self._mapall.add(attribs)
+        else: self._mapall.update(attribs)
     def map(self, attribs, ui_element):
         if type(attribs) is str: attribs = [attribs]
         t = self._translate
@@ -2457,12 +2484,19 @@ class UI_Proxy:
         # ignore mapping for attribs with _ prefix
         if attrib.startswith('_'):
             return getattr(self._default_element, attrib)
+        if attrib in self._mapall:
+            return getattr(self._default_element, attrib)
         ui_element = self._mapping.get(attrib, None)
         if ui_element is None: ui_element = self._default_element
         return getattr(ui_element, attrib)
     def __setattr__(self, attrib, val):
         # ignore mapping for attribs with _ prefix
         if attrib.startswith('_'):
+            return setattr(self._default_element, attrib, val)
+        if attrib in self._mapall:
+            print('ui_proxy: mapping %s,%s to %s' % (str(attrib), str(val), str(self._all_elements)))
+            for ui_element in self._other_elements:
+                setattr(ui_element, attrib, val)
             return setattr(self._default_element, attrib, val)
         if attrib in self.__dict__:
             self.__dict__[attrib] = val
@@ -2491,6 +2525,7 @@ class UI_Document(UI_Document_FSM):
     allow_disabled_to_blur = False
     key_repeat_delay = 0.1500 * 0.8
     key_repeat_pause = 0.0700 * 0.2
+    tooltip_delay = 0.50
 
     def __init__(self):
         self._context = None
@@ -2502,6 +2537,9 @@ class UI_Document(UI_Document_FSM):
         self._area = context.area
         self.actions = Actions(bpy.context, UI_Document.default_keymap)
         self._body = UI_Element(tagName='body')
+        self._tooltip = UI_Element(tagName='dialog', classes='tooltip', parent=self._body)
+        self._tooltip_message = None
+        self._tooltip_wait = None
         self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
         self.fsm.init(self, start='main')
 
@@ -2538,6 +2576,20 @@ class UI_Document(UI_Document_FSM):
         self._lmb = self.actions.using('LEFTMOUSE')
         self._mmb = self.actions.using('MIDDLEMOUSE')
         self._rmb = self.actions.using('RIGHTMOUSE')
+
+        next_message = None
+        if self._under_mouse and self._under_mouse.title:
+            next_message = self._under_mouse.title
+        if self._tooltip_message != next_message:
+            self._tooltip_message = next_message
+            self._tooltip_wait = time.time() + self.tooltip_delay
+            self._tooltip.is_visible = False
+        if self._tooltip_message and time.time() > self._tooltip_wait:
+            self._tooltip.innerText = self._tooltip_message
+            ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + self._tooltip._mbp_width)
+            ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + self._tooltip._mbp_height)
+            self._tooltip.reposition(left=ttl, top=ttt - self._body.height_pixels)
+            self._tooltip.is_visible = True
 
         self.fsm.update()
 
@@ -2746,7 +2798,7 @@ class UI_Document(UI_Document_FSM):
             stop_blur_at = None
             p_focus = ui_element.get_pathFromRoot()
             p_blur = self._focus.get_pathFromRoot()
-            for i in range(min(len(p_focus, p_blur))):
+            for i in range(min(len(p_focus), len(p_blur))):
                 if p_focus[i] != p_blur[i]:
                     stop_focus_at = p_focus[i]
                     stop_blur_at = p_blur[i]

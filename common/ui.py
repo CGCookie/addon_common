@@ -117,11 +117,12 @@ def input_radio(**kwargs):
     # TODO: strip input ui_element to only be checkmark!
     helper_argtranslate('label', 'innerText', kwargs)
     kw_label = helper_argsplitter({'innerText'}, kwargs)
+    kw_all = helper_argsplitter({'title'}, kwargs)
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
-    ui_input = UI_Element(tagName='input', type='radio', can_focus=True, **kwargs)
-    ui_radio = UI_Element(tagName='img', classes='radio',  parent=ui_input)
-    ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label)
+    ui_input = UI_Element(tagName='input', type='radio', can_focus=True, **kwargs, **kw_all)
+    ui_radio = UI_Element(tagName='img', classes='radio',  parent=ui_input, **kw_all)
+    ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label, **kw_all)
     def mouseclick(e):
         ui_input.checked = True
     def on_input(e):
@@ -136,6 +137,7 @@ def input_radio(**kwargs):
     ui_proxy = UI_Proxy(ui_input)
     ui_proxy.translate('label', 'innerText')
     ui_proxy.map({'innerText','children','append_child','delete_child','clear_children'}, ui_label)
+    ui_proxy.map_to_all('title')
     return ui_proxy
 
 def input_checkbox(**kwargs):
@@ -370,7 +372,8 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
             if ui_dialog._parent is None: return
             if ui_dialog._parent == ui_dialog: return
             ui_dialog._parent.delete_child(ui_dialog)
-        ui_close = UI_Element(tagName='button', classes='dialog-close', on_mouseclick=close, parent=ui_header)
+        title = 'Close dialog' # 'Hide' if hide_on_close??
+        ui_close = UI_Element(tagName='button', classes='dialog-close', title=title, on_mouseclick=close, parent=ui_header)
 
     ui_label = UI_Element(tagName='span', classes='dialog-title', innerText=label or '', parent=ui_header)
     if moveable:
