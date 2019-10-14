@@ -398,12 +398,7 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
             if not is_dragging: return
             delta = e.mouse - mousedown_pos
             new_pos = original_pos + delta
-            w,h = ui_dialog.width_pixels,ui_dialog.height_pixels
-            rw,rh = ui_dialog._relative_element.width_pixels,ui_dialog._relative_element.height_pixels
-            mbpw,mbph = ui_dialog._relative_element._mbp_width,ui_dialog._relative_element._mbp_height
-            # ui_dialog.left = clamp(new_pos.x, 0, rw - w)
-            # ui_dialog.top  = clamp(new_pos.y, -rh + h, 0)
-            ui_dialog.reposition(left=clamp(new_pos.x, 0, (rw - mbpw) - w), top=clamp(new_pos.y, -(rh - mbph) + h, 0))
+            ui_dialog.reposition(left=new_pos.x, top=new_pos.y)
         ui_header.add_eventListener('on_mousedown', mousedown)
         ui_header.add_eventListener('on_mouseup', mouseup)
         ui_header.add_eventListener('on_mousemove', mousemove)

@@ -548,6 +548,10 @@ class UI_Element_Properties:
         l,cur = [],self
         while cur: l,cur = l+[cur],cur._parent
         return l
+    def get_pathFromRoot(self):
+        l = self.get_pathToRoot()
+        l.reverse()
+        return l
     def get_root(self):
         c = self
         while c._parent: c = c._parent
@@ -801,7 +805,14 @@ class UI_Element_Properties:
         self._title = v
         self._dirty('title changed', parent=True, children=False)
 
-    def reposition(self, left=None, top=None, bottom=None, right=None):
+    def reposition(self, left=None, top=None, bottom=None, right=None, clamp_position=True):
+        assert not bottom and not right, 'repositioning UI via bottom or right not implemented yet :('
+        if clamp and self._relative_element:
+            w,h = self.width_pixels,self.height_pixels
+            rw,rh = self._relative_element.width_pixels,self._relative_element.height_pixels
+            mbpw,mbph = self._relative_element._mbp_width,self._relative_element._mbp_height
+            if left is not None: left = clamp(left, 0, (rw - mbpw) - w)
+            if top is not None: top = clamp(top, -(rh - mbph) + h, 0)
         if left is not None: self._style_left = left
         if top  is not None: self._style_top  = top
         self._absolute_pos = None
@@ -923,7 +934,7 @@ class UI_Element_Properties:
     @property
     def left_pixels(self):
         if self._relative_element is None:   rew = self._parent_size.width if self._parent_size else 0
-        elif self._relative_element == self: rew = self._parent_size.width
+        elif self._relative_element == self: rew = self._parent_size.width if self._parent_size else 0
         else:                                rew = self._relative_element.width_pixels
         l = self.style_left
         if self._relative_pos and l == 'auto': l = self._relative_pos.x
@@ -938,7 +949,7 @@ class UI_Element_Properties:
     @property
     def top_pixels(self):
         if self._relative_element is None:   reh = self._parent_size.height if self._parent_size else 0
-        elif self._relative_element == self: reh = self._parent_size.height
+        elif self._relative_element == self: reh = self._parent_size.height if self._parent_size else 0
         else:                                reh = self._relative_element.height_pixels
         t = self.style_top
         if self._relative_pos and t == 'auto': t = self._relative_pos.y
@@ -955,7 +966,7 @@ class UI_Element_Properties:
         w = self.style_width
         if self._absolute_size and w == 'auto': w = self._absolute_size.width
         if type(w) is NumberUnit:
-            if   self._relative_element == self: rew = self._parent_size.width
+            if   self._relative_element == self: rew = self._parent_size.width if self._parent_size else 0
             elif self._relative_element is None: rew = 0
             else:                                rew = self._relative_element.width_pixels
             w = w.val(base=rew)
@@ -965,7 +976,7 @@ class UI_Element_Properties:
         h = self.style_height
         if self._absolute_size and h == 'auto': h = self._absolute_size.height
         if type(h) is NumberUnit:
-            if   self._relative_element == self: reh = self._parent_size.height
+            if   self._relative_element == self: reh = self._parent_size.height if self._parent_size else 0
             elif self._relative_element is None: reh = 0
             else:                                reh = self._relative_element.height_pixels
             h = h.val(base=reh)
@@ -1008,8 +1019,10 @@ class UI_Element_Properties:
     @is_visible.setter
     def is_visible(self, v):
         self._is_visible = v
-        self._dirty('changing visibility can affect style', 'style', children=True)
+        # self._dirty('changing visibility can affect style', 'style', children=True)
+        self._dirty('changing visibility can affect everything', parent=True, children=True)
         self._dirty_styling()
+        self._dirty_flow()
 
     @property
     def is_scrollable(self):
@@ -1114,7 +1127,7 @@ class UI_Element_Properties:
 
 class UI_Element_Dirtiness:
     @profiler.function
-    def _dirty(self, cause=None, properties=None, parent=True, children=False):
+    def _dirty(self, cause=None, properties=None, *, parent=True, children=False):
         if cause is None: cause = 'Unspecified cause'
         parent &= self._parent is not None
         parent &= self._parent != self
@@ -1267,6 +1280,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         #################################################################
         # read-only attributes of UI_Element
         self._parent        = None      # read-only property; set in parent.append_child(child)
+        self._parent_size   = None
         self._children      = []        # read-only list of all children; append_child, delete_child, clear_children
         self._pseudoclasses = set()     # TODO: should order matter here? (make list)
                                         # updated by main ui system (hover, active, focus)
@@ -1278,6 +1292,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._style_bottom  = None
         self._style_width   = None
         self._style_height  = None
+
+        self._document_elem = None
+        self._nonstatic_elem = None
+
 
         #################################################################################
         # boxes for viewing (wrt blender region) and content (wrt view)
@@ -1310,6 +1328,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._events = {
             'on_focus':         [],     # focus is gained (:foces is added)
             'on_blur':          [],     # focus is lost (:focus is removed)
+            'on_focusin':       [],     # focus is gained to self or a child
+            'on_focusout':      [],     # focus is lost from self or a child
             'on_keydown':       [],     # key is pressed down
             'on_keyup':         [],     # key is released
             'on_keypress':      [],     # key is entered (down+up)
@@ -2377,10 +2397,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 if not cap: cb(details)
 
     @profiler.function
-    def _dispatch_event(self, event, mouse=None, key=None, ui_event=None):
+    def _dispatch_event(self, event, mouse=None, key=None, ui_event=None, stop_at=None):
         if mouse is None: mouse = ui_document.actions.mouse
         if ui_event is None: ui_event = UI_Event(target=self, mouse=mouse, key=key)
         path = self.get_pathToRoot()[1:] # skipping first item, which is self
+        if stop_at is not None and stop_at in path:
+            path = path[:path.index(stop_at)]
         ui_event.event_phase = 'capturing'
         for cur in path[::-1]: cur._fire_event(event, ui_event)
         ui_event.event_phase = 'at target'
@@ -2405,16 +2427,27 @@ class UI_Proxy:
         self.__dict__['_default_element'] = default_element
         self.__dict__['_mapping'] = {}
         self.__dict__['_translate'] = {}
+        self.__dict__['_all_elements'] = { default_element }
+        self.__dict__['_other_elements'] = set()
+    def __str__(self):
+        l = self._all_elements
+        return '<UI_Proxy def=%s others=%s>' % (str(self._default_element), str(self._other_elements))
+    def __repr__(self):
+        return self.__str__()
     def map(self, attribs, ui_element):
         if type(attribs) is str: attribs = [attribs]
         t = self._translate
         attribs = [t.get(a, a) for a in attribs]
         for attrib in attribs: self._mapping[attrib] = ui_element
+        self._all_elements.add(ui_element)
+        self._other_elements.add(ui_element)
     def translate(self, attrib_from, attrib_to):
         self._translate[attrib_from] = attrib_to
     def translate_map(self, attrib_from, attrib_to, ui_element):
         self.translate(attrib_from, attrib_to)
         self.map([attrib_to], ui_element)
+        self._all_elements.add(ui_element)
+        self._other_elements.add(ui_element)
     def unmap(self, attribs):
         if type(attribs) is str: attribs = [attribs]
         for attrib in attribs: self._mapping[attrib] = None
@@ -2577,6 +2610,7 @@ class UI_Document(UI_Document_FSM):
 
         if self._rmb and not self._last_rmb and self._under_mouse:
             self._debug_print(self._under_mouse)
+            print('focus:', self._focus)
 
         self.handle_hover()
         self.handle_mousemove()
@@ -2626,23 +2660,27 @@ class UI_Document(UI_Document_FSM):
 
     @UI_Document_FSM.FSM_State('mousedown', 'can enter')
     def modal_mousedown_canenter(self):
-        can_enter = True
-        can_enter &= bool(self._under_mouse) and not self._under_mouse.is_disabled
-        can_enter &= self._under_mouse != self._body
-        if UI_Document.allow_disabled_to_blur and not can_enter and self._focus:
-            # blur previous
-            self._focus._del_pseudoclass('focus')
-            self._focus._dispatch_event('on_blur')
-            self._focus = None
-        return can_enter
+        disabled_under = self._under_mouse and self._under_mouse.is_disabled
+        if UI_Document.allow_disabled_to_blur and disabled_under:
+            # user clicked on disabled element, so blur current focused element
+            self.blur()
+        if self._under_mouse == self._body:
+            # clicking body always blurs focus
+            self.blur()
+        return self._under_mouse and self._under_mouse != self._body and not self._under_mouse.is_disabled
 
     @UI_Document_FSM.FSM_State('mousedown', 'enter')
     def modal_mousedown_enter(self):
         change_focus = self._focus != self._under_mouse
         if change_focus:
-            self.blur()
             if self._under_mouse.can_focus:
+                # element under mouse takes focus
                 self.focus(self._under_mouse)
+            elif self._focus and self._is_ancestor(self._focus, self._under_mouse):
+                # current focus is an ancestor of new element, so don't blur!
+                pass
+            else:
+                self.blur()
 
         self._under_mousedown = self._under_mouse
         self._addrem_pseudoclass('active', add_to=self._under_mousedown)
@@ -2682,19 +2720,44 @@ class UI_Document(UI_Document_FSM):
         self._addrem_pseudoclass('active', remove_from=self._under_mousedown)
         # self._under_mousedown.del_pseudoclass('active')
 
-    def blur(self):
+    def _is_ancestor(self, ancestor, descendant):
+        if type(ancestor) is UI_Proxy:
+            ancestors = set(ancestor._all_elements)
+        else:
+            ancestors = { ancestor }
+        descendant_ancestors = set(descendant.get_pathToRoot())
+        common = ancestors & descendant_ancestors
+        return len(common)>0
+
+    def blur(self, stop_at=None):
         if self._focus is None: return
         self._focus._del_pseudoclass('focus')
         self._focus._dispatch_event('on_blur')
+        self._focus._dispatch_event('on_focusout', stop_at=stop_at)
+        self._addrem_pseudoclass('active', remove_from=self._focus)
         self._focus = None
 
     def focus(self, ui_element):
         if ui_element is None: return
         if self._focus == ui_element: return
-        self.blur()
+
+        stop_focus_at = None
+        if self._focus:
+            stop_blur_at = None
+            p_focus = ui_element.get_pathFromRoot()
+            p_blur = self._focus.get_pathFromRoot()
+            for i in range(min(len(p_focus, p_blur))):
+                if p_focus[i] != p_blur[i]:
+                    stop_focus_at = p_focus[i]
+                    stop_blur_at = p_blur[i]
+                    break
+            self.blur(stop_at=stop_blur_at)
+            print('focusout to', p_blur, stop_blur_at)
+            print('focusin from', p_focus, stop_focus_at)
         self._focus = ui_element
         self._focus._add_pseudoclass('focus')
         self._focus._dispatch_event('on_focus')
+        self._focus._dispatch_event('on_focusin', stop_at=stop_focus_at)
 
     @UI_Document_FSM.FSM_State('focus', 'enter')
     def modal_focus_enter(self):
