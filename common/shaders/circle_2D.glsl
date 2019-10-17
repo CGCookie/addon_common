@@ -45,9 +45,9 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-in vec2 vpos;
-in vec2 cpos;
-in float offset;
+noperspective in vec2 vpos;
+noperspective in vec2 cpos;
+noperspective in float offset;
 
 void main() {
     // stipple

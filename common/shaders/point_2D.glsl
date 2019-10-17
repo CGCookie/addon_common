@@ -23,7 +23,7 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-in vec2 vpos;
+noperspective in vec2 vpos;
 
 void main() {
     vec2 ctr = (MVPMatrix * vec4(center, 0.0, 1.0)).xy;
