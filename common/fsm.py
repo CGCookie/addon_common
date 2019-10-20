@@ -79,7 +79,7 @@ class FSM:
                         return fn(*args, **kwargs)
                     except Exception as e:
                         print('Caught exception in function "%s" ("%s")' % (
-                            self.fnname, self.state
+                            self.fnname, fsm.state
                         ))
                         debugger.print_exception()
                         print(e)

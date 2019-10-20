@@ -169,6 +169,14 @@ if bversion() >= "2.80":
     ]
     batch_3D_circle = batch_for_shader(shader_3D_circle, 'TRIS', {"pos": pts})
 
+    # 3D triangle
+    shader_3D_triangle = create_shader('triangle_3D.glsl')
+    batch_3D_triangle = batch_for_shader(shader_3D_triangle, 'TRIS', {'pos': [(1,0), (0,1), (0,0)]})
+
+    # 3D triangle
+    shader_2D_triangle = create_shader('triangle_2D.glsl')
+    batch_2D_triangle = batch_for_shader(shader_2D_triangle, 'TRIS', {'pos': [(1,0), (0,1), (0,0)]})
+
 
 
 class Drawing:
@@ -383,7 +391,17 @@ class Drawing:
         returns MVP for pixel view
         TODO: compute separate M,V,P matrices
         '''
-        return Matrix(self.get_pixel_matrix_list()) if self.r3d else None
+        last_w, last_h, last_m = -1, -1, None
+        def fn():
+            nonlocal last_w, last_h, last_m
+            if not self.r3d: return None
+            w,h = self.rgn.width,self.rgn.height
+            if last_w != w or last_h != h:
+                last_w,last_h = w,h
+                last_m = Matrix([[2/w,0,0,-1], [0,2/h,0,-1], [0,0,1,0], [0,0,0,1]])
+            return last_m
+        self.get_pixel_matrix = fn
+        return fn()
 
     def get_pixel_matrix_buffer(self):
         if not self.r3d: return None
@@ -631,7 +649,7 @@ class Drawing:
 
     @blender_version_wrapper('>=', '2.80')
     def draw3D_lines(self, points, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
-        self.glCheckError('starting draw2D_lines')
+        self.glCheckError('starting draw3D_lines')
         if color1 is None: color1 = (0,0,0,0)
         width = self.scale(width)
         stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
@@ -651,7 +669,7 @@ class Drawing:
             shader_2D_lineseg.uniform_float('pos1', p1)
             batch_2D_lineseg.draw(shader_2D_lineseg)
         gpu.shader.unbind()
-        self.glCheckError('done with draw2D_lines')
+        self.glCheckError('done with draw3D_lines')
 
     @blender_version_wrapper('>=', '2.80')
     def draw2D_linestrip(self, points, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
@@ -712,9 +730,266 @@ class Drawing:
         batch_3D_circle.draw(shader_3D_circle)
         gpu.shader.unbind()
 
+    @blender_version_wrapper('>=', '2.80')
+    def draw3D_triangles(self, points:[Point], colors:[Color]):
+        self.glCheckError('starting draw3D_triangles')
+        shader_3D_triangle.bind()
+        shader_3D_triangle.uniform_float('MVPMatrix', self.get_view_matrix())
+        for i in range(0, len(points), 3):
+            p0,p1,p2 = points[i:i+3]
+            c0,c1,c2 = colors[i:i+3]
+            if p0 is None or p1 is None or p2 is None: continue
+            if c0 is None or c1 is None or c2 is None: continue
+            shader_3D_triangle.uniform_float('pos0', p0)
+            shader_3D_triangle.uniform_float('color0', c0)
+            shader_3D_triangle.uniform_float('pos1', p1)
+            shader_3D_triangle.uniform_float('color1', c1)
+            shader_3D_triangle.uniform_float('pos2', p2)
+            shader_3D_triangle.uniform_float('color2', c2)
+            batch_3D_triangle.draw(shader_3D_triangle)
+        gpu.shader.unbind()
+        self.glCheckError('done with draw3D_triangles')
+
+    @contextlib.contextmanager
+    def draw(self, draw_type:"CC_DRAWTYPE"):
+        assert getattr(self, '_draw', None) is None, 'Cannot nest Drawing.draw calls'
+        self._draw = draw_type
+        self.glCheckError('starting draw')
+        try:
+            draw_type.begin()
+            yield draw_type
+            draw_type.end()
+        except Exception as e:
+            print('Exception caught while in Drawing.draw with %s' % str(draw_type))
+            print(e)
+        self.glCheckError('done with draw')
+        self._draw = None
+
 
 Drawing.initialize()
 
+
+######################################################################################################
+# The following classes mimic the immediate mode for (old-school way of) drawing geometry
+#   glBegin(GL_TRIANGLES)
+#   glColor3f(p)
+#   glVertex3f(p)
+#   glEnd()
+
+class CC_DRAWTYPE:
+    _point_size = 1
+    _line_width = 1
+    _border_width = 0
+    _border_color = None
+    _stipple_pattern = None
+    _stipple_offset = 0
+    _stipple_color = None
+
+    _default_color = Color((1, 1, 1, 1))
+    _default_point_size = 1
+    _default_line_width = 1
+    _default_border_width = 0
+    _default_border_color = Color((0, 0, 0, 0))
+    _default_stipple_pattern = [1,0]
+    _default_stipple_color = Color((0, 0, 0, 0))
+
+    @classmethod
+    def reset(cls):
+        s = Drawing._instance.scale
+        cls._point_size = s(cls._default_point_size)
+        cls._line_width = s(cls._default_line_width)
+        cls._border_width = s(cls._default_border_width)
+        cls._border_color = cls._default_border_color
+        cls._stipple_offset = 0
+        cls._stipple_pattern = [s(v) for v in cls._default_stipple_pattern]
+        cls._stipple_color = cls._default_stipple_color
+        cls.update()
+
+    @classmethod
+    def update(cls): pass
+
+    @classmethod
+    def point_size(cls, radius):
+        s = Drawing._instance.scale
+        cls._point_size = s(radius)
+        cls.update()
+
+    @classmethod
+    def line_width(cls, width):
+        s = Drawing._instance.scale
+        cls._line_width = s(width)
+        cls.update()
+
+    @classmethod
+    def border(cls, *, width=None, color=None):
+        s = Drawing._instance.scale
+        if width is not None:
+            cls._border_width = s(width)
+        if color is not None:
+            cls._border_color = color
+        cls.update()
+
+    @classmethod
+    def stipple(cls, *, pattern=None, offset=None, color=None):
+        s = Drawing._instance.scale
+        if pattern is not None:
+            cls._stipple_pattern = [s(v) for v in pattern]
+        if offset is not None:
+            cls._stipple_offset = s(offset)
+        if color is not None:
+            cls._stipple_color = color
+        cls.update()
+
+    @classmethod
+    def end(cls):
+        gpu.shader.unbind()
+
+class CC_2D_POINTS(CC_DRAWTYPE):
+    @classmethod
+    def begin(cls):
+        shader_2D_point.bind()
+        cls.reset()
+        shader_2D_point.uniform_float('MVPMatrix', Drawing._instance.get_pixel_matrix())
+        shader_2D_point.uniform_float('screensize', (Drawing._instance.area.width, Drawing._instance.area.height))
+        shader_2D_point.uniform_float('color', cls._default_color)
+
+    @classmethod
+    def update(cls):
+        shader_2D_point.uniform_float('radius', cls._point_size)
+        shader_2D_point.uniform_float('border', cls._border_width)
+        shader_2D_point.uniform_float('colorBorder', cls._border_color)
+
+    @classmethod
+    def color(cls, c:Color):
+        shader_2D_point.uniform_float('color', c)
+
+    @classmethod
+    def vertex(cls, p:Point2D):
+        shader_2D_point.uniform_float('center', p)
+        batch_2D_point.draw(shader_2D_point)
+
+
+class CC_2D_LINES(CC_DRAWTYPE):
+    @classmethod
+    def begin(cls):
+        shader_2D_lineseg.bind()
+        cls.reset()
+        shader_2D_lineseg.uniform_float('MVPMatrix', Drawing._instance.get_pixel_matrix())
+        shader_2D_lineseg.uniform_float('screensize', (Drawing._instance.area.width, Drawing._instance.area.height))
+        shader_2D_lineseg.uniform_float('color0', cls._default_color)
+        cls._c = 0
+
+    @classmethod
+    def update(cls):
+        shader_2D_lineseg.uniform_float('color1', cls._stipple_color)
+        shader_2D_lineseg.uniform_float('width', cls._line_width)
+        shader_2D_lineseg.uniform_float('stipple', cls._stipple_pattern)
+        shader_2D_lineseg.uniform_float('stippleOffset', cls._stipple_offset)
+
+    @classmethod
+    def color(cls, c:Color):
+        shader_2D_lineseg.uniform_float('color0', c)
+
+    @classmethod
+    def vertex(cls, p:Point2D):
+        shader_2D_lineseg.uniform_float('pos%d' % cls._c, p)
+        cls._c = (cls._c + 1) % 2
+        if cls._c == 0: batch_2D_lineseg.draw(shader_2D_lineseg)
+
+class CC_2D_LINE_LOOP(CC_2D_LINES):
+    @classmethod
+    def begin(cls):
+        super().begin()
+        cls._first_p = None
+        cls._last_p = None
+
+    @classmethod
+    def vertex(cls, p:Point2D):
+        if cls._first_p is None:
+            cls._first_p = cls._last_p = p
+        else:
+            shader_2D_lineseg.uniform_float('pos0', cls._last_p)
+            shader_2D_lineseg.uniform_float('pos1', p)
+            batch_2D_lineseg.draw(shader_2D_lineseg)
+            cls._last_p = p
+
+    @classmethod
+    def end(cls):
+        if cls._last_p:
+            shader_2D_lineseg.uniform_float('pos0', cls._last_p)
+            shader_2D_lineseg.uniform_float('pos1', cls._first_p)
+            batch_2D_lineseg.draw(shader_2D_lineseg)
+        super().end()
+
+
+class CC_2D_TRIANGLES(CC_DRAWTYPE):
+    @staticmethod
+    def begin():
+        shader_2D_triangle.bind()
+        #shader_2D_triangle.uniform_float('screensize', (Drawing._instance.area.width, Drawing._instance.area.height))
+        shader_2D_triangle.uniform_float('MVPMatrix', Drawing._instance.get_pixel_matrix())
+        CC_2D_TRIANGLES._c = 0
+        CC_2D_TRIANGLES._last_color = None
+
+    @staticmethod
+    def color(c:Color):
+        if c is None: return
+        shader_2D_triangle.uniform_float('color%d' % CC_2D_TRIANGLES._c, c)
+        CC_2D_TRIANGLES._last_color = c
+
+    @staticmethod
+    def vertex(p:Point2D):
+        shader_2D_triangle.uniform_float('pos%d' % CC_2D_TRIANGLES._c, p)
+        CC_2D_TRIANGLES._c = (CC_2D_TRIANGLES._c + 1) % 3
+        if CC_2D_TRIANGLES._c == 0: batch_2D_triangle.draw(shader_2D_triangle)
+        CC_2D_TRIANGLES.color(CC_2D_TRIANGLES._last_color)
+
+class CC_2D_TRIANGLE_FAN(CC_DRAWTYPE):
+    @staticmethod
+    def begin():
+        shader_2D_triangle.bind()
+        #shader_2D_triangle.uniform_float('screensize', (Drawing._instance.area.width, Drawing._instance.area.height))
+        shader_2D_triangle.uniform_float('MVPMatrix', Drawing._instance.get_pixel_matrix())
+        CC_2D_TRIANGLE_FAN._c = 0
+        CC_2D_TRIANGLE_FAN._last_color = None
+
+    @staticmethod
+    def color(c:Color):
+        if c is None: return
+        shader_2D_triangle.uniform_float('color%d' % CC_2D_TRIANGLE_FAN._c, c)
+        CC_2D_TRIANGLE_FAN._last_color = c
+
+    @staticmethod
+    def vertex(p:Point2D):
+        shader_2D_triangle.uniform_float('pos%d' % CC_2D_TRIANGLE_FAN._c, p)
+        CC_2D_TRIANGLE_FAN._c += 1
+        if CC_2D_TRIANGLE_FAN._c == 3:
+            batch_2D_triangle.draw(shader_2D_triangle)
+            CC_2D_TRIANGLE_FAN._c = 1
+        CC_2D_TRIANGLE_FAN.color(CC_2D_TRIANGLE_FAN._last_color)
+
+class CC_3D_TRIANGLES(CC_DRAWTYPE):
+    @staticmethod
+    def begin():
+        shader_3D_triangle.bind()
+        shader_3D_triangle.uniform_float('MVPMatrix', Drawing._instance.get_view_matrix())
+        CC_3D_TRIANGLES._c = 0
+        CC_3D_TRIANGLES._last_color = None
+
+    @staticmethod
+    def color(c:Color):
+        if c is None: return
+        shader_3D_triangle.uniform_float('color%d' % CC_3D_TRIANGLES._c, c)
+        CC_3D_TRIANGLES._last_color = c
+
+    @staticmethod
+    def vertex(p:Point):
+        shader_3D_triangle.uniform_float('pos%d' % CC_3D_TRIANGLES._c, p)
+        CC_3D_TRIANGLES._c = (CC_3D_TRIANGLES._c + 1) % 3
+        if CC_3D_TRIANGLES._c == 0: batch_3D_triangle.draw(shader_3D_triangle)
+        CC_3D_TRIANGLES.color(CC_3D_TRIANGLES._last_color)
+
+######################################################################################################
 
 
 class ScissorStack:
