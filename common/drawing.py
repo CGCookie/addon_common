@@ -24,6 +24,7 @@ import re
 import math
 import time
 import random
+from typing import List
 import traceback
 import functools
 import contextlib
@@ -751,7 +752,7 @@ class Drawing:
         self.glCheckError('done with draw3D_triangles')
 
     @contextlib.contextmanager
-    def draw(self, draw_type:"CC_DRAWTYPE"):
+    def draw(self, draw_type:"CC_DRAW"):
         assert getattr(self, '_draw', None) is None, 'Cannot nest Drawing.draw calls'
         self._draw = draw_type
         self.glCheckError('starting draw')
@@ -776,14 +777,14 @@ Drawing.initialize()
 #   glVertex3f(p)
 #   glEnd()
 
-class CC_DRAWTYPE:
-    _point_size = 1
-    _line_width = 1
-    _border_width = 0
-    _border_color = None
-    _stipple_pattern = None
-    _stipple_offset = 0
-    _stipple_color = None
+class CC_DRAW:
+    _point_size:float = 1
+    _line_width:float = 1
+    _border_width:float = 0
+    _border_color:Color = Color((0, 0, 0, 0))
+    _stipple_pattern:List[float] = [1,0]
+    _stipple_offset:float = 0
+    _stipple_color:Color = Color((0, 0, 0, 0))
 
     _default_color = Color((1, 1, 1, 1))
     _default_point_size = 1
@@ -796,62 +797,64 @@ class CC_DRAWTYPE:
     @classmethod
     def reset(cls):
         s = Drawing._instance.scale
-        cls._point_size = s(cls._default_point_size)
-        cls._line_width = s(cls._default_line_width)
-        cls._border_width = s(cls._default_border_width)
-        cls._border_color = cls._default_border_color
-        cls._stipple_offset = 0
-        cls._stipple_pattern = [s(v) for v in cls._default_stipple_pattern]
-        cls._stipple_color = cls._default_stipple_color
+        CC_DRAW._point_size = s(CC_DRAW._default_point_size)
+        CC_DRAW._line_width = s(CC_DRAW._default_line_width)
+        CC_DRAW._border_width = s(CC_DRAW._default_border_width)
+        CC_DRAW._border_color = CC_DRAW._default_border_color
+        CC_DRAW._stipple_offset = 0
+        CC_DRAW._stipple_pattern = [s(v) for v in CC_DRAW._default_stipple_pattern]
+        CC_DRAW._stipple_color = CC_DRAW._default_stipple_color
         cls.update()
 
     @classmethod
     def update(cls): pass
 
     @classmethod
-    def point_size(cls, radius):
+    def point_size(cls, size):
         s = Drawing._instance.scale
-        cls._point_size = s(radius)
+        CC_DRAW._point_size = s(size)
         cls.update()
 
     @classmethod
     def line_width(cls, width):
         s = Drawing._instance.scale
-        cls._line_width = s(width)
+        CC_DRAW._line_width = s(width)
         cls.update()
 
     @classmethod
     def border(cls, *, width=None, color=None):
         s = Drawing._instance.scale
         if width is not None:
-            cls._border_width = s(width)
+            CC_DRAW._border_width = s(width)
         if color is not None:
-            cls._border_color = color
+            CC_DRAW._border_color = color
         cls.update()
 
     @classmethod
     def stipple(cls, *, pattern=None, offset=None, color=None):
         s = Drawing._instance.scale
         if pattern is not None:
-            cls._stipple_pattern = [s(v) for v in pattern]
+            CC_DRAW._stipple_pattern = [s(v) for v in pattern]
         if offset is not None:
-            cls._stipple_offset = s(offset)
+            CC_DRAW._stipple_offset = s(offset)
         if color is not None:
-            cls._stipple_color = color
+            CC_DRAW._stipple_color = color
         cls.update()
 
     @classmethod
     def end(cls):
         gpu.shader.unbind()
+CC_DRAW.reset()
 
-class CC_2D_POINTS(CC_DRAWTYPE):
+
+class CC_2D_POINTS(CC_DRAW):
     @classmethod
     def begin(cls):
         shader_2D_point.bind()
-        cls.reset()
         shader_2D_point.uniform_float('MVPMatrix', Drawing._instance.get_pixel_matrix())
         shader_2D_point.uniform_float('screensize', (Drawing._instance.area.width, Drawing._instance.area.height))
         shader_2D_point.uniform_float('color', cls._default_color)
+        cls.update()
 
     @classmethod
     def update(cls):
@@ -869,14 +872,14 @@ class CC_2D_POINTS(CC_DRAWTYPE):
         batch_2D_point.draw(shader_2D_point)
 
 
-class CC_2D_LINES(CC_DRAWTYPE):
+class CC_2D_LINES(CC_DRAW):
     @classmethod
     def begin(cls):
         shader_2D_lineseg.bind()
-        cls.reset()
         shader_2D_lineseg.uniform_float('MVPMatrix', Drawing._instance.get_pixel_matrix())
         shader_2D_lineseg.uniform_float('screensize', (Drawing._instance.area.width, Drawing._instance.area.height))
         shader_2D_lineseg.uniform_float('color0', cls._default_color)
+        cls.stipple(offset=0)
         cls._c = 0
 
     @classmethod
@@ -922,7 +925,7 @@ class CC_2D_LINE_LOOP(CC_2D_LINES):
         super().end()
 
 
-class CC_2D_TRIANGLES(CC_DRAWTYPE):
+class CC_2D_TRIANGLES(CC_DRAW):
     @staticmethod
     def begin():
         shader_2D_triangle.bind()
@@ -944,7 +947,7 @@ class CC_2D_TRIANGLES(CC_DRAWTYPE):
         if CC_2D_TRIANGLES._c == 0: batch_2D_triangle.draw(shader_2D_triangle)
         CC_2D_TRIANGLES.color(CC_2D_TRIANGLES._last_color)
 
-class CC_2D_TRIANGLE_FAN(CC_DRAWTYPE):
+class CC_2D_TRIANGLE_FAN(CC_DRAW):
     @staticmethod
     def begin():
         shader_2D_triangle.bind()
@@ -968,7 +971,7 @@ class CC_2D_TRIANGLE_FAN(CC_DRAWTYPE):
             CC_2D_TRIANGLE_FAN._c = 1
         CC_2D_TRIANGLE_FAN.color(CC_2D_TRIANGLE_FAN._last_color)
 
-class CC_3D_TRIANGLES(CC_DRAWTYPE):
+class CC_3D_TRIANGLES(CC_DRAW):
     @staticmethod
     def begin():
         shader_3D_triangle.bind()
