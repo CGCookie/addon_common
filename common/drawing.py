@@ -899,6 +899,22 @@ class CC_2D_LINES(CC_DRAW):
         cls._c = (cls._c + 1) % 2
         if cls._c == 0: batch_2D_lineseg.draw(shader_2D_lineseg)
 
+class CC_2D_LINE_STRIP(CC_2D_LINES):
+    @classmethod
+    def begin(cls):
+        super().begin()
+        cls._last_p = None
+
+    @classmethod
+    def vertex(cls, p:Point2D):
+        if cls._last_p is None:
+            cls._last_p = p
+        else:
+            shader_2D_lineseg.uniform_float('pos0', cls._last_p)
+            shader_2D_lineseg.uniform_float('pos1', p)
+            batch_2D_lineseg.draw(shader_2D_lineseg)
+            cls._last_p = p
+
 class CC_2D_LINE_LOOP(CC_2D_LINES):
     @classmethod
     def begin(cls):
