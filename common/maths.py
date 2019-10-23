@@ -453,6 +453,8 @@ class Color(Vector):
         t = type(other)
         if t is float or t is int:
             return Color((other * self.r, other * self.g, other * self.b, self.a))
+        if t is Color:
+            return Color((self.r * other.r, self.g * other.g, self.b * other.b, self.a * other.a))
         assert False, "unhandled type of other: %s (%s)" % (str(other), str(t))
 
     def __rmul__(self, other):
