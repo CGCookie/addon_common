@@ -12,7 +12,7 @@ varying vec4 aOutColor;
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
 
-#version 120
+#version 130
 
 void main() {
     gl_Position = uMVPMatrix * vPos;
@@ -24,7 +24,7 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-#version 120
+#version 130
 
 void main() {
     float d = 2.0 * distance(gl_PointCoord, vec2(0.5, 0.5));

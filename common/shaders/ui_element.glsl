@@ -52,7 +52,7 @@ const int REGION_ERROR          = -100;
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
 
-#version 120
+#version 130
 
 void main() {
     // set vertex to bottom-left, top-left, top-right, or bottom-right location, depending on pos
@@ -69,7 +69,7 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-#version 120
+#version 130
 
 int get_region() {
     /* return values:
