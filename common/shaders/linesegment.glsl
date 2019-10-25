@@ -18,7 +18,7 @@ varying float vDist;
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
 
-#version 130
+#version 330
 
 void main() {
     vec2 d01 = normalize(uPos1 - uPos0);
@@ -38,7 +38,7 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-#version 130
+#version 330
 
 void main() {
     float s = mod(vDist + uStippleOffset, uStipple.x + uStipple.y);

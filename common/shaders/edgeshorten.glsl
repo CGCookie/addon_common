@@ -12,7 +12,7 @@ varying vec4 aColor;
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
 
-#version 130
+#version 330
 
 void main() {
     vec4 p0 = uMVPMatrix * vPos;
@@ -31,7 +31,7 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-#version 130
+#version 330
 
 void main() {
     gl_FragColor = aColor;

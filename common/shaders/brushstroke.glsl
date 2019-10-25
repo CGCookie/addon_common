@@ -11,7 +11,7 @@ varying float aDistAccum;
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
 
-#version 130
+#version 330
 
 void main() {
     gl_Position = uMVPMatrix * vec4(vPos, 0.0, 1.0);
@@ -23,7 +23,7 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-#version 130
+#version 330
 
 void main() {
     if(mod(int(aDistAccum / 2), 4) >= 2) discard;

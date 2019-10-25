@@ -69,7 +69,7 @@ varying vec4 vColor;            // color of geometry (considers selection)
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
 
-#version 130
+#version 330
 
 bool floatnear(float v, float n) { return abs(v-n) < 0.5; }
 
@@ -130,7 +130,7 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-#version 130
+#version 330
 
 vec3 xyz(vec4 v) { return v.xyz / v.w; }
 

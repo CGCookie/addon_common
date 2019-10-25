@@ -14,7 +14,7 @@ varying vec4 aOutColor;
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
 
-#version 130
+#version 330
 
 float angle(vec2 d) { return atan(d.y, d.x); }
 
@@ -31,7 +31,7 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-#version 130
+#version 330
 
 float alpha(vec2 dir) {
     vec2 d0 = dir - vec2(1,1);
