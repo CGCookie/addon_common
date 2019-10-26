@@ -102,13 +102,16 @@ class Shader():
                     vertSource.append(line)
                 elif mode == 'frag':
                     fragSource.append(line)
+        v_attributes = [a.replace('attribute ', 'in ') for a in attributes]
+        v_varyings = [v.replace('varying ', 'out ') for v in varyings]
+        f_varyings = [v.replace('varying ', 'in ') for v in varyings]
         srcVertex = '\n'.join(
             ([vertVersion] if includeVersion else []) +
-            uniforms + attributes + varyings + consts + vertSource
+            uniforms + v_attributes + v_varyings + consts + vertSource
         )
         srcFragment = '\n'.join(
             ([fragVersion] if includeVersion else []) +
-            uniforms + varyings + consts + fragSource
+            uniforms + f_varyings + consts + fragSource
         )
         return (srcVertex, srcFragment)
 
