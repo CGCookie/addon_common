@@ -132,6 +132,8 @@ void main() {
 
 #version 330
 
+out vec4 outColor;
+
 vec3 xyz(vec4 v) { return v.xyz / v.w; }
 
 bool floatnear(float v, float n) { return abs(v-n) < 0.5; }
@@ -255,5 +257,5 @@ void main() {
 
     alpha *= pow(max(vCNormal.z, 0.01), 0.25);
 
-    gl_FragColor = coloring(vec4(rgb, alpha));
+    outColor = coloring(vec4(rgb, alpha));
 }

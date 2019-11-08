@@ -71,6 +71,8 @@ void main() {
 
 #version 330
 
+out vec4 outColor;
+
 int get_region() {
     /* return values:
           0 - outside border region
@@ -214,5 +216,5 @@ void main() {
     else if(region == REGION_ERROR)            c = vec4(1,0,0,1);  // should never hit here
     else                                       c = vec4(1,0,1,1);  // should really never hit here
     if(using_image > 0.5) c = mix_image(c);
-    gl_FragColor = c;
+    outColor = c;
 }

@@ -33,6 +33,8 @@ void main() {
 
 #version 330
 
+out vec4 outColor;
+
 void main() {
-    gl_FragColor = aColor;
+    outColor = aColor;
 }

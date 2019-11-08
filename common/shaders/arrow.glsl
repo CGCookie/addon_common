@@ -33,6 +33,8 @@ void main() {
 
 #version 330
 
+out vec4 outColor;
+
 float alpha(vec2 dir) {
     vec2 d0 = dir - vec2(1,1);
     vec2 d1 = dir - vec2(1,-1);
@@ -57,5 +59,5 @@ void main() {
     vec2 dr = vec2(cos(aRot)*d.x - sin(aRot)*d.y, sin(aRot)*d.x + cos(aRot)*d.y);
     float a = alpha(dr);
     if(a < 0.0) discard;
-    gl_FragColor = mix(aOutColor, aInColor, a);
+    outColor = mix(aOutColor, aInColor, a);
 }

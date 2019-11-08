@@ -26,8 +26,10 @@ void main() {
 
 #version 330
 
+out vec4 outColor;
+
 void main() {
     float d = 2.0 * distance(gl_PointCoord, vec2(0.5, 0.5));
     if(d > 1.0) discard;
-    gl_FragColor = (d > uInOut) ? aOutColor : aInColor;
+    outColor = (d > uInOut) ? aOutColor : aInColor;
 }

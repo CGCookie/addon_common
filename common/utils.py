@@ -44,6 +44,7 @@ from .maths import (
 
 
 # find functions of object that has key attribute
+# returns list of (attribute value, fn)
 def find_fns(obj, key):
     cls = type(obj)
     fn_type = type(find_fns)

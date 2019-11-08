@@ -25,16 +25,18 @@ void main() {
 
 noperspective in vec2 vpos;
 
+out vec4 outColor;
+
 void main() {
     vec2 ctr = (MVPMatrix * vec4(center, 0.0, 1.0)).xy;
     float d = distance(vpos, vec2(ctr.x * screensize.x, ctr.y * screensize.y));
     if(d > radius + border) discard;
     if(d <= radius) {
         float d2 = radius - d;
-        gl_FragColor = mix(colorBorder, color, clamp(d2 - border/2, 0.0, 1.0));
+        outColor = mix(colorBorder, color, clamp(d2 - border/2, 0.0, 1.0));
     } else {
         float d2 = d - radius;
-        gl_FragColor = mix(colorBorder, vec4(0,0,0,0), clamp(d2 - border/2, 0.0, 1.0));
+        outColor = mix(colorBorder, vec4(0,0,0,0), clamp(d2 - border/2, 0.0, 1.0));
     }
 }
 

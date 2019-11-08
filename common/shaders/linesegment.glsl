@@ -40,12 +40,14 @@ void main() {
 
 #version 330
 
+out vec4 outColor;
+
 void main() {
     float s = mod(vDist + uStippleOffset, uStipple.x + uStipple.y);
     if(s <= uStipple.x) {
-        gl_FragColor = uColor0;
+        outColor = uColor0;
     } else {
-        gl_FragColor = uColor1;
+        outColor = uColor1;
         if(uColor1.a <= 0) discard;
     }
 }

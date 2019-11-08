@@ -45,8 +45,9 @@ if bversion() >= "2.80":
     '''
     cover_fshader = '''
         uniform float darken;
+        out vec4 outColor;
         void main() {
-            gl_FragColor = vec4(0.0f, 0.0f, 0.0f, darken);
+            outColor = vec4(0.0f, 0.0f, 0.0f, darken);
         }
     '''
     shader = gpu.types.GPUShader(cover_vshader, cover_fshader)

@@ -25,7 +25,9 @@ void main() {
 
 #version 330
 
+out vec4 outColor;
+
 void main() {
     if(mod(int(aDistAccum / 2), 4) >= 2) discard;
-    gl_FragColor = aColor;
+    outColor = aColor;
 }

@@ -33,7 +33,9 @@ void main() {
 
 in vec4 color;
 
+out vec4 outColor;
+
 void main() {
-    gl_FragColor = color;
+    outColor = color;
 }
 

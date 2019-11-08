@@ -49,28 +49,30 @@ noperspective in vec2 vpos;
 noperspective in vec2 cpos;
 noperspective in float offset;
 
+out vec4 outColor;
+
 void main() {
     // stipple
     if(stipple.y <= 0) {        // stipple disabled
-        gl_FragColor = color0;
+        outColor = color0;
     } else {
         float t = stipple.x + stipple.y;
         float s = mod(offset, t);
         float sd = s - stipple.x;
         if(s <= 0.5 || s >= t - 0.5) {
-            gl_FragColor = mix(color1, color0, mod(s + 0.5, t));
+            outColor = mix(color1, color0, mod(s + 0.5, t));
         } else if(s >= stipple.x - 0.5 && s <= stipple.x + 0.5) {
-            gl_FragColor = mix(color0, color1, s - (stipple.x - 0.5));
+            outColor = mix(color0, color1, s - (stipple.x - 0.5));
         } else if(s < stipple.x) {
-            gl_FragColor = color0;
+            outColor = color0;
         } else {
-            gl_FragColor = color1;
+            outColor = color1;
         }
     }
     // antialias along edge of line
     float cdist = length(cpos - vpos);
     if(cdist > width) {
-        gl_FragColor.a *= clamp(1.0 - (cdist - width), 0.0, 1.0);
+        outColor.a *= clamp(1.0 - (cdist - width), 0.0, 1.0);
     }
 }
 

@@ -26,7 +26,9 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
+out vec4 outColor;
+
 void main() {
-    gl_FragColor = color;
+    outColor = color;
 }
 
