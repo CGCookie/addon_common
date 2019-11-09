@@ -82,30 +82,20 @@ class CookieCutter_UI:
     def ignore_ui_events(self, v):
         self._ignore_ui_events = bool(v)
 
-    def _draw_pre3d(self):  self.drawcallbacks.pre3d()
-    def _draw_post3d(self): self.drawcallbacks.post3d()
-    def _draw_post2d(self): self.drawcallbacks.post2d()
-
     def _cc_ui_start(self):
         def preview():
-            self._draw_pre3d()
+            with self.catch_exception('draw pre3d'):
+                self.drawcallbacks.pre3d()
         def postview():
-            self._draw_post3d()
+            with self.catch_exception('draw post3d'):
+                self.drawcallbacks.post3d()
         def postpixel():
             bgl.glEnable(bgl.GL_MULTISAMPLE)
             bgl.glEnable(bgl.GL_BLEND)
-            #bgl.glEnable(bgl.GL_POINT_SMOOTH)
-
-            self._draw_post2d()
-
-            try:
+            with self.catch_exception('draw post2d()'):
+                self.drawcallbacks.post2d()
+            with self.catch_exception('draw window UI'):
                 self.document.draw(self.context)
-                #self.wm.draw_postpixel(self.context)
-                pass
-            except Exception as e:
-                print('Caught exception while trying to draw window UI')
-                debugger.print_exception()
-                print(e)
 
         self._handle_preview   = self._space.draw_handler_add(preview,   tuple(), 'WINDOW', 'PRE_VIEW')
         self._handle_postview  = self._space.draw_handler_add(postview,  tuple(), 'WINDOW', 'POST_VIEW')

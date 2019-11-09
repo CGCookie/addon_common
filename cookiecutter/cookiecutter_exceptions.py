@@ -13,16 +13,18 @@ https://github.com/CGCookie/retopoflow
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+import contextlib
+
 from ..common.fsm import FSM
 from ..common.debug import debugger
 
-class CookieCutter_FSM:
-    fsm = FSM()
-    FSM_State = fsm.wrapper
-
-    def _cc_fsm_init(self):
-        self.fsm.init(self, start='main')
-
-    def _cc_fsm_update(self):
-        self.fsm.update()
-
+class CookieCutter_Exceptions:
+    @staticmethod
+    @contextlib.contextmanager
+    def catch_exception(action, fatal=False):
+        try:
+            yield None
+        except Exception as e:
+            print('CookieCutter caught exception while trying to %s' % action)
+            debugger.print_exception()
+            if fatal: assert False

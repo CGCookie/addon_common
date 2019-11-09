@@ -29,9 +29,10 @@ from ..common.useractions import Actions
 from .cookiecutter_fsm import CookieCutter_FSM
 from .cookiecutter_ui import CookieCutter_UI
 from .cookiecutter_blender import CookieCutter_Blender
+from .cookiecutter_exceptions import CookieCutter_Exceptions
 
 
-class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Blender):
+class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Blender, CookieCutter_Exceptions):
     '''
     CookieCutter is used to create advanced operators very quickly!
 
@@ -70,7 +71,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
     @classmethod
     def poll(cls, context):
-        return cls.can_start(context)
+        with cls.catch_exception('call can_start()'):
+            return cls.can_start(context)
 
     def invoke(self, context, event):
         self._nav = False
@@ -79,18 +81,16 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self.context = context
         self.event = None
 
-        self._cc_fsm_init()
-        self._cc_ui_init()
-        self._cc_actions_init()
+        with self.catch_exception('initializing FSM, UI, Actions'):
+            self._cc_fsm_init()
+            self._cc_ui_init()
+            self._cc_actions_init()
 
-        try:
+        with self.catch_exception('call start()'):
             self.start()
-        except Exception as e:
-            print('Caught exception while trying to start')
-            debugger.print_exception()
-            raise e
 
-        self._cc_ui_start()
+        with self.catch_exception('starting UI'):
+            self._cc_ui_start()
 
         self.context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
@@ -107,19 +107,12 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         if self._done:
             self._cc_actions_end()
             self._cc_ui_end()
-            try:
+            with self.catch_exception('call end() with %s' % self._done):
                 if self._done == 'commit':
                     self.end_commit()
                 else:
                     self.end_cancel()
-            except Exception as e:
-                print('Caught exception while trying to end with %s' % self._done)
-                debugger.print_exception()
-            try:
                 self.end()
-            except Exception as e:
-                print('Caught exception while trying to end')
-                debugger.print_exception()
 
             return {'FINISHED'} if self._done=='finish' else {'CANCELLED'}
 
@@ -144,11 +137,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
                 self._nav = False
                 self._nav_time = time.time()
 
-        try:
+        with self.catch_exception('call update()'):
             self.update()
-        except Exception as e:
-            print('Caught exception while calling update')
-            debugger.print_exception()
 
         if ret: return ret
 
