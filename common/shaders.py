@@ -52,21 +52,33 @@ class Shader():
         logging and error-checking not quite working :(
         '''
 
-        bufLen = bgl.Buffer(bgl.GL_BYTE, 4)
-        bufLog = bgl.Buffer(bgl.GL_BYTE, 2000)
-        bufStatus = bgl.Buffer(bgl.GL_INT, 1)
 
         bgl.glCompileShader(shader)
 
-        # get shader compilation log and status (successfully compiled?)
+        # report shader compilation log (if any)
+        bufLogLen = bgl.Buffer(bgl.GL_INT, 1)
+        bgl.glGetShaderiv(shader, bgl.GL_INFO_LOG_LENGTH, bufLogLen)
+        if bufLogLen[0] > 0:
+            # report log available
+            bufLog = bgl.Buffer(bgl.GL_BYTE, bufLogLen)
+            bgl.glGetShaderInfoLog(shader, bufLogLen[0], bufLogLen, bufLog)
+            log = ''.join(chr(v) for v in bufLog.to_list() if v)
+            if log:
+                print('SHADER REPORT %s' % name)
+                print('\n'.join(['    %s'%l for l in log.splitlines()]))
+            else:
+                print('Shader %s has no report' % name)
+        else:
+            log = ''
+
+        # report shader compilation status
+        bufStatus = bgl.Buffer(bgl.GL_INT, 1)
         bgl.glGetShaderiv(shader, bgl.GL_COMPILE_STATUS, bufStatus)
-        bgl.glGetShaderInfoLog(shader, 2000, bufLen, bufLog)
-        log = ''.join(chr(v) for v in bufLog.to_list() if v)
         if bufStatus[0] == 0:
             print('ERROR WHILE COMPILING SHADER %s' % name)
-            print('\n'.join(['% 3d %s'%(i+1,l) for (i,l) in enumerate(src.splitlines())]))
-            print('\n'.join(['    %s'%l for l in log.splitlines()]))
+            print('\n'.join(['   % 4d  %s'%(i+1,l) for (i,l) in enumerate(src.splitlines())]))
             assert False
+
         return log
 
     @staticmethod
@@ -152,8 +164,8 @@ class Shader():
 
         self.checkErrors = checkErrors
 
-        srcVertex   = '\n'.join(l.strip() for l in srcVertex.split('\n'))
-        srcFragment = '\n'.join(l.strip() for l in srcFragment.split('\n'))
+        srcVertex   = '\n'.join(l for l in srcVertex.split('\n'))
+        srcFragment = '\n'.join(l for l in srcFragment.split('\n'))
 
         bgl.glShaderSource(self.shaderVert, srcVertex)
         bgl.glShaderSource(self.shaderFrag, srcFragment)

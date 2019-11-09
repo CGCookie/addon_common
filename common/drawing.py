@@ -134,7 +134,11 @@ if bversion() >= "2.80":
             else: source[mode].append(line)
         vert_source = '\n'.join(source['common'] + source['vertex'])
         frag_source = '\n'.join(source['common'] + source['fragment'])
-        return GPUShader(vert_source, frag_source)
+        try:
+            return GPUShader(vert_source, frag_source)
+        except Exception as e:
+            print('ERROR WHILE COMPILING SHADER %s' % fn_glsl)
+            assert False
 
     # 2D point
     shader_2D_point = create_shader('point_2D.glsl')
