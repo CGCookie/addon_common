@@ -308,6 +308,7 @@ def markdown(mdown, **kwargs):
     paras = mdown.split('\n\n')                         # split into paragraphs
 
     ui_container = UI_Element(tagName='div', classes='mdown', **kwargs)
+    ui_container.defer_dirty_propagation = True
 
     for p in paras:
         if p.startswith('# '):
@@ -356,6 +357,7 @@ def markdown(mdown, **kwargs):
             p = re.sub(r'\n', ' ', p)      # join sentences of paragraph
             UI_Element(tagName='p', innerText=p, parent=ui_container)
 
+    ui_container.defer_dirty_propagation = False
     return ui_container
 
 

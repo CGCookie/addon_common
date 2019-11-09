@@ -39,6 +39,8 @@ class ProfilerHelper:
         self.parent_text = parent_text
         self.all_call = '~~ All Calls ~~^%s' % text
         self.parent_all_call = pr.stack[-1].all_call if pr.stack else None
+        self.direct_call = '~~ Direct Calls ~~^%s --> %s' % (pr.stack[-1].text if pr.stack else 'None', text)
+        self.parent_direct_call = pr.stack[-1].direct_call if pr.stack else None
         self._is_done = False
         self.pr.d_start[self.full_text] = time.time()
         self.pr.stack.append(self)
@@ -80,6 +82,8 @@ class ProfilerHelper:
         self.update(self.full_text, delta, key_parent=self.parent_text)
         self.update('~~ All Calls ~~', delta)
         self.update(self.all_call, delta, key_parent=self.parent_all_call)
+        self.update('~~ Direct Calls ~~', delta)
+        self.update(self.direct_call, delta, key_parent=self.parent_direct_call)
         del self.pr.d_start[self.full_text]
         self.pr.clear_handler()
 
@@ -144,7 +148,7 @@ class Profiler:
         self._clear = True
         self.clear_handler()
 
-    def start(self, text=None, addFile=True, dblBack=False):
+    def start(self, text=None, addFile=True, n_backs=1):
         # assert not Profiler._broken
         if Profiler._broken:
             print('Profiler broken. Ignoring')
@@ -152,8 +156,8 @@ class Profiler:
         if not Profiler._enabled:
             return ProfilerHelper_Ignore()
 
-        frame = inspect.currentframe().f_back
-        if dblBack: frame = frame.f_back
+        frame = inspect.currentframe()
+        for _ in range(n_backs): frame = frame.f_back
         filename = os.path.basename(frame.f_code.co_filename)
         linenum = frame.f_lineno
         fnname = frame.f_code.co_name
@@ -170,7 +174,7 @@ class Profiler:
         pass
 
     def add_note(self, *args, **kwargs):
-        self.start(*args, dblBack=True, **kwargs).done()
+        self.start(*args, n_backs=2, **kwargs).done()
 
     @contextlib.contextmanager
     def code(self, *args, enabled=True, **kwargs):
@@ -178,7 +182,7 @@ class Profiler:
             yield None
             return
         try:
-            pr = self.start(*args, dblBack=True, **kwargs)
+            pr = self.start(*args, n_backs=3, **kwargs)  # n_backs=3 for contextlib wrapper
             yield pr
             pr.done()
         except Exception as e:

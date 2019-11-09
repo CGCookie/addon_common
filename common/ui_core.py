@@ -93,6 +93,8 @@ fontmap = {
 def setup_font(fontid):
     FontManager.aspect(1, fontid)
     FontManager.enable_kerning_default(fontid)
+
+@profiler.function
 def get_font(fontfamily, fontstyle=None, fontweight=None):
     if fontfamily in fontmap:
         styleweight = '%s %s' % (fontstyle or 'normal', fontweight or 'normal')
@@ -387,24 +389,21 @@ class UI_Element_Utils:
         done = set()
         while working:
             current = working.pop()
+            curnode = g[current]
             assert current not in done, 'cycle detected in cleaning callbacks (%s)' % current
-            if not all(p in done for p in g[current]['parents']): continue
+            if not all(p in done for p in curnode['parents']): continue
             do_cleaning = False
             do_cleaning |= current in self._dirty_properties
-            do_cleaning |= bool(self._dirty_callbacks.get(current, []))
+            do_cleaning |= bool(self._dirty_callbacks.get(current, False))
             if do_cleaning:
-                g[current]['fn'](self, *args, **kwargs)
+                curnode['fn'](self, *args, **kwargs)
             redirtied = [d for d in self._dirty_properties if d in done]
             if redirtied:
-                # restarting
+                profiler.add_note('restarting')
                 working = set(UI_Element_Utils._cleaning_graph_roots)
                 done = set()
-                # assert False, "Redirtied %s after cleaning %s" % (
-                #     str(redirtied),
-                #     current
-                # )
             else:
-                working.update(g[current]['children'])
+                working.update(curnode['children'])
                 done.add(current)
 
 
@@ -428,12 +427,11 @@ class UI_Element_Utils:
 
     @profiler.function
     def _get_style_trbl(self, kb, scale=None):
-        t = self._get_style_num('%s-top' % kb, 0)
-        r = self._get_style_num('%s-right' % kb, 0)
-        b = self._get_style_num('%s-bottom' % kb, 0)
-        l = self._get_style_num('%s-left' % kb, 0)
-        if scale is None: return (t,r,b,l)
-        return (t*scale, r*scale, b*scale, l*scale)
+        t = self._get_style_num('%s-top' % kb, 0, scale=scale)
+        r = self._get_style_num('%s-right' % kb, 0, scale=scale)
+        b = self._get_style_num('%s-bottom' % kb, 0, scale=scale)
+        l = self._get_style_num('%s-left' % kb, 0, scale=scale)
+        return (t,r,b,l)
 
 
 # https://www.w3schools.com/jsref/obj_event.asp
@@ -1518,148 +1516,154 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self.defer_dirty_propagation = True
 
-        # rebuild up full selector
-        sel_parent = [] if not self._parent else self._parent._selector
-        if self._pseudoelement:
-            # this is either a ::before or ::after pseudoelement
-            self._selector = sel_parent[:-1] + [sel_parent[-1] + '::' + self._pseudoelement]
-            self._selector_before = None
-            self._selector_after  = None
-        elif self._innerTextAsIs:
-            # this is a text element
-            self._selector = sel_parent + ['*text*']
-            self._selector_before = None
-            self._selector_after = None
-        else:
-            attribs = ['type', 'value']
-            sel_tagName = self._tagName
-            sel_id = '#%s' % self._id if self._id else ''
-            sel_cls = ''.join('.%s' % c for c in self._classes)
-            sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
-            if self._value_bound and self._value.disabled: sel_pseudo += ':disabled'
-            if self._checked_bound and self._checked.disabled: sel_pseudo += ':disabled'
-            sel_attribs = ''.join('[%s]' % p for p in attribs if getattr(self,p) is not None)
-            sel_attribvals = ''.join('[%s="%s"]' % (p,str(getattr(self,p))) for p in attribs if getattr(self,p) is not None)
-            if self.checked:
-                sel_attribs += '[checked]'
-                sel_attribvals += '[checked="checked"]'
-            self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
-            self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
-            self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
-
-        # initialize styles in order: default, focus, active, hover, hover+active
-        # TODO: inherit parent styles with other elements (not just *text*)
-        if self._styling_parent is None:
-            if self._parent:
-                # keep = {
-                #     'font-family', 'font-style', 'font-weight', 'font-size',
-                #     'color',
-                # }
-                # decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
-                # self._styling_parent = UI_Styling.from_decllist(decllist)
-                self._styling_parent = UI_Styling()
+        with profiler.code('rebuild full selector'):
+            sel_parent = [] if not self._parent else self._parent._selector
+            if self._pseudoelement:
+                # this is either a ::before or ::after pseudoelement
+                self._selector = sel_parent[:-1] + [sel_parent[-1] + '::' + self._pseudoelement]
+                self._selector_before = None
+                self._selector_after  = None
+            elif self._innerTextAsIs:
+                # this is a text element
+                self._selector = sel_parent + ['*text*']
+                self._selector_before = None
+                self._selector_after = None
             else:
-                self._styling_parent = UI_Styling()
+                attribs = ['type', 'value']
+                sel_tagName = self._tagName
+                sel_id = '#%s' % self._id if self._id else ''
+                sel_cls = ''.join('.%s' % c for c in self._classes)
+                sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
+                if self._value_bound and self._value.disabled: sel_pseudo += ':disabled'
+                if self._checked_bound and self._checked.disabled: sel_pseudo += ':disabled'
+                sel_attribs = ''.join('[%s]' % p for p in attribs if getattr(self,p) is not None)
+                sel_attribvals = ''.join('[%s="%s"]' % (p,str(getattr(self,p))) for p in attribs if getattr(self,p) is not None)
+                if self.checked:
+                    sel_attribs += '[checked]'
+                    sel_attribvals += '[checked="checked"]'
+                self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
+                self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
+                self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
 
-        # computed default styling
-        if self._styling_default is None:
-            if self._innerTextAsIs is not None:
-                self._styling_default = UI_Styling()
+        with profiler.code('initialize styles in order: default, focus, active, hover, hover+active'):
+            # TODO: inherit parent styles with other elements (not just *text*)
+            if self._styling_parent is None:
+                if self._parent:
+                    # keep = {
+                    #     'font-family', 'font-style', 'font-weight', 'font-size',
+                    #     'color',
+                    # }
+                    # decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
+                    # self._styling_parent = UI_Styling.from_decllist(decllist)
+                    self._styling_parent = UI_Styling()
+                else:
+                    self._styling_parent = UI_Styling()
+
+            # computed default styling
+            if self._styling_default is None:
+                if self._innerTextAsIs is not None:
+                    self._styling_default = UI_Styling()
+                else:
+                    self._styling_default = ui_defaultstylings
+
+            # compute custom styles
+            if self._styling_custom is None:
+                if self._style_str:
+                    self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
+                else:
+                    self._styling_custom = UI_Styling()
+
+            styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
+            self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
+
+        with profiler.code('filling style cache'):
+            if self._is_visible and not self._pseudoelement:
+                # need to compute ::before and ::after styles to know whether there is content to compute and render
+                self._computed_styles_before = None # UI_Styling.compute_style(self._selector_before, *styling_list)
+                self._computed_styles_after  = None # UI_Styling.compute_style(self._selector_after,  *styling_list)
             else:
-                self._styling_default = ui_defaultstylings
+                self._computed_styles_before = None
+                self._computed_styles_after = None
+            self._is_scrollable_x = (self._computed_styles.get('overflow-x', 'visible') == 'scroll')
+            self._is_scrollable_y = (self._computed_styles.get('overflow-y', 'visible') == 'scroll')
 
-        # # compute custom styles
-        if self._styling_custom is None:
-            self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
+            dpi_mult = Globals.drawing.get_dpi_mult()
+            self._style_cache = {}
+            sc = self._style_cache
+            if self._innerTextAsIs is None:
+                sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = self._get_style_trbl('margin',  scale=dpi_mult)
+                sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = self._get_style_trbl('padding', scale=dpi_mult)
+                sc['border-width']        = self._get_style_num('border-width', 0, scale=dpi_mult)
+                sc['border-radius']       = self._computed_styles.get('border-radius', 0)
+                sc['border-left-color']   = self._computed_styles.get('border-left-color',   Color.transparent)
+                sc['border-right-color']  = self._computed_styles.get('border-right-color',  Color.transparent)
+                sc['border-top-color']    = self._computed_styles.get('border-top-color',    Color.transparent)
+                sc['border-bottom-color'] = self._computed_styles.get('border-bottom-color', Color.transparent)
+                sc['background-color']    = self._computed_styles.get('background-color',    Color.transparent)
+                sc['width'] = self._computed_styles.get('width', 'auto')
+                sc['height'] = self._computed_styles.get('height', 'auto')
+            else:
+                sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = 0, 0, 0, 0
+                sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = 0, 0, 0, 0
+                sc['border-width']        = 0
+                sc['border-radius']       = 0
+                sc['border-left-color']   = Color.transparent
+                sc['border-right-color']  = Color.transparent
+                sc['border-top-color']    = Color.transparent
+                sc['border-bottom-color'] = Color.transparent
+                sc['background-color']    = Color.transparent
+                sc['width'] = 'auto'
+                sc['height'] = 'auto'
 
-        styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
-        self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
+            fontfamily = self._computed_styles.get('font-family', 'sans-serif')
+            fontstyle = self._computed_styles.get('font-style', 'normal')
+            fontweight = self._computed_styles.get('font-weight', 'normal')
+            self._fontid = get_font(fontfamily, fontstyle, fontweight)
+            self._fontsize = self._computed_styles.get('font-size', NumberUnit(12,'pt')).val()
+            self._fontcolor = self._computed_styles.get('color', (0,0,0,1))
+            ts = self._computed_styles.get('text-shadow', 'none')
+            if ts == 'none': self._textshadow = 'none'
+            else: self._textshadow = (ts[0].val(), ts[1].val(), ts[-1])
 
-        if self._is_visible and not self._pseudoelement:
-            # need to compute ::before and ::after styles to know whether there is content to compute and render
-            self._computed_styles_before = UI_Styling.compute_style(self._selector_before, *styling_list)
-            self._computed_styles_after  = UI_Styling.compute_style(self._selector_after,  *styling_list)
-        else:
-            self._computed_styles_before = None
-            self._computed_styles_after = None
-        self._is_scrollable_x = (self._computed_styles.get('overflow-x', 'visible') == 'scroll')
-        self._is_scrollable_y = (self._computed_styles.get('overflow-y', 'visible') == 'scroll')
+            self._whitespace = self._computed_styles.get('white-space', 'normal')
 
-        dpi_mult = Globals.drawing.get_dpi_mult()
-        self._style_cache = {}
-        sc = self._style_cache
-        if self._innerTextAsIs is None:
-            sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = self._get_style_trbl('margin',  scale=dpi_mult)
-            sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = self._get_style_trbl('padding', scale=dpi_mult)
-            sc['border-width']        = self._get_style_num('border-width', 0, scale=dpi_mult)
-            sc['border-radius']       = self._computed_styles.get('border-radius', 0)
-            sc['border-left-color']   = self._computed_styles.get('border-left-color',   Color.transparent)
-            sc['border-right-color']  = self._computed_styles.get('border-right-color',  Color.transparent)
-            sc['border-top-color']    = self._computed_styles.get('border-top-color',    Color.transparent)
-            sc['border-bottom-color'] = self._computed_styles.get('border-bottom-color', Color.transparent)
-            sc['background-color']    = self._computed_styles.get('background-color',    Color.transparent)
-            sc['width'] = self._computed_styles.get('width', 'auto')
-            sc['height'] = self._computed_styles.get('height', 'auto')
-        else:
-            sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = 0, 0, 0, 0
-            sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = 0, 0, 0, 0
-            sc['border-width']        = 0
-            sc['border-radius']       = 0
-            sc['border-left-color']   = Color.transparent
-            sc['border-right-color']  = Color.transparent
-            sc['border-top-color']    = Color.transparent
-            sc['border-bottom-color'] = Color.transparent
-            sc['background-color']    = Color.transparent
-            sc['width'] = 'auto'
-            sc['height'] = 'auto'
+        with profiler.code('recursing to children'):
+            # tell children to recompute selector
+            # NOTE: self._children_all has not been constructed, yet!
+            for child in self._children: child._compute_style()
+            for child in self._children_text: child._compute_style()
+            if self._child_before: self._child_before._compute_styles()
+            if self._child_after: self._child_after._compute_styles()
 
-        fontfamily = self._computed_styles.get('font-family', 'sans-serif')
-        fontstyle = self._computed_styles.get('font-style', 'normal')
-        fontweight = self._computed_styles.get('font-weight', 'normal')
-        self._fontid = get_font(fontfamily, fontstyle, fontweight)
-        self._fontsize = self._computed_styles.get('font-size', NumberUnit(12,'pt')).val()
-        self._fontcolor = self._computed_styles.get('color', (0,0,0,1))
-        ts = self._computed_styles.get('text-shadow', 'none')
-        if ts == 'none': self._textshadow = 'none'
-        else: self._textshadow = (ts[0].val(), ts[1].val(), ts[-1])
+        with profiler.code('hashing for cache'):
+            style_content_hash = Hasher(
+                self.is_visible,
+                self.innerText,
+                self._src_str,
+                self._fontid, self._fontsize,
+                self._whitespace,
+                self._computed_styles.get('background-image', None),
+                self._computed_styles_before.get('content', None) if self._computed_styles_before else None,
+                self._computed_styles_after.get('content',  None) if self._computed_styles_after  else None,
+            )
+            if style_content_hash != getattr(self, '_style_content_hash', None):
+                self._dirty('style change might have changed content (::before / ::after)', 'content')
+                self._dirty_flow()
+                self._style_content_hash = style_content_hash
 
-        self._whitespace = self._computed_styles.get('white-space', 'normal')
-
-        # tell children to recompute selector
-        # NOTE: self._children_all has not been constructed, yet!
-        for child in self._children: child._compute_style()
-        for child in self._children_text: child._compute_style()
-        if self._child_before: self._child_before._compute_styles()
-        if self._child_after: self._child_after._compute_styles()
-
-        style_content_hash = Hasher(
-            self.is_visible,
-            self.innerText,
-            self._src_str,
-            self._fontid, self._fontsize,
-            self._whitespace,
-            self._computed_styles.get('background-image', None),
-            self._computed_styles_before.get('content', None) if self._computed_styles_before else None,
-            self._computed_styles_after.get('content',  None) if self._computed_styles_after  else None,
-        )
-        if style_content_hash != getattr(self, '_style_content_hash', None):
-            self._dirty('style change might have changed content (::before / ::after)', 'content')
-            self._dirty_flow()
-            self._style_content_hash = style_content_hash
-
-        style_size_hash = Hasher(
-            self._fontid, self._fontsize,
-            {k:sc[k] for k in [
-                'margin-top','margin-right','margin-bottom','margin-left',
-                'padding-top','padding-right','padding-bottom','padding-left',
-                'border-width',
-                'width', 'height'
-            ]},
-        )
-        if style_size_hash != getattr(self, '_style_size_hash', None):
-            self._dirty('style change might have changed size', 'size')
-            self._dirty_flow()
-            self._style_size_hash = style_size_hash
+            style_size_hash = Hasher(
+                self._fontid, self._fontsize,
+                {k:sc[k] for k in [
+                    'margin-top','margin-right','margin-bottom','margin-left',
+                    'padding-top','padding-right','padding-bottom','padding-left',
+                    'border-width',
+                    'width', 'height'
+                ]},
+            )
+            if style_size_hash != getattr(self, '_style_size_hash', None):
+                self._dirty('style change might have changed size', 'size')
+                self._dirty_flow()
+                self._style_size_hash = style_size_hash
 
         self._dirty_properties.discard('style')
         self._dirty_callbacks['style'] = set()
@@ -1769,10 +1773,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 })
                 self._children_text_min_size = Size2D(width=0, height=0)
                 with profiler.code('cleaning text children'):
-                    for child in self._children_text:
-                        child._clean()
-                        self._children_text_min_size.width  = max(self._children_text_min_size.width,  child._static_content_size.width)
-                        self._children_text_min_size.height = max(self._children_text_min_size.height, child._static_content_size.height)
+                    for child in self._children_text: child._clean()
+                    self._children_text_min_size.width  = max(child._static_content_size.width  for child in self._children_text)
+                    self._children_text_min_size.height = max(child._static_content_size.height for child in self._children_text)
                 self._new_content = True
 
         elif self.src: # and not self._src:
@@ -1898,34 +1901,36 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self.defer_dirty_propagation = True
 
-        for child in self._children_all:
-            child._compute_static_content_size()
+        with profiler.code('recursing to children'):
+            for child in self._children_all:
+                child._compute_static_content_size()
 
         self._static_content_size = None
 
         # set size based on content (computed size)
         if self._innerTextAsIs is not None:
-            # TODO: allow word breaking?
-            # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
-            size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
-            ts = self._parent._textshadow
-            if ts == 'none': tsx,tsy = 0,0
-            else: tsx,tsy,tsc = ts
-            self._static_content_size = Size2D()
-            self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs) + 1) # + 1 + max(0,tsx))
-            self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs)) # + 1 + max(0,tsy))
-            self._static_content_space = Globals.drawing.get_text_width(' ')
-            # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
-            Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
+            with profiler.code('computing text sizes'):
+                # TODO: allow word breaking?
+                # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
+                size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
+                ts = self._parent._textshadow
+                if ts == 'none': tsx,tsy = 0,0
+                else: tsx,tsy,tsc = ts
+                self._static_content_size = Size2D()
+                self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs) + 1) # + 1 + max(0,tsx))
+                self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs)) # + 1 + max(0,tsy))
+                self._static_content_space = Globals.drawing.get_text_width(' ')
+                # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
+                Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
 
         elif self._src == 'image':
-            # TODO: set to image size?
-            dpi_mult = Globals.drawing.get_dpi_mult()
-            self._static_content_size = Size2D()
-            self._static_content_size.set_all_widths(self._image_data['width'] * dpi_mult)
-            self._static_content_size.set_all_heights(self._image_data['height'] * dpi_mult)
-            self._static_content_space = 0
-            pass
+            with profiler.code('computing image sizes'):
+                # TODO: set to image size?
+                dpi_mult = Globals.drawing.get_dpi_mult()
+                self._static_content_size = Size2D()
+                self._static_content_size.set_all_widths(self._image_data['width'] * dpi_mult)
+                self._static_content_size.set_all_heights(self._image_data['height'] * dpi_mult)
+                self._static_content_space = 0
 
         else:
             pass
@@ -1960,6 +1965,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if not self.is_visible:
             return
+
+        #profiler.add_note('laying out %s' % str(self).replace('\n',' ')[:100])
 
         first_on_line  = kwargs['first_on_line']    # is self the first UI_Element on the current line?
         fitting_size   = kwargs['fitting_size']     # size from parent that we should try to fit in (only max)
@@ -2346,8 +2353,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     ts = self._parent._textshadow
                     if ts != 'none':
                         tsx,tsy,tsc = ts
-                        Globals.drawing.text_draw2D(self._innerTextAsIs, (self._l+tsx, self._t-tsy), color=tsc)
-                    Globals.drawing.text_draw2D(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
+                        Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+tsx, self._t-tsy), color=tsc)
+                    Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
                     # no need to reset prev size, since parent will do that
 
             elif self._src == 'image':
@@ -2758,7 +2765,7 @@ class UI_Document(UI_Document_FSM):
         if self._under_mouse == self._body:
             # clicking body always blurs focus
             self.blur()
-        return self._under_mouse and self._under_mouse != self._body and not self._under_mouse.is_disabled
+        return self._under_mouse is not None and self._under_mouse != self._body and not self._under_mouse.is_disabled
 
     @UI_Document_FSM.FSM_State('mousedown', 'enter')
     def modal_mousedown_enter(self):
