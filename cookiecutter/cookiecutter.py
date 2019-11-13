@@ -101,6 +101,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
     def modal(self, context, event):
         self.context = context
         self.event = event
+        self.drawcallbacks.reset_pre()
 
         profiler.printfile()
 

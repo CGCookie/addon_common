@@ -537,7 +537,7 @@ class Drawing:
     def draw2D_line(self, p0:Point2D, p1:Point2D, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
         # TODO: better test this!
         print('THIS IS NOT TESTED!')
-        if color1 is None: color1 = (0,0,0,0)
+        if color1 is None: color1 = (color0[0],color0[1],color0[2],0)
         if not hasattr(Drawing, '_line_data'):
             sizeOfFloat, sizeOfInt = 4, 4
             vbos = bgl.Buffer(bgl.GL_INT, 1)
@@ -618,7 +618,7 @@ class Drawing:
     # draw line segment in screen space
     @blender_version_wrapper('>=', '2.80')
     def draw2D_line(self, p0:Point2D, p1:Point2D, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
-        if color1 is None: color1 = (0,0,0,0)
+        if color1 is None: color1 = (color0[0],color0[1],color0[2],0)
         width = self.scale(width)
         stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
         offset = self.scale(offset)
@@ -638,7 +638,7 @@ class Drawing:
     @blender_version_wrapper('>=', '2.80')
     def draw2D_lines(self, points, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
         self.glCheckError('starting draw2D_lines')
-        if color1 is None: color1 = (0,0,0,0)
+        if color1 is None: color1 = (color0[0],color0[1],color0[2],0)
         width = self.scale(width)
         stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
         offset = self.scale(offset)
@@ -662,7 +662,7 @@ class Drawing:
     @blender_version_wrapper('>=', '2.80')
     def draw3D_lines(self, points, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
         self.glCheckError('starting draw3D_lines')
-        if color1 is None: color1 = (0,0,0,0)
+        if color1 is None: color1 = (color0[0],color0[1],color0[2],0)
         width = self.scale(width)
         stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
         offset = self.scale(offset)
@@ -685,7 +685,7 @@ class Drawing:
 
     @blender_version_wrapper('>=', '2.80')
     def draw2D_linestrip(self, points, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
-        if color1 is None: color1 = (0,0,0,0)
+        if color1 is None: color1 = (color0[0],color0[1],color0[2],0)
         width = self.scale(width)
         stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
         offset = self.scale(offset)
@@ -707,7 +707,7 @@ class Drawing:
     # draw circle in screen space
     @blender_version_wrapper('>=', '2.80')
     def draw2D_circle(self, center:Point2D, radius:float, color0:Color, *, color1=None, width=1, stipple=None, offset=0):
-        if color1 is None: color1 = (0,0,0,0)
+        if color1 is None: color1 = (color0[0],color0[1],color0[2],0)
         radius = self.scale(radius)
         width = self.scale(width)
         stipple = [self.scale(v) for v in stipple] if stipple else [1,0]
@@ -1152,6 +1152,12 @@ class ScissorStack:
 class DrawCallbacks:
     def __init__(self):
         self.wrapper = self._create_wrapper()
+        self.wrapper_pre = self._wrapper_pre
+        self._called_pre = False
+
+    def _wrapper_pre(self, fn):
+        fn.drawmode = 'pre'
+        return fn
 
     def _create_wrapper(self):
         drawcb = self
@@ -1181,14 +1187,26 @@ class DrawCallbacks:
             'pre3d':  [],
             'post3d': [],
             'post2d': [],
+            'pre':    [],
         }
         for (m,fn) in find_fns(self.obj, 'drawmode'):
             self._fns[m] += [fn]
 
     def _call(self, n):
         for fn in self._fns[n]: fn(self.obj)
-    def pre3d(self):  self._call('pre3d')
-    def post3d(self): self._call('post3d')
-    def post2d(self): self._call('post2d')
+    def reset_pre(self): self._called_pre = False
+    def _pre(self):
+        if self._called_pre: return
+        self._call('pre')
+        self._called_pre = True
+    def pre3d(self):
+        self._pre()
+        self._call('pre3d')
+    def post3d(self):
+        self._pre()
+        self._call('post3d')
+    def post2d(self):
+        self._pre()
+        self._call('post2d')
 
 

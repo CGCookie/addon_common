@@ -64,6 +64,7 @@ class CookieCutter_UI:
 
     drawcallbacks = DrawCallbacks()
     Draw = drawcallbacks.wrapper
+    PreDraw = drawcallbacks.wrapper_pre
 
     def _cc_ui_init(self):
         self.document = Globals.ui_document # UI_Document(self.context)
