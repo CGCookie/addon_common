@@ -56,14 +56,16 @@ void main() {
         float t = stipple.x + stipple.y;
         float s = mod(offset, t);
         float sd = s - stipple.x;
+        vec4 colors = color1;
+        if(colors.a < (1.0/255.0)) colors.rgb = color0.rgb;
         if(s <= 0.5 || s >= t - 0.5) {
-            outColor = mix(color1, color0, mod(s + 0.5, t));
+            outColor = mix(colors, color0, mod(s + 0.5, t));
         } else if(s >= stipple.x - 0.5 && s <= stipple.x + 0.5) {
-            outColor = mix(color0, color1, s - (stipple.x - 0.5));
+            outColor = mix(color0, colors, s - (stipple.x - 0.5));
         } else if(s < stipple.x) {
             outColor = color0;
         } else {
-            outColor = color1;
+            outColor = colors;
         }
     }
     // antialias along edge of line

@@ -28,15 +28,17 @@ noperspective in vec2 vpos;
 out vec4 outColor;
 
 void main() {
+    vec4 colorb = colorBorder;
+    if(colorb.a < (1.0/255.0)) colorb.rgb = color.rgb;
     vec2 ctr = (MVPMatrix * vec4(center, 0.0, 1.0)).xy;
     float d = distance(vpos, vec2(ctr.x * screensize.x, ctr.y * screensize.y));
     if(d > radius + border) discard;
     if(d <= radius) {
         float d2 = radius - d;
-        outColor = mix(colorBorder, color, clamp(d2 - border/2, 0.0, 1.0));
+        outColor = mix(colorb, color, clamp(d2 - border/2, 0.0, 1.0));
     } else {
         float d2 = d - radius;
-        outColor = mix(colorBorder, vec4(0,0,0,0), clamp(d2 - border/2, 0.0, 1.0));
+        outColor = mix(colorb, vec4(colorb.rgb,0), clamp(d2 - border/2, 0.0, 1.0));
     }
 }
 
