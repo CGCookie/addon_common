@@ -590,7 +590,7 @@ class UI_Element_Properties:
             child._parent.delete_child(child)
         self._children.append(child)
         child._parent = self
-        child._dirty('appending child to parent', parent=False, children=True)
+        child._dirty('appending child to parent', parent=True, children=True)
         self._dirty('appending new child changes content', 'content')
         self._new_content = True
         return child
@@ -1403,6 +1403,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # TODO: go back through these to make sure we've caught everything
         self._classes          = []     # classes applied to element, set by self.classes property, based on self._classes_str
         self._computed_styles  = {}     # computed style UI_Style after applying all styling
+        self._computed_styles_before = {}
+        self._computed_styles_after = {}
         self._is_visible       = None   # indicates if self is visible, set in compute_style(), based on self._computed_styles
         self._is_scrollable_x  = False  # indicates is self is scrollable along x, set in compute_style(), based on self._computed_styles
         self._is_scrollable_y  = False  # indicates is self is scrollable along y, set in compute_style(), based on self._computed_styles
@@ -1513,8 +1515,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         rebuilds self._selector and computes the stylesheet, propagating computation to children
         '''
 
-        if self._defer_clean:
-            return
+        if self._defer_clean: return
         if 'style' not in self._dirty_properties:
             for e in self._dirty_callbacks.get('style', []): e._compute_style()
             self._dirty_callbacks['style'] = set()

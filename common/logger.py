@@ -27,7 +27,7 @@ from .globals import Globals
 
 class Logger:
     _log_filename = 'Logger'
-    _divider = '=' * 80
+    _divider = '\n\n%s\n' % ('='*80)
 
     @staticmethod
     def set_log_filename(path):
@@ -40,11 +40,16 @@ class Logger:
     @staticmethod
     def get_log(create=True):
         if Logger._log_filename not in bpy.data.texts:
-            if not create:
-                return None
+            if not create: return None
+            old = { t.name for t in bpy.data.texts }
             # create a log file for recording
             bpy.ops.text.new()
-            bpy.data.texts[-1].name = Logger._log_filename
+            for t in bpy.data.texts:
+                if t.name in old: continue
+                t.name = Logger._log_filename
+                break
+            else:
+                assert False
         return bpy.data.texts[Logger._log_filename]
 
     @staticmethod
@@ -54,7 +59,7 @@ class Logger:
     @staticmethod
     def add(line):
         log = Logger.get_log()
-        log.write('\n\n%s\n%s' % (Logger._divider, str(line)))
+        log.write('%s%s' % (Logger._divider, str(line)))
 
     @staticmethod
     def open_log():
