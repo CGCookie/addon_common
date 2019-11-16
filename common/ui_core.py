@@ -58,6 +58,9 @@ TODO:
 '''
 
 
+DEBUG_COLOR_CLEAN = False
+
+
 def get_font_path(fn, ext=None):
     if ext: fn = '%s.%s' % (fn,ext)
     paths = [
@@ -1405,6 +1408,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._child_before     = None   # ::before child
         self._child_after      = None   # ::after child
         self._children_all     = []     # all children in order
+        self._children_all_sorted = []  # all children sorted by z-index
         self._innerTextWrapped = None   # <--- no longer needed?
         self._selector         = None   # full selector of self, built in compute_style()
         self._selector_before  = None   # full selector of ::before pseudoelement for self
@@ -1805,6 +1809,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if self._child_after:   self._children_all.append(self._child_after)
 
         for child in self._children_all: child._compute_content()
+
+        # sort children by z-index
+        self._children_all_sorted = sorted(self._children_all, key=lambda e:e.z_index)
 
         # content changes might have changed size
         if self._new_content:
@@ -2309,8 +2316,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _draw(self, depth=0):
         if not self.is_visible: return
 
-        if False:
-            t = max(0, 1 - (time.time() - self._clean_debugging.get('layout', 0)) / 1)
+        if DEBUG_COLOR_CLEAN:
+            # style, content, size, layout, blocks
+            t_max = 2
+            t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
             background_override = Color((t, t/2, 0, 0.5))
         else:
             background_override = None
@@ -2405,12 +2414,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         with profiler.code('drawing innerText'):
                             size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
                             Globals.drawing.set_font_color(self._fontid, self._fontcolor)
-                            l = sorted(self._children_all, key=lambda e:e.z_index)
-                            for child in l: child._draw(depth + 1)
+                            for child in self._children_all_sorted: child._draw(depth + 1)
                             Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
                     else:
-                        l = sorted(self._children_all, key=lambda e:e.z_index)
-                        for child in l: child._draw(depth+1)
+                        for child in self._children_all_sorted: child._draw(depth+1)
 
         ScissorStack.pop()
     def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
@@ -2615,6 +2622,8 @@ class UI_Document(UI_Document_FSM):
     def update(self, context, event):
         if context.area != self._area: return
 
+        if DEBUG_COLOR_CLEAN: tag_redraw_all()
+
         self.actions.update(context, event, self._timer, print_actions=False)
 
         self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
@@ -2713,7 +2722,6 @@ class UI_Document(UI_Document_FSM):
 
         if self.actions.pressed({'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}, unpress=False):
             move = Globals.drawing.scale(24) * (-1 if self.actions.pressed('WHEELUPMOUSE') else 1)
-            print(move)
             self.actions.unpress()
             if self._get_scrollable():
                 self._scroll_element.scrollTop = self._scroll_last.y + move
