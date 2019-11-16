@@ -49,17 +49,16 @@ class FontManager:
     def load(val, load_callback=None):
         if val is None:
             fontid = FontManager._last_fontid
-        elif type(val) is int:
-            fontid = val
-        elif val in FontManager._cache:
-            fontid = FontManager._cache[val]
         else:
-            # note: loading the same file multiple times is not a problem.
-            #       blender is smart enough to cache
-            fontid = blf.load(val)
-            print('Loaded font "%s" as id %d' % (val, fontid))
-            FontManager._cache[val] = fontid
-            if load_callback: load_callback(fontid)
+            if val not in FontManager._cache:
+                # note: loading the same file multiple times is not a problem.
+                #       blender is smart enough to cache
+                fontid = blf.load(val)
+                print('Loaded font "%s" as id %d' % (val, fontid))
+                FontManager._cache[val] = fontid
+                FontManager._cache[fontid] = fontid
+                if load_callback: load_callback(fontid)
+            fontid = FontManager._cache[val]
         FontManager._last_fontid = fontid
         return fontid
 

@@ -611,10 +611,13 @@ class UI_Element_Properties:
         return self
 
     def _delete_child(self, child):
-        assert child
-        if type(child) is UI_Proxy:
-            child = child._default_element
-        assert child in self._children, 'attempting to delete child that does not exist?'
+        assert child, 'attempting to delete None child?'
+        if child not in self._children:
+            # child is not in children, could be wrapped in proxy
+            pchildren = [pchild for pchild in self._children if type(pchild) is UI_Proxy and child in pchild._all_elements]
+            assert len(pchildren) != 0, 'attempting to delete child that does not exist?'
+            assert len(pchildren) == 1, 'attempting to delete child that is wrapped twice?'
+            child = pchildren[0]
         self._children.remove(child)
         child._parent = None
         child._dirty('deleting child from parent')
@@ -1925,8 +1928,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 if ts == 'none': tsx,tsy = 0,0
                 else: tsx,tsy,tsc = ts
                 self._static_content_size = Size2D()
-                self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs) + 1) # + 1 + max(0,tsx))
-                self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs)) # + 1 + max(0,tsy))
+                self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs))
+                self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs))
                 self._static_content_space = Globals.drawing.get_text_width(' ')
                 # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
                 Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
@@ -2316,34 +2319,36 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _draw(self, depth=0):
         if not self.is_visible: return
 
-        if DEBUG_COLOR_CLEAN:
-            # style, content, size, layout, blocks
-            t_max = 2
-            t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
-            background_override = Color((t, t/2, 0, 0.5))
-        else:
-            background_override = None
+        with profiler.code('initialization'):
+            if DEBUG_COLOR_CLEAN:
+                # style, content, size, layout, blocks
+                t_max = 2
+                t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
+                background_override = Color((t, t/2, 0, 0.5))
+            else:
+                background_override = None
 
-        self._setup_ltwh()
+            self._setup_ltwh()
 
-        if False and self._innerTextAsIs and self._parent._textshadow != 'none':
-            tsx,tsy,tsc = self._parent._textshadow
-            ol = min(tsx, 0)
-            ot = max(-tsy, 0)
-            ow = abs(tsx)
-            oh = abs(tsy)
-        else: ol,ot,ow,oh = 0,0,0,0
+            if False and self._innerTextAsIs and self._parent._textshadow != 'none':
+                tsx,tsy,tsc = self._parent._textshadow
+                ol = min(tsx, 0)
+                ot = max(-tsy, 0)
+                ow = abs(tsx)
+                oh = abs(tsy)
+            else: ol,ot,ow,oh = 0,0,0,0
 
-        ScissorStack.push(self._l+ol, self._t+ot, self._w+ow, self._h+oh, str(self))
-        bgl.glEnable(bgl.GL_BLEND)
+            if not ScissorStack.is_box_visible(self._l+ol, self._t+ot, self._w+ow, self._h+oh): return
 
-        dpi_mult = Globals.drawing.get_dpi_mult()
-        sc = self._style_cache
-        margin_top,  margin_right,  margin_bottom,  margin_left  = sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']
-        padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
-        border_width = sc['border-width']
+            bgl.glEnable(bgl.GL_BLEND)
 
-        if ScissorStack.is_box_visible(self._l+ol, self._t+ot, self._w+ow, self._h+oh):
+            dpi_mult = Globals.drawing.get_dpi_mult()
+            sc = self._style_cache
+            margin_top,  margin_right,  margin_bottom,  margin_left  = sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']
+            padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
+            border_width = sc['border-width']
+
+        with ScissorStack.wrap(self._l+ol, self._t+ot, self._w+ow, self._h+oh, msg=str(self)):
             if self._innerTextAsIs is not None:
                 with profiler.code('drawing text'):
                     if False:
@@ -2359,7 +2364,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         st['padding-bottom'] = -1
                         ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, st)
                     # need to set font size each time, but not certain why...
-                    Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
+                    # Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
                     ts = self._parent._textshadow
                     if ts != 'none':
                         tsx,tsy,tsc = ts
@@ -2384,7 +2389,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, self._image_data['texid'], background_override=background_override)
                 #print(self._src_str, (self._l, self._t, self._w, self._h), self._dynamic_full_size, self._dynamic_content_size)
                 #ScissorStack.print_view_stack()
-
 
             else:
                 with profiler.code('drawing mbp'):
@@ -2419,7 +2423,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     else:
                         for child in self._children_all_sorted: child._draw(depth+1)
 
-        ScissorStack.pop()
     def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
 
     @profiler.function
