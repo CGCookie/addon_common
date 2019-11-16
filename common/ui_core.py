@@ -605,6 +605,7 @@ class UI_Element_Properties:
             self.append_child(children)
         else:
             assert False, 'UI_Element.builder: unhandled type %s' % t
+        return self
 
     def _delete_child(self, child):
         assert child
@@ -1657,7 +1658,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     'margin-top','margin-right','margin-bottom','margin-left',
                     'padding-top','padding-right','padding-bottom','padding-left',
                     'border-width',
-                    'width', 'height'
+                    'width', 'height',  #'min-width','min-height','max-width','max-height',
                 ]},
             )
             if style_size_hash != getattr(self, '_style_size_hash', None):
@@ -2710,6 +2711,14 @@ class UI_Document(UI_Document_FSM):
             self._debug_print(self._under_mouse)
             print('focus:', self._focus)
 
+        if self.actions.pressed({'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}, unpress=False):
+            move = Globals.drawing.scale(24) * (-1 if self.actions.pressed('WHEELUPMOUSE') else 1)
+            print(move)
+            self.actions.unpress()
+            if self._get_scrollable():
+                self._scroll_element.scrollTop = self._scroll_last.y + move
+                self._scroll_element._setup_ltwh()
+
         self.handle_hover()
         self.handle_mousemove()
 
@@ -2722,20 +2731,22 @@ class UI_Document(UI_Document_FSM):
             if under_mouse:      print('UNDER', under_mouse, under_mouse.pseudoclasses)
             else: print('UNDER', None)
 
+    def _get_scrollable(self):
+        # find first along root to path that can scroll
+        if not self._under_mouse: return None
+        self._scrollable = [e for e in self._under_mouse.get_pathToRoot() if e.is_scrollable]
+        if not self._scrollable: return None
+        self._scroll_element = self._scrollable[0]
+        self._scroll_last = RelPoint2D((self._scroll_element.scrollLeft, self._scroll_element.scrollTop))
+        return self._scroll_element
 
     @UI_Document_FSM.FSM_State('scroll', 'can enter')
     def modal_scroll_canenter(self):
-        # find first along root to path that can scroll
-        if not self._under_mouse: return False
-        self._scrollable = [e for e in self._under_mouse.get_pathToRoot() if e.is_scrollable]
-        if not self._scrollable: return False
+        if not self._get_scrollable(): return False
 
     @UI_Document_FSM.FSM_State('scroll', 'enter')
     def modal_scroll_enter(self):
-        e = self._scrollable[0]
-        self._scroll_element = e
         self._scroll_point = self._mouse
-        self._scroll_last = RelPoint2D((e.scrollLeft, e.scrollTop))
         self.ignore_hover_change = True
         Globals.cursors.set('SCROLL_Y')
 
@@ -2885,10 +2896,12 @@ class UI_Document(UI_Document_FSM):
             if self._last_pressed != pressed:
                 self._last_press_start = cur
                 self._last_press_time = 0
-                self._focus._dispatch_event('on_keypress', key=pressed)
+                if self._focus:
+                    self._focus._dispatch_event('on_keypress', key=pressed)
             elif cur >= self._last_press_start + UI_Document.key_repeat_delay and cur >= self._last_press_time + UI_Document.key_repeat_pause:
                 self._last_press_time = cur
-                self._focus._dispatch_event('on_keypress', key=pressed)
+                if self._focus:
+                    self._focus._dispatch_event('on_keypress', key=pressed)
         self._last_pressed = pressed
 
         if not self._focus: return 'main'
