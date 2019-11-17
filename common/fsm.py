@@ -26,6 +26,26 @@ class FSM:
     def __init__(self):
         self.wrapper = self._create_wrapper()
         self.onlyinstate_wrapper = self._create_onlyinstate_wrapper()
+        self.exception_wrapper = self._create_exception_wrapper()
+
+    def _create_exception_wrapper(self):
+        self._exception_callbacks = []
+        def wrapper(fn):
+            self._exception_callbacks += [fn]
+        return wrapper
+
+    def add_exception_callback(self, fn):
+        self._exception_callbacks += [fn]
+
+    def _callback_exception_callbacks(self, e):
+        for fn in self._exception_callbacks:
+            try:
+                fn(e)
+            except Exception as e2:
+                print('Caught exception while callback exception callbacks: %s' % fn.__name__)
+                print('original: %s' % str(e))
+                print('additional: %s' % str(e2))
+                debugger.print_exception()
 
     def _create_wrapper(self):
         fsm = self
@@ -53,6 +73,7 @@ class FSM:
                         ))
                         debugger.print_exception()
                         print(e)
+                        fsm._callback_exception_callbacks(e)
                         return
                 run.fnname = self.fnname
                 run.fsmstate = self.state
@@ -83,6 +104,7 @@ class FSM:
                         ))
                         debugger.print_exception()
                         print(e)
+                        fsm._callback_exception_callbacks(e)
                         return self.default
                 run.fnname = self.fnname
                 run.fsmstate = ' '.join(self.states)
@@ -110,6 +132,7 @@ class FSM:
         except Exception as e:
             print('Caught exception in state ("%s")' % (s))
             debugger.print_exception()
+            self._callback_exception_callbacks(e)
             return
 
     def update(self):

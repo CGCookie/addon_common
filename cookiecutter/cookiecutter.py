@@ -81,7 +81,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self.context = context
         self.event = None
 
-        with self.catch_exception('initializing FSM, UI, Actions'):
+        with self.catch_exception('initializing Exception Callbacks, FSM, UI, Actions'):
+            self._cc_exception_init()
             self._cc_fsm_init()
             self._cc_ui_init()
             self._cc_actions_init()
