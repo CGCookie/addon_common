@@ -1057,9 +1057,12 @@ class ScissorStack:
         ScissorStack.is_started = True
 
     @staticmethod
-    def end():
-        assert ScissorStack.is_started, 'Attempting to end a non-started ScissorStack'
-        assert len(ScissorStack.stack) == 1, 'Attempting to end a non-empty ScissorStack (size: %d)' % (len(ScissorStack.stack)-1)
+    def end(force=False):
+        if not force:
+            assert ScissorStack.is_started, 'Attempting to end a non-started ScissorStack'
+            assert len(ScissorStack.stack) == 1, 'Attempting to end a non-empty ScissorStack (size: %d)' % (len(ScissorStack.stack)-1)
+        else:
+            ScissorStack.stack = ScissorStack.stack[:1]
         if not ScissorStack.scissor_test_was_enabled: bgl.glDisable(bgl.GL_SCISSOR_TEST)
         ScissorStack.is_started = False
 

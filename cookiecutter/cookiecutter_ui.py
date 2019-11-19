@@ -28,7 +28,7 @@ from ..common.globals import Globals
 from ..common.blender import bversion, tag_redraw_all
 from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger
-from ..common.drawing import Drawing, DrawCallbacks
+from ..common.drawing import Drawing, DrawCallbacks, ScissorStack
 from ..common.ui_core import UI_Document
 
 
@@ -85,18 +85,27 @@ class CookieCutter_UI:
 
     def _cc_ui_start(self):
         def preview():
-            with self.catch_exception('draw pre3d'):
-                self.drawcallbacks.pre3d()
+            try: self.drawcallbacks.pre3d()
+            except Exception as e:
+                self._handle_exception(e, 'draw pre3d')
+                ScissorStack.end(force=True)
         def postview():
-            with self.catch_exception('draw post3d'):
-                self.drawcallbacks.post3d()
+            try: self.drawcallbacks.post3d()
+            except Exception as e:
+                self._handle_exception(e, 'draw post3d')
+                ScissorStack.end(force=True)
         def postpixel():
             bgl.glEnable(bgl.GL_MULTISAMPLE)
             bgl.glEnable(bgl.GL_BLEND)
-            with self.catch_exception('draw post2d()'):
-                self.drawcallbacks.post2d()
-            with self.catch_exception('draw window UI'):
-                self.document.draw(self.context)
+            try: self.drawcallbacks.post2d()
+            except Exception as e:
+                self._handle_exception(e, 'draw post2d')
+                ScissorStack.end(force=True)
+            try: self.document.draw(self.context)
+            except Exception as e:
+                self._handle_exception(e, 'draw window UI')
+                ScissorStack.end(force=True)
+                self._done = True               # consider this a fatal failure
 
         self._handle_preview   = self._space.draw_handler_add(preview,   tuple(), 'WINDOW', 'PRE_VIEW')
         self._handle_postview  = self._space.draw_handler_add(postview,  tuple(), 'WINDOW', 'POST_VIEW')

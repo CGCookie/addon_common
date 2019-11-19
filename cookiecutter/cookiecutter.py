@@ -71,8 +71,9 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
     @classmethod
     def poll(cls, context):
-        with cls.catch_exception('call can_start()'):
-            return cls.can_start(context)
+        try: return cls.can_start(context)
+        except Exception as e: cls._handle_exception(e, 'call can_start()')
+        return False
 
     def invoke(self, context, event):
         self._nav = False
@@ -81,17 +82,17 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self.context = context
         self.event = None
 
-        with self.catch_exception('initializing Exception Callbacks, FSM, UI, Actions'):
+        try:
             self._cc_exception_init()
             self._cc_fsm_init()
             self._cc_ui_init()
             self._cc_actions_init()
-
-        with self.catch_exception('call start()'):
-            self.start()
-
-        with self.catch_exception('starting UI'):
-            self._cc_ui_start()
+        except Exception as e:
+            self._handle_exception(e, 'initializing Exception Callbacks, FSM, UI, Actions')
+        try: self.start()
+        except Exception as e: self._handle_exception(e, 'call start()')
+        try: self._cc_ui_start()
+        except Exception as e: self._handle_exception(e, 'starting UI')
 
         self.context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
@@ -109,13 +110,14 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         if self._done:
             self._cc_actions_end()
             self._cc_ui_end()
-            with self.catch_exception('call end() with %s' % self._done):
+            try:
                 if self._done == 'commit':
                     self.end_commit()
                 else:
                     self.end_cancel()
                 self.end()
-
+            except Exception as e:
+                self._handle_exception(e, 'call end() with %s' % self._done)
             return {'FINISHED'} if self._done=='finish' else {'CANCELLED'}
 
         ret = None
@@ -139,8 +141,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
                 self._nav = False
                 self._nav_time = time.time()
 
-        with self.catch_exception('call update()'):
-            self.update()
+        try: self.update()
+        except Exception as e: self._handle_exception(e, 'call update')
 
         if ret: return ret
 
