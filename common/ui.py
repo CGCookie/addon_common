@@ -300,32 +300,32 @@ def collapsible(label, **kwargs):
     return ui_proxy
 
 
-def markdown(mdown, **kwargs):
+def set_markdown(ui_mdown, mdown):
+    ui_mdown.defer_dirty_propagation = True
+    ui_mdown.clear_children()
+
     # process message similarly to Markdown
     mdown = re.sub(r'^\n*', r'', mdown)                 # remove leading \n
     mdown = re.sub(r'\n*$', r'', mdown)                 # remove trailing \n
     mdown = re.sub(r'\n\n\n*', r'\n\n', mdown)          # 2+ \n => \n\n
     paras = mdown.split('\n\n')                         # split into paragraphs
 
-    ui_container = UI_Element(tagName='div', classes='mdown', **kwargs)
-    ui_container.defer_dirty_propagation = True
-
     for p in paras:
         if p.startswith('# '):
             # h1 heading!
             h1text = re.sub(r'# +', r'', p)
-            UI_Element(tagName='h1', innerText=h1text, parent=ui_container)
+            UI_Element(tagName='h1', innerText=h1text, parent=ui_mdown)
         elif p.startswith('## '):
             # h2 heading!
             h2text = re.sub(r'## +', r'', p)
-            UI_Element(tagName='h2', innerText=h2text, parent=ui_container)
+            UI_Element(tagName='h2', innerText=h2text, parent=ui_mdown)
         elif p.startswith('### '):
             # h3 heading!
             h3text = re.sub(r'### +', r'', p)
-            UI_Element(tagName='h3', innerText=h3text, parent=ui_container)
+            UI_Element(tagName='h3', innerText=h3text, parent=ui_mdown)
         elif p.startswith('- '):
             # unordered list!
-            ui_ul = UI_Element(tagName='ul', parent=ui_container)
+            ui_ul = UI_Element(tagName='ul', parent=ui_mdown)
             p = p[2:]
             for litext in re.split(r'\n- ', p):
                 # litext = re.sub(r'- ', r'', litext)
@@ -336,7 +336,7 @@ def markdown(mdown, **kwargs):
             # image!
             m = re.match(r'^!\[(?P<caption>.*)\]\((?P<filename>.*)\)$', p)
             fn = m.group('filename')
-            UI_Element(tagName='img', src=fn, parent=ui_container)
+            UI_Element(tagName='img', src=fn, parent=ui_mdown)
         elif p.startswith('| '):
             # table
             data = [l for l in p.split('\n')]
@@ -355,10 +355,15 @@ def markdown(mdown, **kwargs):
                         # t.set(r, c, UI_WrappedLabel(data[r][c], min_size=(0, 12), max_size=(400, 12000)))
         else:
             p = re.sub(r'\n', ' ', p)      # join sentences of paragraph
-            UI_Element(tagName='p', innerText=p, parent=ui_container)
+            UI_Element(tagName='p', innerText=p, parent=ui_mdown)
 
-    ui_container.defer_dirty_propagation = False
+    ui_mdown.defer_dirty_propagation = False
+
+def markdown(mdown, **kwargs):
+    ui_container = UI_Element(tagName='div', classes='mdown', **kwargs)
+    set_markdown(ui_container, mdown)
     return ui_container
+
 
 
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, closeable=True, moveable=True, hide_on_close=False, **kwargs):

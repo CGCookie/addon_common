@@ -591,6 +591,7 @@ class UI_Element_Properties:
         self._children.append(child)
         child._parent = self
         child._dirty('appending child to parent', parent=True, children=True)
+        self._dirty('copying dirtiness from child', properties=child._dirty_properties, parent=True, children=False)
         self._dirty('appending new child changes content', 'content')
         self._new_content = True
         return child
@@ -1187,7 +1188,7 @@ class UI_Element_Dirtiness:
         if properties is None: properties = set(UI_Element_Utils._cleaning_graph_nodes)
         elif type(properties) is str:  properties = {properties}
         elif type(properties) is list: properties = set(properties)
-        if not (properties - self._dirty_properties): return
+        if not (properties - self._dirty_properties): return    # no new dirtiness
         self._dirty_properties |= properties
         self._dirty_causes.append(cause)
         if parent:   self._dirty_propagation['parent']   |= properties
