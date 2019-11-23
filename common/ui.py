@@ -40,6 +40,7 @@ from .ui_utilities import (
     UIRender_Block, UIRender_Inline,
     helper_argtranslate, helper_argsplitter,
 )
+from .utils import kwargopts
 from .ui_styling import UI_Styling
 
 from .boundvar import BoundVar
@@ -90,6 +91,13 @@ def button(**kwargs):
 
 def p(**kwargs):
     return UI_Element(tagName='p', **kwargs)
+
+def a(**kwargs):
+    link = helper_argsplitter({'href'}, kwargs).href
+    e = UI_Element(tagName='a', **kwargs)
+    def mouseclick(e): bpy.ops.wm.url_open(url=link)
+    e.add_eventListener('on_mouseclick', mouseclick)
+    return e
 
 def div(**kwargs):
     return UI_Element(tagName='div', **kwargs)
@@ -298,6 +306,196 @@ def collapsible(label, **kwargs):
     ui_proxy.translate_map('collapsed', 'checked', ui_label)
     ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
     return ui_proxy
+
+
+
+class Markdown:
+    # https://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url
+    re_url    = re.compile(r'^((https?)|mailto)://([-a-zA-Z0-9@:%._\+~#=]+\.)*?[-a-zA-Z0-9@:%._+~#=]+\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*)$')
+
+    # markdown inline
+    re_link   = re.compile(r'\[(?P<title>.+?)\]\((?P<link>.+?)\)')
+    re_pre    = re.compile(r'`(?P<pre>.+?)`')
+    re_italic = re.compile(r'_(?P<text>.+?)_')
+    re_bold   = re.compile(r'\*(?P<text>.+?)\*')
+
+    # markdown line (just first)
+    re_h1     = re.compile(r'^# +(?P<text>[^\n]+)$')
+    re_h2     = re.compile(r'^## +(?P<text>[^\n]+)$')
+    re_ul     = re.compile(r'^(?P<indent> *)- +(?P<text>[^\n]+)$')
+    re_table  = re.compile(r'^\| +(([^|\n]+?) +\|)+$')
+
+    @staticmethod
+    def preprocess(txt):
+        # process message similarly to Markdown
+        txt = re.sub(r'^\n*', r'', txt)         # remove leading \n
+        txt = re.sub(r'\n*$', r'', txt)         # remove trailing \n
+        txt = re.sub(r'\n\n\n*', r'\n\n', txt)  # 2+ \n => \n\n
+        txt = re.sub(r'---', r'—', txt)         # em dash
+        txt = re.sub(r'--', r'–', txt)          # en dash
+        return txt
+
+    @staticmethod
+    def url(txt): return Markdown.re_url.match(txt)
+
+    @staticmethod
+    def link(txt): return Markdown.re_link.match(txt)
+
+    @staticmethod
+    def pre(txt): return Markdown.re_pre.match(txt)
+
+    @staticmethod
+    def italic(txt): return Markdown.re_italic.match(txt)
+
+    @staticmethod
+    def bold(txt): return Markdown.re_bold.match(txt)
+
+    @staticmethod
+    def process_line(line):
+        tests = {
+            'h1': Markdown.re_h1,
+            'h2': Markdown.re_h2,
+            'ul': Markdown.re_ul,
+            'table': Markdown.re_table,
+        }
+        for test in tests:
+            m = tests[test].match(line)
+            if m: return (test, m)
+        return None
+
+    @staticmethod
+    def h1(txt): return Markdown.re_h1.match(txt)
+
+    @staticmethod
+    def h2(txt): return Markdown.re_h2.match(txt)
+
+    @staticmethod
+    def ul(txt): return Markdown.re_ul.match(txt)
+
+    @staticmethod
+    def table(txt): return Markdown.re_table.match(txt)
+
+
+def set_markdown_new(ui_mdown, mdown): #self, mdown, fn_link_callback=None):
+    mdown = Markdown.preprocess(mdown)
+
+    if getattr(ui_mdown, '__mdown', None) == mdown: return
+    ui_mdown.__mdown = mdown
+
+    paras = mdown.split('\n\n')                         # split into paragraphs
+
+    def is_link_url(link):
+        return re.match(r'^http[s]?://.*', link) is not None
+    def link_click(link):
+        if Markdown.url(link): bpy.ops.wm.url_open(url=link)
+        elif fn_link_callback: fn_link_callback(link)
+        else: print('UI Markdown: link "%s" was clicked, but no handler is available' % link)
+    def process_para(para, **kwargs):
+        opts = kwargopts(kwargs,
+            p_tag=True,
+            classes=None,
+        )
+        # break each ui_item onto it's own line
+        para = re.sub(r'\n', '  ', para)    # join sentences of paragraph
+        para = re.sub(r'   *', '  ', para)  # 2+ spaces => 2 spaces
+
+        # create container for parts to go into
+        container = p() if opts.p_tag else span()
+        container.classes = opts.classes
+
+        # TODO: revisit this, and create an actual parser
+        for p in para.split('<br>'):
+            p = p.strip()
+            wc = container.add(UI_WrappedContainer(separation_x=space, separation_y=0, scale_separation=False))
+            while p:
+                m_link = Markdown.link(p)
+                if m_link:
+                    link = m_link.group('link')
+                    if is_link_url(link):
+                        tooltip = 'Click to open URL in default web browser'
+                    else:
+                        tooltip = None
+                        if not fn_link_callback: print('WARNING: link "%s" with no callback' % link)
+                    wc.add(UI_Button(' %s '%m_link.group('title'), lambda:link_click(link), tooltip=tooltip, margin=0, padding=0, bgcolor=(0.5,0.5,0.5,0.4), fontid=opts.fontid, fontsize=opts.fontsize))
+                    p = p[m_link.end():].strip()
+                    continue
+                m_pre = Markdown.pre(p)
+                if m_pre:
+                    w,p = m_pre.group('pre'),p[m_pre.end():].strip()
+                    lbl = UI_Label(' %s '%w, fontid=self._pre_fontid, fontsize=opts.fontsize, color=(0.7,0.7,0.75,1), margin=0, padding=0)
+                    wr = UI_Background(background=(0.5,0.5,0.5,0.1), border=(0,0,0,0.1), ui_item=lbl)
+                    wc.add(wr)
+                    continue
+                m_italic = Markdown.italic(p)
+                if m_italic:
+                    w,p = m_italic.group('text'),p[m_italic.end():].strip()
+                    lbl = UI_Label(w, fontid=self._i_fontid, fontsize=opts.fontsize, shadowcolor=opts.shadowcolor, margin=0, padding=0)
+                    wc.add(lbl)
+                    continue
+                m_bold = Markdown.bold(p)
+                if m_bold:
+                    w,p = m_bold.group('text'),p[m_bold.end():].strip()
+                    lbl = UI_Label(w, fontid=self._b_fontid, fontsize=opts.fontsize, shadowcolor=opts.shadowcolor, margin=0, padding=0)
+                    wc.add(lbl)
+                    continue
+                w,p = p.split(' ', 1) if ' ' in p else (p,'')
+                wc.add(UI_Label(w, fontid=opts.fontid, fontsize=opts.fontsize, shadowcolor=opts.shadowcolor, margin=0, padding=0))
+                p = p.strip()
+        return container
+
+    container = UI_Container(margin=4, separation=6)
+    for p in paras:
+        if p.startswith('# '):
+            # h1 heading!
+            h1text = re.sub(r'# +', r'', p)
+            container.add(process_para(h1text, fontsize=self.h1_fontsize, fontid=self._fontid, shadowcolor=(0,0,0,0.5), margin_top=4, margin_bottom=10))
+
+        elif p.startswith('## '):
+            # h2 heading!
+            h2text = re.sub(r'## +', r'', p)
+            container.add(process_para(h2text, fontsize=self.h2_fontsize, fontid=self._fontid, shadowcolor=(0,0,0,0.5), margin_top=8, margin_bottom=2))
+
+        elif p.startswith('- '):
+            # unordered list!
+            ul = container.add(UI_Container(margin_top=4, margin_bottom=4))
+            p = p[2:]
+            for litext in p.split('\n- '):
+                li = ul.add(UI_Container(margin=0, vertical=False))
+                # options: -·•
+                li.add(UI_Label('•', fontid=self._fontid, margin_left=8, margin_top=0, margin_bottom=0, margin_right=8))
+                li.add(process_para(litext))
+
+        elif p.startswith('!['):
+            # image!
+            m = re.match(r'^!\[(?P<caption>.*)\]\((?P<filename>.*)\)$', p)
+            fn = m.group('filename')
+            img = container.add(UI_Image(fn))
+
+        elif p.startswith('| '):
+            # table!
+            def split_row(row):
+                row = re.sub(r'^\| ', r'', row)
+                row = re.sub(r' \|$', r'', row)
+                return [col.strip() for col in row.split(' | ')]
+            data = [l for l in p.split('\n')]
+            header = split_row(data[0])
+            add_header = any(header)
+            align = data[1]
+            data = [split_row(row) for row in data[2:]]
+            rows,cols = len(data),len(data[0])
+            t = container.add(UI_TableContainer(rows+(1 if add_header else 0), cols))
+            if add_header:
+                for c in range(cols):
+                    t.set(0, c, process_para(header[c], shadowcolor=(0,0,0,0.5)))
+            for r in range(rows):
+                for c in range(cols):
+                    t.set(r+(1 if add_header else 0), c, process_para(data[r][c]))
+
+        else:
+            container.add(process_para(p))
+
+    self.set_ui_item(container)
+
 
 
 def set_markdown(ui_mdown, mdown):

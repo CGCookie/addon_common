@@ -219,6 +219,43 @@ def git_info(start_at_caller=True):
 
 
 
+def kwargopts(kwargs, defvals=None, **mykwargs):
+    opts = defvals.copy() if defvals else {}
+    opts.update(mykwargs)
+    opts.update(kwargs)
+    if 'opts' in kwargs: opts.update(opts['opts'])
+    def factory():
+        class Opts():
+            ''' pretend to be a dictionary, but also add . access fns '''
+            def __init__(self):
+                self.touched = set()
+            def __getattr__(self, opt):
+                self.touched.add(opt)
+                return opts[opt]
+            def __getitem__(self, opt):
+                self.touched.add(opt)
+                return opts[opt]
+            def __len__(self): return len(opts)
+            def has_key(self, opt): return opt in opts
+            def keys(self): return opts.keys()
+            def values(self): return opts.values()
+            def items(self): return opts.items()
+            def __contains__(self, opt): return opt in opts
+            def __iter__(self): return iter(opts)
+            def print_untouched(self):
+                print('untouched: %s' % str(set(opts.keys()) - self.touched))
+            def pass_through(self, *args):
+                return {key:self[key] for key in args}
+        return Opts()
+    return factory()
+
+
+
+#################################################
+
+
+
+
 def selection_mouse():
     select_type = get_preferences().inputs.select_mouse
     return ['%sMOUSE' % select_type, 'SHIFT+%sMOUSE' % select_type]
