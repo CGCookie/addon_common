@@ -132,6 +132,15 @@ def br(**kwargs):
 def img(**kwargs):
     return UI_Element(tagName='img', **kwargs)
 
+def table(**kwargs):
+    return UI_Element(tagName='table', **kwargs)
+def tr(**kwargs):
+    return UI_Element(tagName='tr', **kwargs)
+def th(**kwargs):
+    return UI_Element(tagName='th', **kwargs)
+def td(**kwargs):
+    return UI_Element(tagName='td', **kwargs)
+
 def textarea(**kwargs):
     return UI_Element(tagName='textarea', **kwargs)
 
@@ -338,13 +347,13 @@ class Markdown:
         'h3':    re.compile(r'### +(?P<text>.+)'),
         'ul':    re.compile(r'(?P<indent> *)- +(?P<text>.+)'),
         'img':   re.compile(r'!\[(?P<caption>[^\]]*)\]\((?P<filename>[^\]]+)\)'),
-        'table': re.compile(r'\| +(([^|]+?) +\|)+'),
+        'table': re.compile(r'\| +(([^|]*?) +\|)+'),
     }
 
     # markdown inline
     inline_tests = {
-        'br':     re.compile(r'<br */?>'),
-        'pre':    re.compile(r'`(?P<text>.+?)`'),
+        'br':     re.compile(r'<br */?> *'),
+        'pre':    re.compile(r'`(?P<text>[^`]+)`'),
         'link':   re.compile(r'\[(?P<text>.+?)\]\((?P<link>.+?)\)'),
         'bold':   re.compile(r'\*(?P<text>.+?)\*'),
         'italic': re.compile(r'_(?P<text>.+?)_'),
@@ -368,7 +377,7 @@ class Markdown:
 
     @staticmethod
     def match_inline(line):
-        line = line.lstrip()    # ignore leading spaces
+        #line = line.lstrip()    # ignore leading spaces
         for (t,r) in Markdown.inline_tests.items():
             m = r.match(line)
             if m: return (t, m)
@@ -386,8 +395,8 @@ class Markdown:
     def split_word(line):
         if ' ' not in line:
             return (line,'')
-        i = line.index(' ')
-        return (line[:i+1],line[i+1:])
+        i = line.index(' ') + 1
+        return (line[:i],line[i:])
 
 
 def get_mdown_path(fn, ext=None, subfolders=None):
@@ -484,24 +493,29 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None):
             elif t == 'img':
                 UI_Element(tagName='img', src=m.group('filename'), title=m.group('caption'), parent=ui_mdown)
             elif t == 'table':
-                #         # table!
-                #         def split_row(row):
-                #             row = re.sub(r'^\| ', r'', row)
-                #             row = re.sub(r' \|$', r'', row)
-                #             return [col.strip() for col in row.split(' | ')]
-                #         data = [l for l in p.split('\n')]
-                #         header = split_row(data[0])
-                #         add_header = any(header)
-                #         align = data[1]
-                #         data = [split_row(row) for row in data[2:]]
-                #         rows,cols = len(data),len(data[0])
-                #         t = container.add(UI_TableContainer(rows+(1 if add_header else 0), cols))
-                #         if add_header:
-                #             for c in range(cols):
-                #                 t.set(0, c, process_para(header[c], shadowcolor=(0,0,0,0.5)))
-                #         for r in range(rows):
-                #             for c in range(cols):
-                #                 t.set(r+(1 if add_header else 0), c, process_para(data[r][c]))
+                # table!
+                def split_row(row):
+                    row = re.sub(r'^\| ', r'', row)
+                    row = re.sub(r' \|$', r'', row)
+                    return [col.strip() for col in row.split(' | ')]
+                data = [l for l in para.split('\n')]
+                header = split_row(data[0])
+                add_header = any(header)
+                align = data[1]
+                data = [split_row(row) for row in data[2:]]
+                rows,cols = len(data),len(data[0])
+                table_element = table(parent=ui_mdown)
+                if add_header:
+                    tr_element = tr(parent=table_element)
+                    for c in range(cols):
+                        th(innerText=header[c], parent=tr_element)
+                        #t.set(0, c, process_para(header[c], shadowcolor=(0,0,0,0.5)))
+                for r in range(rows):
+                    tr_element = tr(parent=table_element)
+                    for c in range(cols):
+                        td_element = td(parent=tr_element)
+                        process_para(td_element, data[r][c])
+                        #t.set(r+(1 if add_header else 0), c, process_para(data[r][c]))
                 pass
             else:
                 assert False, 'Unhandled markdown line type "%s" ("%s") with "%s"' % (str(t), str(m), para)

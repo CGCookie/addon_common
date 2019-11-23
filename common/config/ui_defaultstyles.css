@@ -309,11 +309,52 @@ div.collapsible > div.inside.collapsed {
 
 
 
+/*******************/
+/*    MARKDOWN     */
+
+
 div.mdown {
     margin: 2px;
     border: 1px rgba(0,0,0,0.5);
-    padding: 4px;
+    padding: 4px 4px 16px 4px;
     background: rgba(0,0,0,0.25);
+}
+
+div.mdown div {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+div.mdown span {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+div.mdown table {
+    display: block;
+    background: rgba(0,0,0,0.2);
+    border: 1px rgba(0,0,0,1);
+    margin: 0px 0px 0px 10px;
+    padding: 4px;
+}
+div.mdown tr {
+    display: block;
+    margin: 0px 0px;
+    border: 0px;
+    padding: 0px 2px;
+}
+div.mdown th {
+    display: inline;
+    margin: 0px;
+    border: 0px;
+    padding: 0px;
+}
+div.mdown td {
+    display: inline;
+    margin: 0px;
+    border: 0px;
+    padding: 2px;
 }
 
 div.mdown h1 {
