@@ -1149,6 +1149,12 @@ class UI_Element_Properties:
         self._checked_bound = False
         return p
 
+    @property
+    def href(self):
+        return self._href or ''
+    @href.setter
+    def href(self, v):
+        self._href = v
 
     @property
     def preclean(self):
@@ -1325,6 +1331,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._checked       = None
         self._checked_bound = False
         self._name          = None
+        self._href          = None
 
         self._was_dirty = False
         self._preclean      = None      # fn that's called back right before clean is started

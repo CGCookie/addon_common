@@ -350,6 +350,8 @@ def helper_argsplitter(keys, kwargs):
 
 @lru_cache(maxsize=1024)
 def helper_wraptext(text='', width=None, fontid=0, fontsize=12, preserve_newlines=False, collapse_spaces=True, wrap_text=True):
+    if type(text) is not str:
+        assert False, 'unknown type: %s (%s)' % (str(type(text)), str(text))
     # TODO: get textwidth of space and each word rather than rebuilding the string
     size_prev = Globals.drawing.set_font_size(fontsize, fontid=fontid, force=True)
     tw = Globals.drawing.get_text_width

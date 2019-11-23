@@ -357,6 +357,28 @@ div.mdown img {
 
 div.mdown p {  }
 
+div.mdown i {
+    margin: 0px;
+    padding: 0px;
+    border: 0px;
+    font-style: italic;
+}
+
+div.mdown b {
+    margin: 0px;
+    padding: 0px;
+    border: 0px;
+    font-weight: bold;
+}
+
+div.mdown pre {
+    font-family: monospace;
+    white-space: pre;
+    margin: 0px;
+    padding: 0px 4px;
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
 div.mdown ul {
     margin: 0px;
     border: 0px;
@@ -380,6 +402,11 @@ div.mdown li > img {
     width: 5px;
     height: 10px;
 }
+div.mdown li span {
+    margin: 0px;
+    padding: 0px;
+    border: 0px;
+}
 div.mdown li > span {
     margin: 0px 0px 0px 8px;
     border: 0px;
@@ -387,6 +414,14 @@ div.mdown li > span {
     display: inline;
 }
 
+div.mdown a {
+    padding: -1px;
+    margin: 0px;
+    border: 1px transparent;
+    border-radius: 0px;
+    border-bottom-color: rgba(255,255,255,0.5);
+    cursor: pointer;
+}
 
 
 
