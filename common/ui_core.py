@@ -112,7 +112,7 @@ def get_image_path(fn, ext=None, subfolders=None):
     # if no subfolders are given, assuming image path is <root>/icons
     # or <root>/images where <root> is the 2 levels above this file
     if subfolders is None:
-        subfolders = ['icons', 'images']
+        subfolders = ['icons', 'images', 'help']
     if ext:
         fn = '%s.%s' % (fn,ext)
     path_here = os.path.dirname(__file__)

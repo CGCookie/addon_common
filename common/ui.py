@@ -40,7 +40,7 @@ from .ui_utilities import (
     UIRender_Block, UIRender_Inline,
     helper_argtranslate, helper_argsplitter,
 )
-from .utils import kwargopts
+from .utils import kwargopts, iter_head
 from .ui_styling import UI_Styling
 
 from .boundvar import BoundVar
@@ -94,12 +94,12 @@ def p(**kwargs):
 
 def a(**kwargs):
     elem = UI_Element(tagName='a', **kwargs)
-    def mouseclick(e):
-        nonlocal elem
-        if not elem.href: return
-        if Markdown.is_url(elem.href):
-            bpy.ops.wm.url_open(url=elem.href)
-    elem.add_eventListener('on_mouseclick', mouseclick)
+    # def mouseclick(e):
+    #     nonlocal elem
+    #     if not elem.href: return
+    #     if Markdown.is_url(elem.href):
+    #         bpy.ops.wm.url_open(url=elem.href)
+    # elem.add_eventListener('on_mouseclick', mouseclick)
     return elem
 
 def b(**kwargs):
@@ -390,11 +390,24 @@ class Markdown:
         return (line[:i+1],line[i+1:])
 
 
-def set_markdown(*args, **kwargs):
-    set_markdown_new(*args, **kwargs)
+def get_mdown_path(fn, ext=None, subfolders=None):
+    # if no subfolders are given, assuming image path is <root>/icons
+    # or <root>/images where <root> is the 2 levels above this file
+    if subfolders is None:
+        subfolders = ['help']
+    if ext:
+        fn = '%s.%s' % (fn,ext)
+    path_here = os.path.dirname(__file__)
+    path_root = os.path.join(path_here, '..', '..')
+    paths = [os.path.join(path_root, p, fn) for p in subfolders]
+    paths += [os.path.join(path_here, 'images', fn)]
+    paths = [p for p in paths if os.path.exists(p)]
+    return iter_head(paths, None)
 
-def set_markdown_new(ui_mdown, mdown): #self, mdown, fn_link_callback=None):
-    mdown = Markdown.preprocess(mdown)                      # preprocess mdown
+
+def set_markdown(ui_mdown, mdown=None, mdown_path=None):
+    if mdown_path: mdown = open(get_mdown_path(mdown_path), 'rt').read()
+    mdown = Markdown.preprocess(mdown or '')                # preprocess mdown
     if getattr(ui_mdown, '__mdown', None) == mdown: return  # ignore updating if it's exactly the same as previous
     ui_mdown.__mdown = mdown                                # record the mdown to prevent reprocessing same
 
@@ -408,8 +421,8 @@ def set_markdown_new(ui_mdown, mdown): #self, mdown, fn_link_callback=None):
         opts = kwargopts(kwargs, classes='')
 
         # break each ui_item onto it's own line
-        para = re.sub(r'\n', '  ', para)    # join sentences of paragraph
-        para = re.sub(r'   *', '  ', para)  # 2+ spaces => 2 spaces
+        para = re.sub(r'\n', ' ', para)     # join sentences of paragraph
+        para = re.sub(r'  *', ' ', para)    # 1+ spaces => 1 space
 
         # TODO: revisit this, and create an actual parser
         para = para.lstrip()
@@ -427,7 +440,10 @@ def set_markdown_new(ui_mdown, mdown): #self, mdown, fn_link_callback=None):
                     text,link = m.group('text'),m.group('link')
                     title = 'Click to open URL in default web browser' if Markdown.is_url(link) else 'Click to open help'
                     def mouseclick():
-                        print('UI a tag: open "%s"' % link)
+                        if Markdown.is_url(link):
+                            bpy.ops.wm.url_open(url=link)
+                        else:
+                            set_markdown(ui_mdown, mdown_path=link)
                     process_words(text, lambda word: a(innerText=word, href=link, title=title, on_mouseclick=mouseclick, parent=container))
                 elif t == 'bold':
                     process_words(m.group('text'), lambda word: b(innerText=word, parent=container))
@@ -552,9 +568,9 @@ def set_markdown_old(ui_mdown, mdown):
 
     ui_mdown.defer_dirty_propagation = False
 
-def markdown(mdown, **kwargs):
+def markdown(mdown=None, mdown_path=None, **kwargs):
     ui_container = UI_Element(tagName='div', classes='mdown', **kwargs)
-    set_markdown(ui_container, mdown)
+    set_markdown(ui_container, mdown=mdown, mdown_path=mdown_path)
     return ui_container
 
 
