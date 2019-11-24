@@ -171,7 +171,13 @@ def delay_exec(action, f_globals=None, f_locals=None):
         # args are ignored!?
         d = dict(f_locals)
         d.update(kwargs)
-        return exec(action, f_globals, f_locals)
+        try:
+            return exec(action, f_globals, f_locals)
+        except Exception as e:
+            print('Caught exception while trying to run a delay_exec')
+            print('  action:', action)
+            print('  except:', e)
+            raise e
     return run_it
 
 #########################################################

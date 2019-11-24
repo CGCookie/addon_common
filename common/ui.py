@@ -126,6 +126,9 @@ def h3(**kwargs):
 def pre(**kwargs):
     return UI_Element(tagName='pre', **kwargs)
 
+def code(**kwargs):
+    return UI_Element(tagName='code', **kwargs)
+
 def br(**kwargs):
     return UI_Element(tagName='br', **kwargs)
 
@@ -320,7 +323,8 @@ def collapsible(label, **kwargs):
     kw_input = helper_argsplitter({'checked'}, kwargs)
     kw_inside = helper_argsplitter({'children'}, kwargs)
 
-    ui_container = UI_Element(tagName='div', classes='collapsible', **kwargs)
+    kwargs['classes'] = 'collapsible %s' % kwargs.get('classes', '')
+    ui_container = UI_Element(tagName='div', **kwargs)
     ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id',str(random.random()))), classes='header', parent=ui_container, **kw_input)
     # ui_label = UI_Element(tagName='input', classes='header', innerText=label, type="checkbox", parent=ui_container, **kw_input)
     ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside)
@@ -353,9 +357,9 @@ class Markdown:
     # markdown inline
     inline_tests = {
         'br':     re.compile(r'<br */?> *'),
-        'pre':    re.compile(r'`(?P<text>[^`]+)`'),
-        'link':   re.compile(r'\[(?P<text>.+?)\]\((?P<link>.+?)\)'),
         'bold':   re.compile(r'\*(?P<text>.+?)\*'),
+        'code':   re.compile(r'`(?P<text>[^`]+)`'),
+        'link':   re.compile(r'\[(?P<text>.+?)\]\((?P<link>.+?)\)'),
         'italic': re.compile(r'_(?P<text>.+?)_'),
     }
 
@@ -443,8 +447,8 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None):
             else:
                 if t == 'br':
                     container.append_child(br())
-                elif t == 'pre':
-                    container.append_child(pre(innerText=m.group('text')))
+                elif t == 'code':
+                    container.append_child(code(innerText=m.group('text')))
                 elif t == 'link':
                     text,link = m.group('text'),m.group('link')
                     title = 'Click to open URL in default web browser' if Markdown.is_url(link) else 'Click to open help'
@@ -695,6 +699,9 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
         ui_dialog.add_eventListener('on_mouseup', mouseup)
         ui_dialog.add_eventListener('on_mousemove', mousemove)
     ui_inside = UI_Element(tagName='div', classes='inside', style='overflow-y:scroll', parent=ui_dialog)
+
+    # ui_footer = UI_Element(tagName='div', classes='dialog-footer', parent=ui_dialog)
+    # ui_footer_label = UI_Element(tagName='span', innerText='footer', parent=ui_footer)
 
     ui_proxy = UI_Proxy(ui_dialog)
     ui_proxy.translate_map('label', 'innerText', ui_label)

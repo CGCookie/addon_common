@@ -37,6 +37,7 @@ from .fsm import FSM
 
 from .useractions import Actions, kmi_to_keycode
 
+from .debug import debugger
 from .boundvar import BoundVar
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
@@ -969,6 +970,7 @@ class UI_Element_Properties:
         else:
             r = self.style_right
             w = self.width_pixels if self.width_pixels != 'auto' else 0
+            # if r != 'auto': print(l,rew,r,w)
             if type(r) is NumberUnit: l = rew - (w + r.val(base=rew))
             elif r != 'auto':         l = rew - (w + r)
         return l
@@ -1051,8 +1053,11 @@ class UI_Element_Properties:
     @property
     def is_visible(self):
         # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
-        if self._is_visible is None: return self._computed_styles.get('display', 'auto') != 'none'
-        return self._is_visible
+        if self._is_visible is None:
+            v = self._computed_styles.get('display', 'auto') != 'none'
+        else:
+            v = self._is_visible
+        return v and (self._parent.is_visible if self._parent else True)
     @is_visible.setter
     def is_visible(self, v):
         self._is_visible = v
@@ -1210,6 +1215,8 @@ class UI_Element_Dirtiness:
         self._styling_default = None
         self._styling_parent = None
         self._styling_custom = None
+        self._style_content_hash = None
+        self._style_size_hash = None
         for child in self._children_all: child.dirty_styling()
         if self._parent is None:
             self._dirty('Dirtying style cache', children=True)
@@ -1531,7 +1538,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self._clean_debugging['style'] = time.time()
 
-        self.defer_dirty_propagation = True
+        # self.defer_dirty_propagation = True
 
         with profiler.code('rebuild full selector'):
             sel_parent = [] if not self._parent else self._parent._selector
@@ -1608,6 +1615,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._style_cache = {}
             sc = self._style_cache
             if self._innerTextAsIs is None:
+                sc['left'] = self._computed_styles.get('left', 'auto')
+                sc['right'] = self._computed_styles.get('right', 'auto')
+                sc['top'] = self._computed_styles.get('top', 'auto')
+                sc['bottom'] = self._computed_styles.get('bottom', 'auto')
                 sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = self._get_style_trbl('margin',  scale=dpi_mult)
                 sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = self._get_style_trbl('padding', scale=dpi_mult)
                 sc['border-width']        = self._get_style_num('border-width', 0, scale=dpi_mult)
@@ -1620,6 +1631,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 sc['width'] = self._computed_styles.get('width', 'auto')
                 sc['height'] = self._computed_styles.get('height', 'auto')
             else:
+                sc['left'] = 'auto'
+                sc['right'] = 'auto'
+                sc['top'] = 'auto'
+                sc['bottom'] = 'auto'
                 sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = 0, 0, 0, 0
                 sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = 0, 0, 0, 0
                 sc['border-width']        = 0
@@ -1666,11 +1681,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if style_content_hash != getattr(self, '_style_content_hash', None):
                 self._dirty('style change might have changed content (::before / ::after)', 'content')
                 self._dirty_flow()
+                self._innerTextWrapped = None
                 self._style_content_hash = style_content_hash
 
             style_size_hash = Hasher(
-                self._fontid, self._fontsize,
+                self._fontid, self._fontsize, self._whitespace,
                 {k:sc[k] for k in [
+                    'left', 'right', 'top', 'bottom',
                     'margin-top','margin-right','margin-bottom','margin-left',
                     'padding-top','padding-right','padding-bottom','padding-left',
                     'border-width',
@@ -1680,12 +1697,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if style_size_hash != getattr(self, '_style_size_hash', None):
                 self._dirty('style change might have changed size', 'size')
                 self._dirty_flow()
+                self._innerTextWrapped = None
                 self._style_size_hash = style_size_hash
 
         self._dirty_properties.discard('style')
         self._dirty_callbacks['style'] = set()
 
-        self.defer_dirty_propagation = False
+        # self.defer_dirty_propagation = False
 
     @UI_Element_Utils.add_cleaning_callback('content', {'blocks'})
     @profiler.function
@@ -1704,7 +1722,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self._clean_debugging['content'] = time.time()
 
-        self.defer_dirty_propagation = True
+        # self.defer_dirty_propagation = True
 
         content_before = self._computed_styles_before.get('content', None) if self._computed_styles_before else None
         if content_before is not None:
@@ -1779,7 +1797,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                                 'pre': word[:i],
                             })
                         idx += len(word)
-                ui_end = UI_Element(innerTextAsIs='', _parent=self)
+                ui_end = UI_Element(innerTextAsIs='', _parent=self)     # needed so cursor can reach end
                 self._children_text.append(ui_end)
                 self._text_map.append({
                     'ui_element': ui_end,
@@ -1791,8 +1809,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._children_text_min_size = Size2D(width=0, height=0)
                 with profiler.code('cleaning text children'):
                     for child in self._children_text: child._clean()
-                    self._children_text_min_size.width  = max(child._static_content_size.width  for child in self._children_text)
-                    self._children_text_min_size.height = max(child._static_content_size.height for child in self._children_text)
+                    if any(child._static_content_size is None for child in self._children_text):
+                        # temporarily set
+                        self._children_text_min_size.width = 0
+                        self._children_text_min_size.height = 0
+                    else:
+                        self._children_text_min_size.width  = max(child._static_content_size.width  for child in self._children_text)
+                        self._children_text_min_size.height = max(child._static_content_size.height for child in self._children_text)
                 self._new_content = True
 
         elif self.src: # and not self._src:
@@ -1833,7 +1856,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._dirty_properties.discard('content')
         self._dirty_callbacks['content'] = set()
 
-        self.defer_dirty_propagation = False
+        # self.defer_dirty_propagation = False
 
     @profiler.function
     def get_text_pos(self, index):
@@ -1869,7 +1892,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self._clean_debugging['blocks'] = time.time()
 
-        self.defer_dirty_propagation = True
+        # self.defer_dirty_propagation = True
 
         if self._computed_styles.get('display', 'inline') == 'flexbox':
             # all children are treated as flex blocks, regardless of their display
@@ -1899,7 +1922,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._dirty_properties.discard('blocks')
         self._dirty_callbacks['blocks'] = set()
 
-        self.defer_dirty_propagation = False
+        # self.defer_dirty_propagation = False
 
     ################################################################################################
     # NOTE: COMPUTE STATIC CONTENT SIZE (TEXT, IMAGE, ETC.), NOT INCLUDING MARGIN, BORDER, PADDING
@@ -1919,7 +1942,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         self._clean_debugging['size'] = time.time()
 
-        self.defer_dirty_propagation = True
+        # self.defer_dirty_propagation = True
 
         with profiler.code('recursing to children'):
             for child in self._children_all:
@@ -1958,7 +1981,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._dirty_properties.discard('size')
         self._dirty_flow()
         self._dirty_callbacks['size'] = set()
-        self.defer_dirty_propagation = False
+        # self.defer_dirty_propagation = False
 
     @profiler.function
     def _layout(self, **kwargs):
@@ -2185,10 +2208,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if style_pos in {'fixed', 'absolute'}:
             # pt,pr,pb,pl = self.top,self.right,self.bottom,self.left
             # # TODO: ignoring units, which could be %!!
-            # if type(pt) is tuple: pt = pt[0]
-            # if type(pr) is tuple: pr = pr[0]
-            # if type(pb) is tuple: pb = pb[0]
-            # if type(pl) is tuple: pl = pl[0]
             self._relative_element = self._document_elem if style_pos == 'fixed' else self._nonstatic_elem
             if self._relative_element is None or self._relative_element == self:
                 mbp_left = mbp_top = 0
@@ -2596,6 +2615,20 @@ class UI_Document(UI_Document_FSM):
     def __init__(self):
         self._context = None
         self._area = None
+        self._exception_callbacks = []
+
+    def add_exception_callback(self, fn):
+        self._exception_callbacks += [fn]
+
+    def _callback_exception_callbacks(self, e):
+        for fn in self._exception_callbacks:
+            try:
+                fn(e)
+            except Exception as e2:
+                print('Caught exception while callback exception callbacks: %s' % fn.__name__)
+                print('original: %s' % str(e))
+                print('additional: %s' % str(e2))
+                debugger.print_exception()
 
     @profiler.function
     def init(self, context, **kwargs):
@@ -2640,7 +2673,7 @@ class UI_Document(UI_Document_FSM):
 
         self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
         self._mouse = Point2D((self._mx, self._my))
-        self._under_mouse = self._body.get_under_mouse(self._mouse)
+        if not self.ignore_hover_change: self._under_mouse = self._body.get_under_mouse(self._mouse)
         self._lmb = self.actions.using('LEFTMOUSE')
         self._mmb = self.actions.using('MIDDLEMOUSE')
         self._rmb = self.actions.using('RIGHTMOUSE')

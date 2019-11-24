@@ -19,10 +19,11 @@ from ..common.debug import debugger
 class CookieCutter_FSM:
     fsm = FSM()
     FSM_State = fsm.wrapper
-    FSM_Exception_Callback = fsm.exception_wrapper
 
     def _cc_fsm_init(self):
         self.fsm.init(self, start='main')
+        def callback(e): self._handle_exception(e, 'handle exception caught by FSM')
+        #self.fsm.add_exception_callback(callback)
 
     def _cc_fsm_update(self):
         self.fsm.update()

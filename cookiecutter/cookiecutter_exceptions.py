@@ -24,7 +24,7 @@ from .cookiecutter_fsm import CookieCutter_FSM
 class CookieCutter_Exceptions:
     @staticmethod
     def _handle_exception(e, action, fatal=False):
-        print('CookieCutter caught exception while trying to %s' % action)
+        print('CookieCutter handling exception caught while trying to "%s"' % action)
         debugger.print_exception()
         if fatal: assert False
         CookieCutter_Exceptions._instance._callback_exception_callbacks(e)
@@ -36,14 +36,17 @@ class CookieCutter_Exceptions:
     Exception_Callback = _exception_callback_wrapper
 
     def _callback_exception_callbacks(self, e):
-        for fn in self._exception_callbacks:
+        print('CookieCutter_Exceptions._callback_exception_callbacks:', e)
+        for fn_name in self._exception_callbacks:
             try:
-                fn(self, e)
+                fn = getattr(self, fn_name)
+                fn(e)
             except Exception as e2:
                 print('CookieCutter caught exception while calling back exception callbacks: %s' % fn.__name__)
                 debugger.print_exception()
 
     def _cc_exception_init(self):
-        self._exception_callbacks = [fn for (_,fn) in find_fns(self, '_cc_exception_callback')]
+        self._exception_callbacks = [fn.__name__ for (_,fn) in find_fns(self, '_cc_exception_callback')]
+        print('CC exception callbacks:', self._exception_callbacks)
         self.fsm.add_exception_callback(self._callback_exception_callbacks)
         CookieCutter_Exceptions._instance = self

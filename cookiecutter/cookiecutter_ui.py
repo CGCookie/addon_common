@@ -69,6 +69,7 @@ class CookieCutter_UI:
     def _cc_ui_init(self):
         self.document = Globals.ui_document # UI_Document(self.context)
         self.document.init(self.context)
+        self.document.add_exception_callback(lambda e: self._handle_exception(e, 'handle exception caught by UI'))
         self.drawing = Globals.drawing
         self.drawing.set_region(bpy.context.area, bpy.context.space_data, bpy.context.region, bpy.context.space_data.region_3d, bpy.context.window)
         self._cc_blenderui_init()
