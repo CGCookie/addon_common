@@ -34,7 +34,9 @@ class BoundVar:
         try:
             exec(value_str, self._f_globals, self._f_locals)
         except Exception as e:
-            assert False, 'BoundVar: value string must be a valid variable!'
+            print('Caught exception when trying to bind to variable')
+            print(e)
+            assert False, 'BoundVar: value string ("%s") must be a valid variable!' % (value_str)
         self._f_locals.update({'boundvar_interface': self._boundvar_interface})
         self._value_str = value_str
         self._callbacks = []
