@@ -25,7 +25,7 @@ import inspect
 class IgnoreChange(Exception): pass
 
 class BoundVar:
-    def __init__(self, value_str, *, frame_depth=1):
+    def __init__(self, value_str, *, on_change=None, frame_depth=1):
         assert type(value_str) is str, 'BoundVar: constructor needs value as string!'
         frame = inspect.currentframe()
         for i in range(frame_depth): frame = frame.f_back
@@ -42,6 +42,7 @@ class BoundVar:
         self._callbacks = []
         self._validators = []
         self._disabled = False
+        if on_change: self.on_change(on_change)
 
     def _boundvar_interface(self, v): self._v = v
     def _call_callbacks(self):
@@ -86,8 +87,8 @@ class BoundVar:
 
 
 class BoundBool(BoundVar):
-    def __init__(self, value_str):
-        super().__init__(value_str, frame_depth=2)
+    def __init__(self, value_str, **kwargs):
+        super().__init__(value_str, frame_depth=2, **kwargs)
     @property
     def checked(self): return self.value
     @checked.setter
@@ -95,8 +96,8 @@ class BoundBool(BoundVar):
 
 
 class BoundInt(BoundVar):
-    def __init__(self, value_str, *, min_value=None, max_value=None):
-        super().__init__(value_str, frame_depth=2)
+    def __init__(self, value_str, *, min_value=None, max_value=None, **kwargs):
+        super().__init__(value_str, frame_depth=2, **kwargs)
         self._min_value = min_value
         self._max_value = max_value
         self.add_validator(self.int_validator)
@@ -119,8 +120,8 @@ class BoundInt(BoundVar):
 
 
 class BoundFloat(BoundVar):
-    def __init__(self, value_str, *, min_value=None, max_value=None):
-        super().__init__(value_str, frame_depth=2)
+    def __init__(self, value_str, *, min_value=None, max_value=None, **kwargs):
+        super().__init__(value_str, frame_depth=2, **kwargs)
         self._min_value = min_value
         self._max_value = max_value
         self.add_validator(self.float_validator)

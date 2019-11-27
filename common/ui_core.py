@@ -1062,6 +1062,7 @@ class UI_Element_Properties:
         return v and (self._parent.is_visible if self._parent else True)
     @is_visible.setter
     def is_visible(self, v):
+        if self._is_visible == v: return
         self._is_visible = v
         # self._dirty('changing visibility can affect style', 'style', children=True)
         self._dirty('changing visibility can affect everything', parent=True, children=True)
