@@ -312,9 +312,10 @@ def input_text(**kwargs):
     return ui_proxy
 
 def collection(label, **kwargs):
+    kw_inside = helper_argsplitter({'children'}, kwargs)
     ui_container = UI_Element(tagName='div', classes='collection', **kwargs)
     ui_label = div(innerText=label, classes='header', parent=ui_container)
-    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container)
+    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside)
     ui_proxy = UI_Proxy(ui_container)
     ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
     return ui_proxy
