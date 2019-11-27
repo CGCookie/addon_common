@@ -1371,7 +1371,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # NOTE: content box is larger than viewing => scrolling, which is
         #       managed by offsetting the content box up (y+1) or left (x-1)
         self._static_content_size  = None       # size of static content (text, image, etc.) w/o margin,border,padding
-        self._static_content_space = 0          # horizontal space between text elements
         self._dynamic_content_size = None       # size of dynamic content (static or wrapped children) w/o mbp
         self._dynamic_full_size    = None       # size of dynamic content with mbp added
         self._mbp_width            = None
@@ -1962,8 +1961,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._static_content_size = Size2D()
                 self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs))
                 self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs))
-                self._static_content_space = Globals.drawing.get_text_width(' ')
-                # Globals.drawing.set_font_size(size_prev, fontid=self._textwrap_opts['fontid'], force=True)
                 Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
 
         elif self._src == 'image':
@@ -1973,7 +1970,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._static_content_size = Size2D()
                 self._static_content_size.set_all_widths(self._image_data['width'] * dpi_mult)
                 self._static_content_size.set_all_heights(self._image_data['height'] * dpi_mult)
-                self._static_content_space = 0
 
         else:
             pass
@@ -2423,25 +2419,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, background_override=background_override)
 
             with profiler.code('drawing children'):
-                if False:
-                    # include padding
-                    il = round(self._l + (margin_left + border_width + padding_left))
-                    it = round(self._t - (margin_top  + border_width + padding_top))
-                    iw = round(self._w - (margin_left + border_width + padding_left + padding_right + border_width + margin_right))
-                    ih = round(self._h - (margin_top  + border_width + padding_top + padding_bottom + border_width + margin_bottom))
-                elif True:
-                    # do not include padding
-                    il = round(self._l + (margin_left + border_width))
-                    it = round(self._t - (margin_top  + border_width))
-                    iw = round(self._w - (margin_left + border_width + border_width + margin_right))
-                    ih = round(self._h - (margin_top  + border_width + border_width + margin_bottom))
-                else:
-                    il = round(self._l + (padding_left + border_width))
-                    it = round(self._t - (padding_top  + border_width))
-                    iw = round(self._w - (padding_left + border_width + border_width + padding_right))
-                    ih = round(self._h - (padding_top  + border_width + border_width + padding_bottom))
+                # compute inner scissor area
+                include_margin = True
+                include_padding = False
+                mt,mr,mb,ml = (margin_top, margin_right, margin_bottom, margin_left)  if include_margin  else (0,0,0,0)
+                pt,pr,pb,pl = (padding_top,padding_right,padding_bottom,padding_left) if include_padding else (0,0,0,0)
+                bw = border_width
+                il = round(self._l + (ml + bw + pl))
+                it = round(self._t - (mt + bw + pt))
+                iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
+                ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
 
-                with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=False):
+                with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=True):
                     if self._innerText is not None:
                         with profiler.code('drawing innerText'):
                             size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
@@ -2637,6 +2626,7 @@ class UI_Document(UI_Document_FSM):
         self.actions = Actions(bpy.context, UI_Document.default_keymap)
         self._body = UI_Element(tagName='body')
         self._tooltip = UI_Element(tagName='dialog', classes='tooltip', parent=self._body)
+        self._tooltip.is_visible = False
         self._tooltip_message = None
         self._tooltip_wait = None
         self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
