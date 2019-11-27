@@ -83,6 +83,11 @@ class BoundVar:
         self._validators.append(fn)
 
 
+class BoundBool(BoundVar):
+    def __init__(self, value_str):
+        super().__init__(value_str, frame_depth=2)
+
+
 class BoundInt(BoundVar):
     def __init__(self, value_str, *, min_value=None, max_value=None):
         super().__init__(value_str, frame_depth=2)

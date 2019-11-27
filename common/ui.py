@@ -178,7 +178,7 @@ def input_radio(**kwargs):
     ui_proxy = UI_Proxy(ui_input)
     ui_proxy.translate('label', 'innerText')
     ui_proxy.map({'innerText','children','append_child','delete_child','clear_children','builder'}, ui_label)
-    ui_proxy.map_to_all('title')
+    ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 def input_checkbox(**kwargs):
@@ -186,17 +186,19 @@ def input_checkbox(**kwargs):
     # TODO: strip input ui_element to only be checkmark!
     helper_argtranslate('label', 'innerText', kwargs)
     kw_label = helper_argsplitter({'innerText'}, kwargs)
+    kw_all = helper_argsplitter({'title'}, kwargs)
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
-    ui_input = UI_Element(tagName='input', type='checkbox', can_focus=True, **kwargs)
-    ui_checkmark = UI_Element(tagName='img', classes='checkbox',  parent=ui_input)
-    ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label)
+    ui_input = UI_Element(tagName='input', type='checkbox', can_focus=True, **kwargs, **kw_all)
+    ui_checkmark = UI_Element(tagName='img', classes='checkbox',  parent=ui_input, **kw_all)
+    ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label, **kw_all)
     def mouseclick(e):
         ui_input.checked = not bool(ui_input.checked)
     ui_input.add_eventListener('on_mouseclick', mouseclick)
     ui_proxy = UI_Proxy(ui_input)
     ui_proxy.translate('label', 'innerText')
     ui_proxy.map({'innerText','children','append_child','delete_child','clear_children', 'builder'}, ui_label)
+    ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 def labeled_input_text(label, **kwargs):

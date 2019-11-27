@@ -2686,13 +2686,17 @@ class UI_Document(UI_Document_FSM):
             next_message = self._under_mouse.title
         if self._tooltip_message != next_message:
             self._tooltip_message = next_message
+            self._tooltip_mouse = None
             self._tooltip_wait = time.time() + self.tooltip_delay
             self._tooltip.is_visible = False
         if self._tooltip_message and time.time() > self._tooltip_wait:
+            # TODO: markdown support??
             self._tooltip.innerText = self._tooltip_message
-            ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + self._tooltip._mbp_width)
-            ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + self._tooltip._mbp_height)
-            self._tooltip.reposition(left=ttl, top=ttt - self._body.height_pixels)
+            if self._tooltip_mouse != self._mouse:
+                self._tooltip_mouse = self._mouse
+                ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + self._tooltip._mbp_width)
+                ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + self._tooltip._mbp_height)
+                self._tooltip.reposition(left=ttl, top=ttt - self._body.height_pixels)
             self._tooltip.is_visible = True
 
         self.fsm.update()
