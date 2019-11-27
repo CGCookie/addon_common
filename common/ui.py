@@ -197,6 +197,7 @@ def input_checkbox(**kwargs):
     ui_input.add_eventListener('on_mouseclick', mouseclick)
     ui_proxy = UI_Proxy(ui_input)
     ui_proxy.translate('label', 'innerText')
+    ui_proxy.translate('value', 'checked')
     ui_proxy.map({'innerText','children','append_child','delete_child','clear_children', 'builder'}, ui_label)
     ui_proxy.map_to_all({'title'})
     return ui_proxy

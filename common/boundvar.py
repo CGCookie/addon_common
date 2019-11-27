@@ -86,6 +86,10 @@ class BoundVar:
 class BoundBool(BoundVar):
     def __init__(self, value_str):
         super().__init__(value_str, frame_depth=2)
+    @property
+    def checked(self): return self.value
+    @checked.setter
+    def checked(self,v): self.value = v
 
 
 class BoundInt(BoundVar):
