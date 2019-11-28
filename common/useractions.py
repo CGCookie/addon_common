@@ -257,6 +257,7 @@ class Actions:
         self.now_pressed = {}
         self.just_pressed = None
         self.last_pressed = None
+        self.event_type = None
 
         self.mouse = None
         self.mouse_prev = None
@@ -309,6 +310,7 @@ class Actions:
 
         t, pressed = event.type, event.value=='PRESS'
 
+        self.event_type = t
         self.mousemove_prev = self.mousemove
         self.timer = (t in Actions.timer_actions)
         self.mousemove = (t in Actions.mousemove_actions)
