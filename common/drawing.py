@@ -403,17 +403,15 @@ class Drawing:
         returns MVP for pixel view
         TODO: compute separate M,V,P matrices
         '''
-        last_w, last_h, last_m = -1, -1, None
-        def fn():
-            nonlocal last_w, last_h, last_m
-            if not self.r3d: return None
-            w,h = self.rgn.width,self.rgn.height
-            if last_w != w or last_h != h:
-                last_w,last_h = w,h
-                last_m = Matrix([[2/w,0,0,-1], [0,2/h,0,-1], [0,0,1,0], [0,0,0,1]])
-            return last_m
-        self.get_pixel_matrix = fn
-        return fn()
+        if not self.r3d: return None
+        w,h = self.rgn.width,self.rgn.height
+        if not hasattr(self, '_get_pixel_matrix_cache'):
+            self._get_pixel_matrix_cache = {'w':-1, 'h':-1, 'm':None}
+        cache = self._get_pixel_matrix_cache
+        if cache['w'] != w or cache['h'] != h:
+            cache['w'],cache['h'] = w,h
+            cache['m'] = Matrix([[2/w,0,0,-1], [0,2/h,0,-1], [0,0,1,0], [0,0,0,1]])
+        return cache['m']
 
     def get_pixel_matrix_buffer(self):
         if not self.r3d: return None
