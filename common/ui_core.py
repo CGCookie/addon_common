@@ -2685,8 +2685,11 @@ class UI_Document(UI_Document_FSM):
             self._tooltip.innerText = self._tooltip_message
             if self._tooltip_mouse != self._mouse:
                 self._tooltip_mouse = self._mouse
-                ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + self._tooltip._mbp_width)
-                ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + self._tooltip._mbp_height)
+                if self._tooltip.width_pixels is None or type(self._tooltip.width_pixels) is str or self._tooltip._mbp_width is None or self._tooltip.height_pixels is None or type(self._tooltip.height_pixels) is str or self._tooltip._mbp_height is None:
+                    ttl,ttt = self._mouse
+                else:
+                    ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + (self._tooltip._mbp_width or 0))
+                    ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + (self._tooltip._mbp_height or 0))
                 self._tooltip.reposition(left=ttl, top=ttt - self._body.height_pixels)
             self._tooltip.is_visible = True
 
