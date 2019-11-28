@@ -196,6 +196,8 @@ def git_info(start_at_caller=True):
                 # found it!
                 path_git_head = path_test
                 break
+            if os.path.split(path_root)[1] == 'addons':
+                break
             path_root = os.path.dirname(path_root)  # try next level up
         if not path_git_head:
             # could not find .git folder
