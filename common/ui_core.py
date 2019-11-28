@@ -2443,6 +2443,25 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     else:
                         for child in self._children_all_sorted: child._draw(depth+1)
 
+            vscroll = max(0, self._dynamic_full_size.height - self._h)
+            if vscroll>=1:
+                with profiler.code('drawing scrollbar'):
+                    bgl.glEnable(bgl.GL_BLEND)
+                    w = 3
+                    h = self._h - (mt+bw+pt) - (mb+bw+pb) - 6
+                    px = self._l + self._w - (mr+bw+pr) - w/2 - 5
+                    py0 = self._t - (mt+bw+pt) - 3
+                    py1 = py0 - (h-1)
+                    sh = h * self._h / self._dynamic_full_size.height
+                    sy0 = py0 - (h-sh) * (self._scroll_offset.y / vscroll)
+                    sy1 = sy0 - sh
+                    Globals.drawing.draw2D_line(Point2D((px,sy0)), Point2D((px,sy1)), Color((1,1,1,0.2)), width=w)
+                    if py0>sy0:
+                        Globals.drawing.draw2D_line(Point2D((px,py0)), Point2D((px,sy0+1)), Color((0,0,0,0.2)), width=w)
+                    if sy1>py1:
+                        Globals.drawing.draw2D_line(Point2D((px,sy1-1)), Point2D((px,py1)), Color((0,0,0,0.2)), width=w)
+                    # print(self._dynamic_full_size.height, self._h, vscroll, self._scroll_offset.y)
+
     def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
 
     @profiler.function
