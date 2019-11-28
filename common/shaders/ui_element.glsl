@@ -1,5 +1,4 @@
 uniform mat4 uMVPMatrix;
-uniform vec2 screen_size;
 
 uniform float left;
 uniform float right;
