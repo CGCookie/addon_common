@@ -1663,6 +1663,9 @@ class NumberUnit:
         self._unit = unit
         self._base = base
 
+    @property
+    def unit(self): return self._unit
+
     def __str__(self): return '<NumberUnit num=%f unit=%s>' % (self._num, str(self._unit))
 
     def __repr__(self): return self.__str__()

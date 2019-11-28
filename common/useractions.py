@@ -169,6 +169,7 @@ class Actions:
         'View Orbit': 'view3d.view_orbit',
         'View Persp/Ortho': 'view3d.view_persportho',
         'View Numpad': 'view3d.viewnumpad',
+        'View Axis': 'view3d.view_axis',
         'NDOF Pan Zoom': 'view2d.ndof',
         'NDOF Orbit View with Zoom': 'view3d.ndof_orbit_zoom',
         'NDOF Orbit View': 'view3d.ndof_orbit',

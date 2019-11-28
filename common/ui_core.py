@@ -421,7 +421,9 @@ class UI_Element_Utils:
         v = self._computed_styles.get(k, 'auto')
         if v == 'auto' and def_v == 'auto': return 'auto'
         if v == 'auto':            v = def_v
-        if type(v) is NumberUnit:  v = v.val(base=(percent_of if percent_of is not None else float(def_v)))
+        if type(v) is NumberUnit:
+            if v.unit == '%': scale = None
+            v = v.val(base=(percent_of if percent_of is not None else float(def_v)))
         if override_v is not None: v = override_v
         v = float(v)
         if min_v is not None: v = max(float(min_v), v)
@@ -830,7 +832,7 @@ class UI_Element_Properties:
         assert not bottom and not right, 'repositioning UI via bottom or right not implemented yet :('
         changed = False
         if clamp and self._relative_element:
-            w,h = self.width_pixels,self.height_pixels
+            w,h = Globals.drawing.scale(self.width_pixels),self.height_pixels #Globals.drawing.scale(self.height_pixels)
             rw,rh = self._relative_element.width_pixels,self._relative_element.height_pixels
             mbpw,mbph = self._relative_element._mbp_width,self._relative_element._mbp_height
             if left is not None: left = clamp(left, 0, (rw - mbpw) - w)
@@ -1060,11 +1062,12 @@ class UI_Element_Properties:
         return v and (self._parent.is_visible if self._parent else True)
     @is_visible.setter
     def is_visible(self, v):
+        if self._is_visible == v: return
         self._is_visible = v
         # self._dirty('changing visibility can affect style', 'style', children=True)
         self._dirty('changing visibility can affect everything', parent=True, children=True)
-        self._dirty_styling()
-        self._dirty_flow()
+        #self._dirty_styling()
+        #self._dirty_flow()
 
     @property
     def is_scrollable(self):
@@ -2568,7 +2571,7 @@ class UI_Proxy:
         if attrib.startswith('_'):
             return setattr(self._default_element, attrib, val)
         if attrib in self._mapall:
-            print('ui_proxy: mapping %s,%s to %s' % (str(attrib), str(val), str(self._all_elements)))
+            #print('ui_proxy: mapping %s,%s to %s' % (str(attrib), str(val), str(self._all_elements)))
             for ui_element in self._other_elements:
                 setattr(ui_element, attrib, val)
             return setattr(self._default_element, attrib, val)
@@ -2605,6 +2608,7 @@ class UI_Document(UI_Document_FSM):
         self._context = None
         self._area = None
         self._exception_callbacks = []
+        self._ui_scale = Globals.drawing.get_dpi_mult()
 
     def add_exception_callback(self, fn):
         self._exception_callbacks += [fn]
@@ -2673,13 +2677,17 @@ class UI_Document(UI_Document_FSM):
             next_message = self._under_mouse.title
         if self._tooltip_message != next_message:
             self._tooltip_message = next_message
+            self._tooltip_mouse = None
             self._tooltip_wait = time.time() + self.tooltip_delay
             self._tooltip.is_visible = False
         if self._tooltip_message and time.time() > self._tooltip_wait:
+            # TODO: markdown support??
             self._tooltip.innerText = self._tooltip_message
-            ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + self._tooltip._mbp_width)
-            ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + self._tooltip._mbp_height)
-            self._tooltip.reposition(left=ttl, top=ttt - self._body.height_pixels)
+            if self._tooltip_mouse != self._mouse:
+                self._tooltip_mouse = self._mouse
+                ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + self._tooltip._mbp_width)
+                ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + self._tooltip._mbp_height)
+                self._tooltip.reposition(left=ttl, top=ttt - self._body.height_pixels)
             self._tooltip.is_visible = True
 
         self.fsm.update()
@@ -2753,7 +2761,7 @@ class UI_Document(UI_Document_FSM):
 
         if self._rmb and not self._last_rmb and self._under_mouse:
             self._debug_print(self._under_mouse)
-            print('focus:', self._focus)
+            #print('focus:', self._focus)
 
         if self.actions.pressed({'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}, unpress=False):
             move = Globals.drawing.scale(24) * (-1 if self.actions.pressed('WHEELUPMOUSE') else 1)
@@ -2904,8 +2912,8 @@ class UI_Document(UI_Document_FSM):
                     stop_blur_at = p_blur[i]
                     break
             self.blur(stop_at=stop_blur_at)
-            print('focusout to', p_blur, stop_blur_at)
-            print('focusin from', p_focus, stop_focus_at)
+            #print('focusout to', p_blur, stop_blur_at)
+            #print('focusin from', p_focus, stop_focus_at)
         self._focus = ui_element
         self._focus._add_pseudoclass('focus')
         self._focus._dispatch_event('on_focus')
@@ -2955,8 +2963,14 @@ class UI_Document(UI_Document_FSM):
         w,h = context.region.width, context.region.height
         sz = Size2D(width=w, max_width=w, height=h, max_height=h)
 
-        ScissorStack.start(context)
         Globals.ui_draw.update()
+        if Globals.drawing.get_dpi_mult() != self._ui_scale:
+            self._ui_scale = Globals.drawing.get_dpi_mult()
+            self._body.dirty('DPI changed', children=True)
+            self._body.dirty_styling()
+            self._body.dirty_flow()
+
+        ScissorStack.start(context)
         bgl.glEnable(bgl.GL_BLEND)
 
         if (w,h) != self._last_sz:

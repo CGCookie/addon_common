@@ -25,7 +25,7 @@ import inspect
 class IgnoreChange(Exception): pass
 
 class BoundVar:
-    def __init__(self, value_str, *, frame_depth=1):
+    def __init__(self, value_str, *, on_change=None, frame_depth=1):
         assert type(value_str) is str, 'BoundVar: constructor needs value as string!'
         frame = inspect.currentframe()
         for i in range(frame_depth): frame = frame.f_back
@@ -34,12 +34,15 @@ class BoundVar:
         try:
             exec(value_str, self._f_globals, self._f_locals)
         except Exception as e:
-            assert False, 'BoundVar: value string must be a valid variable!'
+            print('Caught exception when trying to bind to variable')
+            print(e)
+            assert False, 'BoundVar: value string ("%s") must be a valid variable!' % (value_str)
         self._f_locals.update({'boundvar_interface': self._boundvar_interface})
         self._value_str = value_str
         self._callbacks = []
         self._validators = []
         self._disabled = False
+        if on_change: self.on_change(on_change)
 
     def _boundvar_interface(self, v): self._v = v
     def _call_callbacks(self):
@@ -83,9 +86,18 @@ class BoundVar:
         self._validators.append(fn)
 
 
+class BoundBool(BoundVar):
+    def __init__(self, value_str, **kwargs):
+        super().__init__(value_str, frame_depth=2, **kwargs)
+    @property
+    def checked(self): return self.value
+    @checked.setter
+    def checked(self,v): self.value = v
+
+
 class BoundInt(BoundVar):
-    def __init__(self, value_str, *, min_value=None, max_value=None):
-        super().__init__(value_str, frame_depth=2)
+    def __init__(self, value_str, *, min_value=None, max_value=None, **kwargs):
+        super().__init__(value_str, frame_depth=2, **kwargs)
         self._min_value = min_value
         self._max_value = max_value
         self.add_validator(self.int_validator)
@@ -108,8 +120,8 @@ class BoundInt(BoundVar):
 
 
 class BoundFloat(BoundVar):
-    def __init__(self, value_str, *, min_value=None, max_value=None):
-        super().__init__(value_str, frame_depth=2)
+    def __init__(self, value_str, *, min_value=None, max_value=None, **kwargs):
+        super().__init__(value_str, frame_depth=2, **kwargs)
         self._min_value = min_value
         self._max_value = max_value
         self.add_validator(self.float_validator)
