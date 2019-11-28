@@ -2766,6 +2766,13 @@ class UI_Document(UI_Document_FSM):
             self._debug_print(self._under_mouse)
             #print('focus:', self._focus)
 
+        if self.actions.pressed({'HOME', 'END'}, unpress=False):
+            move = 100000 * (-1 if self.actions.pressed({'HOME'}) else 1)
+            self.actions.unpress()
+            if self._get_scrollable():
+                self._scroll_element.scrollTop = self._scroll_last.y + move
+                self._scroll_element._setup_ltwh()
+
         if self.actions.pressed({'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'PAGE_UP', 'PAGE_DOWN', 'TRACKPADPAN', 'UP_ARROW', 'DOWN_ARROW'}, unpress=False):
             if self.actions.event_type == 'TRACKPADPAN':
                 move = self.actions.mouse.y - self.actions.mouse_prev.y
