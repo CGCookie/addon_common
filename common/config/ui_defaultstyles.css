@@ -626,7 +626,7 @@ body > dialog.tooltip {
     z-index: 100000;
     position: fixed;
     border: 1px black;
-    background: rgba(32,32,32, 0.75);
+    background: rgba(32,32,32, 0.95);
     color: white;
     margin: 2px;
     padding: 4px;

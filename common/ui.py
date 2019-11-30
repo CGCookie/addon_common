@@ -204,15 +204,17 @@ def input_checkbox(**kwargs):
 
 def labeled_input_text(label, **kwargs):
     kw_container = helper_argsplitter({'parent', 'id'}, kwargs)
-    ui_container = UI_Element(tagName='div', classes='labeledinputtext-container', **kw_container)
-    ui_left  = UI_Element(tagName='div',   classes='labeledinputtext-label-container', parent=ui_container)
-    ui_label = UI_Element(tagName='label', classes='labeledinputtext-label', innerText=label, parent=ui_left)
-    ui_right = UI_Element(tagName='div',   classes='labeledinputtext-input-container', parent=ui_container)
-    ui_input = input_text(parent=ui_right, **kwargs)
+    kw_all = helper_argsplitter({'title'}, kwargs)
+    ui_container = UI_Element(tagName='div', classes='labeledinputtext-container', **kw_container, **kw_all)
+    ui_left  = UI_Element(tagName='div',   classes='labeledinputtext-label-container', parent=ui_container, **kw_all)
+    ui_label = UI_Element(tagName='label', classes='labeledinputtext-label', innerText=label, parent=ui_left, **kw_all)
+    ui_right = UI_Element(tagName='div',   classes='labeledinputtext-input-container', parent=ui_container, **kw_all)
+    ui_input = input_text(parent=ui_right, **kwargs, **kw_all)
 
     ui_proxy = UI_Proxy(ui_container)
     ui_proxy.translate_map('label', 'innerText', ui_label)
     ui_proxy.map('value', ui_input)
+    ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 def input_text(**kwargs):
@@ -326,12 +328,13 @@ def collapsible(label, **kwargs):
     kwargs.setdefault('checked', True)
     kw_input = helper_argsplitter({'checked'}, kwargs)
     kw_inside = helper_argsplitter({'children'}, kwargs)
+    kw_all = helper_argsplitter({'title'}, kwargs)
 
     kwargs['classes'] = 'collapsible %s' % kwargs.get('classes', '')
-    ui_container = UI_Element(tagName='div', **kwargs)
-    ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id',str(random.random()))), classes='header', parent=ui_container, **kw_input)
+    ui_container = UI_Element(tagName='div', **kwargs, **kw_all)
+    ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id',str(random.random()))), classes='header', parent=ui_container, **kw_input, **kw_all)
     # ui_label = UI_Element(tagName='input', classes='header', innerText=label, type="checkbox", parent=ui_container, **kw_input)
-    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside)
+    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside, **kw_all)
 
     def toggle():
         if ui_label.checked: ui_inside.add_class('collapsed')
@@ -343,6 +346,7 @@ def collapsible(label, **kwargs):
     ui_proxy = UI_Proxy(ui_container)
     ui_proxy.translate_map('collapsed', 'checked', ui_label)
     ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
+    ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 
