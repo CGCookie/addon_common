@@ -177,7 +177,7 @@ def set_object_layers(o): print('unhandled: set_object_layers')
 @blender_version_wrapper('<=','2.79')
 def set_object_selection(o, sel): o.select = sel
 @blender_version_wrapper('>=','2.80')
-def set_object_selection(o, sel): o.select_set('SELECT' if sel else 'DESELECT')
+def set_object_selection(o, sel): o.select_set(sel)
 
 @blender_version_wrapper('<=','2.79')
 def link_object(o): bpy.context.scene.objects.link(o)

@@ -2781,9 +2781,9 @@ class UI_Document(UI_Document_FSM):
         if self._lmb and not self._last_lmb:
             return 'mousedown'
 
-        if self._rmb and not self._last_rmb and self._under_mouse:
-            self._debug_print(self._under_mouse)
-            #print('focus:', self._focus)
+        # if self._rmb and not self._last_rmb and self._under_mouse:
+        #     self._debug_print(self._under_mouse)
+        #     #print('focus:', self._focus)
 
         if self.actions.pressed({'HOME', 'END'}, unpress=False):
             move = 100000 * (-1 if self.actions.pressed({'HOME'}) else 1)
