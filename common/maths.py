@@ -1006,6 +1006,8 @@ class BBox:
             self.max = None
             self.mx, self.my, self.mz = nan, nan, nan
             self.Mx, self.My, self.Mz = nan, nan, nan
+            self.min_dim = nan
+            self.max_dim = nan
             return
         if from_bmverts:
             from_coords = [bmv.co for bmv in from_bmverts]
