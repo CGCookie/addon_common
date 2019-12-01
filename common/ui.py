@@ -229,7 +229,10 @@ def input_text(**kwargs):
     data = {'orig': None, 'text': None, 'idx': 0, 'pos': None}
     def preclean():
         if data['text'] is None:
-            ui_input.innerText = str(ui_input.value)
+            if type(ui_input.value) is float:
+                ui_input.innerText = '%0.4f' % ui_input.value
+            else:
+                ui_input.innerText = str(ui_input.value)
         else:
             ui_input.innerText = data['text']
         #print(ui_input, type(ui_input.innerText), ui_input.innerText, type(ui_input.value), ui_input.value)
@@ -256,7 +259,11 @@ def input_text(**kwargs):
             ui_input.scrollLeft = ui_input.scrollLeft + dx
             ui_input._setup_ltwh()
     def focus(e):
-        data['orig'] = data['text'] = str(ui_input.value)
+        if type(ui_input.value) is float:
+            s = '%0.4f' % ui_input.value
+        else:
+            s = str(ui_input.value)
+        data['orig'] = data['text'] = s
         data['idx'] = 0 # len(data['text'])
         data['pos'] = None
     def blur(e):
