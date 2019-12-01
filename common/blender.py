@@ -292,6 +292,7 @@ def show_blender_text(textblock_name, hide_header=True, goto_top=True):
     txt = bpy.data.texts[textblock_name]
     if goto_top:
         txt.current_line_index = 0
+        txt.select_end_line_index = 0
 
     # duplicate the current area then change it to a text editor
     area_dupli = bpy.ops.screen.area_dupli('INVOKE_DEFAULT')
@@ -304,6 +305,7 @@ def show_blender_text(textblock_name, hide_header=True, goto_top=True):
         if space.type == 'TEXT_EDITOR':
             space.text = txt
             space.show_word_wrap = True
+            space.show_syntax_highlight = False
             space.top = 0
             if hide_header and area.regions[0].height != 1:
                 # hide header
