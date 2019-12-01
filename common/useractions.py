@@ -246,6 +246,8 @@ class Actions:
         load_keymaps()
 
         self.context = context
+        self.area = context.area
+        self.screen = context.screen
         self.space = context.space_data
         self.region = context.region
         self.size = Vec2D((context.region.width, context.region.height))
