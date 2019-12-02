@@ -352,6 +352,7 @@ def collapsible(label, **kwargs):
 
     ui_proxy = UI_Proxy(ui_container)
     ui_proxy.translate_map('collapsed', 'checked', ui_label)
+    ui_proxy.map({'label', 'innerText'}, ui_label)
     ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
     ui_proxy.map_to_all({'title'})
     return ui_proxy

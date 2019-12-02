@@ -53,6 +53,8 @@ const int REGION_ERROR          = -100;
 
 #version 330
 
+precision highp float;
+
 void main() {
     // set vertex to bottom-left, top-left, top-right, or bottom-right location, depending on pos
     vec2 p = vec2(
@@ -70,7 +72,11 @@ void main() {
 
 #version 330
 
+precision highp float;
+
 out vec4 outColor;
+
+float sqr(float s) { return s * s; }
 
 int get_region() {
     /* return values:
@@ -89,8 +95,8 @@ int get_region() {
     float dist_top    = (top - margin_top) - screen_pos.y;
     float radwid  = max(border_radius, border_width);
     float rad     = max(0, border_radius - border_width);
-    float radwid2 = radwid * radwid;
-    float rad2    = rad * rad;
+    float radwid2 = sqr(radwid);
+    float rad2    = sqr(rad);
     float r2;
 
     // outside
@@ -119,7 +125,7 @@ int get_region() {
 
     // top-left
     if(dist_top <= radwid && dist_left <= radwid) {
-        r2 = pow(dist_left - radwid, 2.0) + pow(dist_top - radwid, 2.0);
+        r2 = sqr(dist_left - radwid) + sqr(dist_top - radwid);
         if(r2 > radwid2)             return REGION_OUTSIDE;
         if(r2 < rad2)                return REGION_BACKGROUND;
         if(dist_left < dist_top)     return REGION_BORDER_LEFT;
@@ -127,7 +133,7 @@ int get_region() {
     }
     // top-right
     if(dist_top <= radwid && dist_right <= radwid) {
-        r2 = pow(dist_right - radwid, 2.0) + pow(dist_top - radwid, 2.0);
+        r2 = sqr(dist_right - radwid) + sqr(dist_top - radwid);
         if(r2 > radwid2)             return REGION_OUTSIDE;
         if(r2 < rad2)                return REGION_BACKGROUND;
         if(dist_right < dist_top)    return REGION_BORDER_RIGHT;
@@ -135,7 +141,7 @@ int get_region() {
     }
     // bottom-left
     if(dist_bottom <= radwid && dist_left <= radwid) {
-        r2 = pow(dist_left - radwid, 2.0) + pow(dist_bottom - radwid, 2.0);
+        r2 = sqr(dist_left - radwid) + sqr(dist_bottom - radwid);
         if(r2 > radwid2)             return REGION_OUTSIDE;
         if(r2 < rad2)                return REGION_BACKGROUND;
         if(dist_left < dist_bottom)  return REGION_BORDER_LEFT;
@@ -143,7 +149,7 @@ int get_region() {
     }
     // bottom-right
     if(dist_bottom <= radwid && dist_right <= radwid) {
-        r2 = pow(dist_right - radwid, 2.0) + pow(dist_bottom - radwid, 2.0);
+        r2 = sqr(dist_right - radwid) + sqr(dist_bottom - radwid);
         if(r2 > radwid2)             return REGION_OUTSIDE;
         if(r2 < rad2)                return REGION_BACKGROUND;
         if(dist_right < dist_bottom) return REGION_BORDER_RIGHT;
