@@ -584,7 +584,7 @@ class UI_Styling:
     @profiler.function
     def compute_style(selector, *stylings):
         if selector is None: return {}
-        full_decllist = [dl for styling in stylings for dl in styling.get_decllist(selector) if styling]
+        full_decllist = [dl for styling in stylings if styling for dl in styling.get_decllist(selector)]
         decllist = UI_Styling._expand_declarations(full_decllist)
         return decllist
 

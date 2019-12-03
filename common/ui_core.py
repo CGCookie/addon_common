@@ -2677,6 +2677,8 @@ class UI_Document(UI_Document_FSM):
         self._last_under_click = None
         self._last_click_time = 0
         self._last_sz = None
+        self._last_w = -1
+        self._last_h = -1
 
     @property
     def body(self):
@@ -2685,6 +2687,14 @@ class UI_Document(UI_Document_FSM):
     @profiler.function
     def update(self, context, event):
         if context.area != self._area: return
+
+        w,h = context.region.width, context.region.height
+        if self._last_w != w or self._last_h != h:
+            # print('Document:', (self._last_w, self._last_h), (w,h))
+            self._last_w,self._last_h = w,h
+            self._body.dirty('changed document size', children=True)
+            self._body.dirty_flow()
+            tag_redraw_all()
 
         if DEBUG_COLOR_CLEAN: tag_redraw_all()
 
@@ -2807,6 +2817,11 @@ class UI_Document(UI_Document_FSM):
             if self._get_scrollable():
                 self._scroll_element.scrollTop = self._scroll_last.y + move
                 self._scroll_element._setup_ltwh()
+
+        if self._under_mouse and self.actions.just_pressed:
+            pressed = self.actions.just_pressed
+            self.actions.unpress()
+            self._under_mouse._dispatch_event('on_keypress', key=pressed)
 
         self.handle_hover()
         self.handle_mousemove()
