@@ -643,9 +643,11 @@ class UI_Element_Properties:
     def clear_children(self): self._clear_children()
 
     def _count_children(self):
-        return sum(1+child.count_children() for child in self._children)
-    def count_children(self): return self._count_children()
-
+        return sum(child.count_children() for child in self._children)
+    def count_children(self): return 1 + self._count_children()
+    def _count_all_children(self):
+        return sum(child.count_all_children() for child in self._children)
+    def count_all_children(self): return 1 + self._count_all_children()
 
     #########################################
     # style methods
@@ -1794,6 +1796,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         idx += 1
                     words = re.split(r'([^ \n]* +)', l)
                     for word in words:
+                        if not word: continue
                         ui_word = UI_Element(innerTextAsIs=word, _parent=self)
                         self._children_text.append(ui_word)
                         for i in range(len(word)):
@@ -2444,9 +2447,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         with profiler.code('drawing innerText'):
                             size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
                             Globals.drawing.set_font_color(self._fontid, self._fontcolor)
+                            #print('  '*depth, self, len(self._children_all_sorted))
                             for child in self._children_all_sorted: child._draw(depth + 1)
                             Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
                     else:
+                        #print('  '*depth, self, len(self._children_all_sorted))
                         for child in self._children_all_sorted: child._draw(depth+1)
 
             vscroll = max(0, self._dynamic_full_size.height - self._h)
@@ -3036,6 +3041,7 @@ class UI_Document(UI_Document_FSM):
         self._body._call_postflow()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
         self._body._set_view_size(sz)
+        #print('UI_Document.draw')
         self._body._draw()
 
         ScissorStack.end()
