@@ -29,7 +29,7 @@ from .profiler import profiler
 # https://docs.blender.org/api/current/blf.html
 
 class FontManager:
-    _cache = {}
+    _cache = {0:0}
     _last_fontid = 0
     _prefs = get_preferences()
 

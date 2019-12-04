@@ -1878,10 +1878,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         idx = m['idx']
         offset = m['offset']
         pre = m['pre']
-        size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
+        size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid) #, force=True)
         tw = Globals.drawing.get_text_width(pre)
         # th = Globals.drawing.get_line_height(pre)
-        Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
+        Globals.drawing.set_font_size(size_prev, fontid=self._fontid) #, force=True)
         #print(index, m, e._relative_pos, e._relative_offset, e._scroll_offset, tw)
         e_pos = e._relative_pos + e._relative_offset + e._scroll_offset + RelPoint2D((tw, 0))
         return e_pos
@@ -1966,14 +1966,14 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             with profiler.code('computing text sizes'):
                 # TODO: allow word breaking?
                 # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
-                size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
+                size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid) #, force=True)
                 ts = self._parent._textshadow
                 if ts == 'none': tsx,tsy = 0,0
                 else: tsx,tsy,tsc = ts
                 self._static_content_size = Size2D()
                 self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs))
                 self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs))
-                Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid, force=True)
+                Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid) #, force=True)
 
         elif self._src == 'image':
             with profiler.code('computing image sizes'):
@@ -2445,11 +2445,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=True):
                     if self._innerText is not None:
                         with profiler.code('drawing innerText'):
-                            size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid, force=True)
+                            size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid) #, force=True)
                             Globals.drawing.set_font_color(self._fontid, self._fontcolor)
                             #print('  '*depth, self, len(self._children_all_sorted))
                             for child in self._children_all_sorted: child._draw(depth + 1)
-                            Globals.drawing.set_font_size(size_prev, fontid=self._fontid, force=True)
+                            Globals.drawing.set_font_size(size_prev, fontid=self._fontid) #, force=True)
                     else:
                         #print('  '*depth, self, len(self._children_all_sorted))
                         for child in self._children_all_sorted: child._draw(depth+1)

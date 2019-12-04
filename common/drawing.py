@@ -219,6 +219,8 @@ class Drawing:
 
         self.area,self.space,self.rgn,self.r3d,self.window = None,None,None,None,None
         # self.font_id = 0
+        self.last_font_key = None
+        self.fontid = 0
         self.fontsize = None
         self.fontsize_scaled = None
         self.line_cache = {}
@@ -246,35 +248,34 @@ class Drawing:
         fm.color(color, fontid=fontid)
 
     def set_font_size(self, fontsize, fontid=None, force=False):
-        fontsize, fontsize_scaled = int(fontsize), int(int(fontsize) * self._dpi_mult)
-        if not force and fontsize_scaled == self.fontsize_scaled:
-            return self.fontsize
+        if fontid is None: fontid = fm._last_fontid
+        else: fontid = fm.load(fontid)
         fontsize_prev = self.fontsize
-        fontsize_scaled_prev = self.fontsize_scaled
-        self.fontsize = fontsize
-        self.fontsize_scaled = fontsize_scaled
-
+        fontsize, fontsize_scaled = int(fontsize), int(int(fontsize) * self._dpi_mult)
+        cache_key = (fontid, fontsize_scaled)
+        if self.last_font_key == cache_key and not force: return fontsize_prev
         fm.size(fontsize_scaled, 72, fontid=fontid)
-        # blf.size(self.font_id, fontsize_scaled, 72) #self._sysdpi)
-
-        # cache away useful details about font (line height, line base)
-        key = (self.fontsize_scaled)
-        if key not in self.line_cache:
-            dprint('Caching new scaled font size:', key)
+        if cache_key not in self.line_cache:
+            # cache away useful details about font (line height, line base)
+            dprint('Caching new scaled font size:', cache_key)
             all_chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()`~[}{]/?=+\\|-_\'",<.>'
             all_caps = all_chars.upper()
-            self.line_cache[key] = {
+            self.line_cache[cache_key] = {
                 'line height': round(fm.dimensions(all_chars, fontid=fontid)[1] + self.scale(4)),
                 'line base': round(fm.dimensions(all_caps, fontid=fontid)[1]),
             }
-        info = self.line_cache[key]
+        info = self.line_cache[cache_key]
         self.line_height = info['line height']
         self.line_base = info['line base']
+        self.fontid = fontid
+        self.fontsize = fontsize
+        self.fontsize_scaled = fontsize_scaled
+        self.last_font_key = cache_key
 
         return fontsize_prev
 
     def get_text_size_info(self, text, item, fontsize=None, fontid=None):
-        if fontsize: size_prev = self.set_font_size(fontsize, fontid=fontid)
+        if fontsize or fontid: size_prev = self.set_font_size(fontsize, fontid=fontid)
 
         if text is None: text, lines = '', []
         elif type(text) is list: text, lines = '\n'.join(text), text
