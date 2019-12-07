@@ -133,6 +133,12 @@ class FontManager:
         return blf.draw(fontid, text)
 
     @staticmethod
+    def draw_simple(text, xyz):
+        fontid = FontManager._last_fontid
+        blf.position(fontid, *xyz)
+        return blf.draw(fontid, text)
+
+    @staticmethod
     def enable(option, fontid=None):
         return blf.enable(FontManager.load(fontid), option)
 

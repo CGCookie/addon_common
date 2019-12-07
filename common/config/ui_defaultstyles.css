@@ -155,7 +155,7 @@ dialog {
     overflow-y: scroll;
     color: white;
     width: 500px;
-    max-width: 750px;
+    /*max-width: 750px;*/
     min-width: 200px;
 }
 
