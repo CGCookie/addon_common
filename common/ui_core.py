@@ -646,7 +646,7 @@ class UI_Element_Properties:
         return sum(child.count_children() for child in self._children)
     def count_children(self): return 1 + self._count_children()
     def _count_all_children(self):
-        return sum(child.count_all_children() for child in self._children)
+        return sum(child.count_all_children() for child in self._children_all)
     def count_all_children(self): return 1 + self._count_all_children()
 
     #########################################
@@ -1276,8 +1276,7 @@ class UI_Element_Dirtiness:
             self._dirty_propagation['parent'].clear()
         if self._dirty_propagation['children']:
             # no need to dirty ::before, ::after, or text, because they will be reconstructed
-            for child in self._children_all:
-                if child in self._children_text: continue
+            for child in self._children:
                 cause = ' -> '.join('%s'%cause for cause in (self._dirty_causes+[
                     '"propagating dirtiness (%s) from %s to child %s"' % (str(self._dirty_propagation['children']), str(self), str(child)),
                 ]))
@@ -1550,7 +1549,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         # self.defer_dirty_propagation = True
 
-        with profiler.code('rebuild full selector'):
+        pr = profiler.start('rebuild full selector')
+        if True:
             sel_parent = [] if not self._parent else self._parent._selector
             if self._pseudoelement:
                 # this is either a ::before or ::after pseudoelement
@@ -1578,8 +1578,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
                 self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
                 self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
+        pr.done()
 
-        with profiler.code('initialize styles in order: default, focus, active, hover, hover+active'):
+        pr = profiler.start('initialize styles in order: default, focus, active, hover, hover+active')
+        if True:
             # TODO: inherit parent styles with other elements (not just *text*)
             if self._styling_parent is None:
                 if self._parent:
@@ -1609,8 +1611,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
             styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
             self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
+        pr.done()
 
-        with profiler.code('filling style cache'):
+        pr = profiler.start('filling style cache')
+        if True:
             if self._is_visible and not self._pseudoelement:
                 # need to compute ::before and ::after styles to know whether there is content to compute and render
                 self._computed_styles_before = None # UI_Styling.compute_style(self._selector_before, *styling_list)
@@ -1668,16 +1672,20 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             else: self._textshadow = (ts[0].val(), ts[1].val(), ts[-1])
 
             self._whitespace = self._computed_styles.get('white-space', 'normal')
+        pr.done()
 
-        with profiler.code('recursing to children'):
+        pr = profiler.start('recursing to children')
+        if True:
             # tell children to recompute selector
             # NOTE: self._children_all has not been constructed, yet!
             for child in self._children: child._compute_style()
             for child in self._children_text: child._compute_style()
             if self._child_before: self._child_before._compute_styles()
             if self._child_after: self._child_after._compute_styles()
+        pr.done()
 
-        with profiler.code('hashing for cache'):
+        pr = profiler.start('hashing for cache')
+        if True:
             style_content_hash = Hasher(
                 self.is_visible,
                 self.innerText,
@@ -1709,6 +1717,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._dirty_flow()
                 self._innerTextWrapped = None
                 self._style_size_hash = style_size_hash
+        pr.done()
 
         self._dirty_properties.discard('style')
         self._dirty_callbacks['style'] = set()
@@ -1818,7 +1827,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     'pre': '',
                 })
                 self._children_text_min_size = Size2D(width=0, height=0)
-                with profiler.code('cleaning text children'):
+                pr = profiler.start('cleaning text children')
+                if True:
                     for child in self._children_text: child._clean()
                     if any(child._static_content_size is None for child in self._children_text):
                         # temporarily set
@@ -1827,6 +1837,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     else:
                         self._children_text_min_size.width  = max(child._static_content_size.width  for child in self._children_text)
                         self._children_text_min_size.height = max(child._static_content_size.height for child in self._children_text)
+                pr.done()
                 self._new_content = True
 
         elif self.src: # and not self._src:
@@ -1955,15 +1966,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         # self.defer_dirty_propagation = True
 
-        with profiler.code('recursing to children'):
+        pr = profiler.start('recursing to children')
+        if True:
             for child in self._children_all:
                 child._compute_static_content_size()
+        pr.done()
 
         self._static_content_size = None
 
         # set size based on content (computed size)
         if self._innerTextAsIs is not None:
-            with profiler.code('computing text sizes'):
+            pr = profiler.start('computing text sizes')
+            if True:
                 # TODO: allow word breaking?
                 # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
                 size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid) #, force=True)
@@ -1974,14 +1988,17 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs))
                 self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs))
                 Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid) #, force=True)
+            pr.done()
 
         elif self._src == 'image':
-            with profiler.code('computing image sizes'):
+            pr = profiler.start('computing image sizes')
+            if True:
                 # TODO: set to image size?
                 dpi_mult = Globals.drawing.get_dpi_mult()
                 self._static_content_size = Size2D()
                 self._static_content_size.set_all_widths(self._image_data['width'] * dpi_mult)
                 self._static_content_size.set_all_heights(self._image_data['height'] * dpi_mult)
+            pr.done()
 
         else:
             pass
@@ -2339,9 +2356,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _setup_ltwh(self):
         # parent_pos = self._parent.absolute_pos if self._parent else Point2D((0, self._parent_size.max_height-1))
         parent_pos = self._relative_element.absolute_pos if self._relative_element and self._relative_element != self else Point2D((0, self._parent_size.max_height-1))
-        if not parent_pos: parent_pos = RelPoint2D((0,0))
-        rel_pos = self._relative_pos or RelPoint2D((0,0))
-        rel_offset = self._relative_offset or RelPoint2D((0,0))
+        if not parent_pos: parent_pos = RelPoint2D.ZERO
+        rel_pos = self._relative_pos or RelPoint2D.ZERO
+        rel_offset = self._relative_offset or RelPoint2D.ZERO
         abs_pos = parent_pos + rel_pos + rel_offset
         self._absolute_pos = abs_pos + self._scroll_offset
         self._l = int(abs_pos.x)
@@ -2355,7 +2372,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _draw(self, depth=0):
         if not self.is_visible: return
 
-        with profiler.code('initialization'):
+        pr1 = profiler.start('initialization')
+        if True:
+            self._setup_ltwh()
+            if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
+                pr1.done()
+                return
+
             if DEBUG_COLOR_CLEAN:
                 # style, content, size, layout, blocks
                 t_max = 2
@@ -2364,18 +2387,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             else:
                 background_override = None
 
-            self._setup_ltwh()
-
-            if False and self._innerTextAsIs and self._parent._textshadow != 'none':
-                tsx,tsy,tsc = self._parent._textshadow
-                ol = min(tsx, 0)
-                ot = max(-tsy, 0)
-                ow = abs(tsx)
-                oh = abs(tsy)
-            else: ol,ot,ow,oh = 0,0,0,0
-
-            if not ScissorStack.is_box_visible(self._l+ol, self._t+ot, self._w+ow, self._h+oh): return
-
             bgl.glEnable(bgl.GL_BLEND)
 
             dpi_mult = Globals.drawing.get_dpi_mult()
@@ -2383,10 +2394,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             margin_top,  margin_right,  margin_bottom,  margin_left  = sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']
             padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
             border_width = sc['border-width']
+        pr1.done()
 
-        with ScissorStack.wrap(self._l+ol, self._t+ot, self._w+ow, self._h+oh, msg=str(self)):
+        with ScissorStack.wrap(self._l, self._t, self._w, self._h, msg=str(self)):
             if self._innerTextAsIs is not None:
-                with profiler.code('drawing text'):
+                pr1 = profiler.start('drawing text')
+                if True:
                     if False:
                         st = dict(self._style_cache)
                         st['border-width'] = 1
@@ -2407,9 +2420,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+tsx, self._t-tsy), color=tsc)
                     Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
                     # no need to reset prev size, since parent will do that
+                pr1.done()
 
             elif self._src == 'image':
-                with profiler.code('drawing mbp + image'):
+                pr1 = profiler.start('drawing mbp + image')
+                if True:
                     if False:
                         st = dict(self._style_cache)
                         st['border-width'] = 1
@@ -2423,14 +2438,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                         st['padding-bottom'] = -1
                         ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, st)
                     ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, self._image_data['texid'], background_override=background_override)
+                pr1.done()
                 #print(self._src_str, (self._l, self._t, self._w, self._h), self._dynamic_full_size, self._dynamic_content_size)
                 #ScissorStack.print_view_stack()
 
             else:
-                with profiler.code('drawing mbp'):
+                pr = profiler.start('drawing mbp')
+                if True:
                     ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, background_override=background_override)
+                pr.done()
 
-            with profiler.code('drawing children'):
+            pr1 = profiler.start('drawing children')
+            if True:
                 # compute inner scissor area
                 include_margin = True
                 include_padding = False
@@ -2444,19 +2463,23 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
                 with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=True):
                     if self._innerText is not None:
-                        with profiler.code('drawing innerText'):
+                        pr2 = profiler.start('drawing innerText')
+                        if True:
                             size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid) #, force=True)
                             Globals.drawing.set_font_color(self._fontid, self._fontcolor)
                             #print('  '*depth, self, len(self._children_all_sorted))
                             for child in self._children_all_sorted: child._draw(depth + 1)
                             Globals.drawing.set_font_size(size_prev, fontid=self._fontid) #, force=True)
+                        pr2.done()
                     else:
                         #print('  '*depth, self, len(self._children_all_sorted))
                         for child in self._children_all_sorted: child._draw(depth+1)
+            pr1.done()
 
             vscroll = max(0, self._dynamic_full_size.height - self._h)
             if vscroll>=1:
-                with profiler.code('drawing scrollbar'):
+                pr1 = profiler.start('drawing scrollbar')
+                if True:
                     bgl.glEnable(bgl.GL_BLEND)
                     w = 3
                     h = self._h - (mt+bw+pt) - (mb+bw+pb) - 6
@@ -2472,12 +2495,14 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     if sy1>py1:
                         Globals.drawing.draw2D_line(Point2D((px,sy1-1)), Point2D((px,py1)), Color((0,0,0,0.2)), width=w)
                     # print(self._dynamic_full_size.height, self._h, vscroll, self._scroll_offset.y)
+                pr1.done()
 
     def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
 
     @profiler.function
     def get_under_mouse(self, p:Point2D):
         if not self.is_visible: return None
+        if self.is_dirty: return None
         if p.x < self._l or p.x >= self._l + self._w: return None
         if p.y > self._t or p.y <= self._t - self._h: return None
         for child in reversed(self._children):

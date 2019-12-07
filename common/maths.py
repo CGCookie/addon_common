@@ -265,6 +265,7 @@ class RelPoint2D(Vector, Entity2D):
         if c == 0:
             return Point2D((0, 0))
         return Point2D((x / c, y / c))
+RelPoint2D.ZERO = RelPoint2D((0,0))
 
 
 class Point(Vector, Entity3D):
@@ -1474,12 +1475,15 @@ class Accel2D:
             self.max = Point2D((1, 1))
         self.size = self.max - self.min
 
-        with profiler.code('inserting verts'):
+        pr = profiler.start('inserting verts')
+        if True:
             for (v, v2d) in zip(verts, self.v2Ds):
                 i, j = self.compute_ij(v2d)
                 self._put(i, j, v)
+        pr.done()
 
-        with profiler.code('inserting edges'):
+        pr = profiler.start('inserting edges')
+        if True:
             for e in edges:
                 v0, v1 = self.map_v_v2D[e.verts[0]], self.map_v_v2D[e.verts[1]]
                 ij0, ij1 = self.compute_ij(v0), self.compute_ij(v1)
@@ -1490,8 +1494,10 @@ class Accel2D:
                         self._put(i, j, e)
                 # v0,v1 = e.verts
                 # self._put_edge(e, self.map_v_v2D[v0], self.map_v_v2D[v1])
+        pr.done()
 
-        with profiler.code('inserting faces'):
+        pr = profiler.start('inserting faces')
+        if True:
             for f in faces:
                 v2ds = [self.map_v_v2D[v] for v in f.verts]
                 if not v2ds:
@@ -1505,6 +1511,7 @@ class Accel2D:
                 # v0 = v2ds[0]
                 # for v1,v2 in zip(v2ds[1:-1],v2ds[2:]):
                 #    self._put_face(f, v0, v1, v2)
+        pr.done()
 
     @profiler.function
     def compute_ij(self, v2d):

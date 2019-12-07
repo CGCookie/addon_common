@@ -1127,14 +1127,14 @@ class ScissorStack:
         assert ScissorStack.is_started
         assert ScissorStack.stack
         l, t, w, h = ScissorStack.stack[-1]
-        r, b = l + (w - 1), t - (h - 1)
+        #r, b = l + (w - 1), t - (h - 1)
         return (l, t, w, h)
 
     @staticmethod
     def print_view_stack():
         for i,st in enumerate(ScissorStack.stack):
             l, t, w, h = st
-            r, b = l + (w - 1), t - (h - 1)
+            #r, b = l + (w - 1), t - (h - 1)
             print(('  '*i) + str((l,t,w,h)) + ' ' + ScissorStack.msg_stack[i])
 
     @staticmethod
@@ -1143,6 +1143,7 @@ class ScissorStack:
         return vw > 0 and vh > 0
 
     @staticmethod
+    @profiler.function
     def is_box_visible(l, t, w, h):
         vl, vt, vw, vh = ScissorStack.get_current_view()
         if vw <= 0 or vh <= 0: return False
