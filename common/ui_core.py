@@ -2181,8 +2181,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                             if sy == 'scroll': h = remaining.clamp_height(h)
                             sz = Size2D(width=w, height=h)
                             element._set_view_size(sz)
-                            line_width += w
-                            line_height = max(line_height, h)
+                            if position != 'fixed':
+                                line_width += w
+                                line_height = max(line_height, h)
                             processed = True
                         else:
                             # element does not fit!  finish of current line, then reprocess current element
@@ -2378,7 +2379,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
             pr1 = profiler.start('drawing innerTextAsIs')
             ox,oy = textshadowoffset if textshadowoffset is not None else (0,0)
-            Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+ox, self._t+oy))
+            Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+ox, self._t-oy))
             pr1.done()
             return
 
@@ -2425,7 +2426,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
             ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
 
-            with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=True):
+            with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=False):
                 if self._innerText is not None:
                     pr2 = profiler.start('drawing innerText')
                     size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)

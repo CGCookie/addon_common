@@ -612,7 +612,7 @@ def markdown(mdown=None, mdown_path=None, **kwargs):
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, closeable=True, moveable=True, hide_on_close=False, **kwargs):
     # TODO: always add header, and use UI_Proxy translate+map "label" to change header
     ui_document = Globals.ui_document
-    kwargs['classes'] = 'framed %s' % kwargs.get('classes', '')
+    kwargs['classes'] = 'framed %s %s' % (kwargs.get('classes', ''), 'moveable' if moveable else '')
     ui_dialog = UI_Element(tagName='dialog', **kwargs)
 
     ui_header = UI_Element(tagName='div', classes='dialog-header', parent=ui_dialog)

@@ -173,14 +173,18 @@ div.dialog-header {
     padding: 2px;
     border: 1px rgba(0,0,0,0.25) rgba(0,0,0,0.25) rgba(0,0,0,1) rgba(0,0,0,0.25);
     border-radius: 0px;
+}
+
+dialog.framed.moveable div.dialog-header {
     cursor: grab;
 }
-div.dialog-header:hover {
+dialog.framed.moveable div.dialog-header:hover {
     background-color: hsla(200, 25%, 40%, 0.75); /* hsla(0,0%,40%,0.75);*/
 }
-div.dialog-header:active {
+dialog.framed.moveable div.dialog-header:active {
     background-color: hsla(200, 100%, 60%, 0.75); /*hsla(0,0%,40%,0.5);*/
 }
+
 span.dialog-title {
     margin: 0px;
     border: 0px white;
@@ -625,6 +629,7 @@ div.mdown a {
 body > dialog.tooltip {
     z-index: 100000;
     position: fixed;
+    /*display: block;*/
     border: 1px black;
     background: rgba(32,32,32, 0.95);
     color: white;
