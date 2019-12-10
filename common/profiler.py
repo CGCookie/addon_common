@@ -281,3 +281,13 @@ class Profiler:
 
 profiler = Profiler()
 Globals.set(profiler)
+
+# class CodeProfiler:
+#     def __init__(self, *args, **kwargs):
+#         self.args = args
+#         self.kwargs = kwargs
+#     def __enter__(self):
+#         self.pr = profiler.start(*self.args, n_backs=2, **self.kwargs)
+#     def __exit__(self, exc_type, exc_val, exc_tb):
+#         self.pr.done()
+# profiler.code = CodeProfiler
