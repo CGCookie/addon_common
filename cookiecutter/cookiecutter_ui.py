@@ -139,7 +139,7 @@ class CookieCutter_UI:
         self._space.draw_handler_remove(self._handle_postpixel, 'WINDOW')
         self.region_restore()
         #self._area.tag_redraw()
-        tag_redraw_all()
+        tag_redraw_all('CC ui_end', only_tag=False)
 
 
     #########################################
@@ -200,7 +200,7 @@ class CookieCutter_UI:
                 except:
                     pass
 
-        tag_redraw_all()
+        tag_redraw_all('CC region_darken', only_tag=False)
 
     def region_restore(self):
         # remove callback handlers
@@ -209,6 +209,6 @@ class CookieCutter_UI:
             del self._postpixel_callbacks
         if hasattr(self, '_region_darkened'):
             del self._region_darkened
-        tag_redraw_all()
+        tag_redraw_all('CC region_restore', only_tag=False)
 
 

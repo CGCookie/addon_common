@@ -415,13 +415,13 @@ class UI_Element_Utils:
     # helper functions
     # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
 
-    re_percent = re.compile(r'(?P<v>\d+)%')
     @profiler.function
     def _get_style_num(self, k, def_v, percent_of=None, min_v=None, max_v=None, scale=None, override_v=None):
         v = self._computed_styles.get(k, 'auto')
-        if v == 'auto' and def_v == 'auto': return 'auto'
-        if v == 'auto':            v = def_v
-        if type(v) is NumberUnit:
+        if v == 'auto':
+            if def_v == 'auto': return 'auto'
+            v = def_v
+        if isinstance(v, NumberUnit): # type(v) is NumberUnit:
             if v.unit == '%': scale = None
             v = v.val(base=(percent_of if percent_of is not None else float(def_v)))
         if override_v is not None: v = override_v
@@ -854,7 +854,7 @@ class UI_Element_Properties:
         if changed:
             self._absolute_pos = None
             self._update_position()
-            tag_redraw_all()
+            tag_redraw_all("UI_Element reposition")
 
     @property
     def left(self):
@@ -1043,8 +1043,9 @@ class UI_Element_Properties:
         if not self._is_scrollable_y: v = 0
         v = min(v, self._dynamic_content_size.height - self._absolute_size.height + self._mbp_height)
         v = max(v, 0)
-        self._scroll_offset.y = v
-        tag_redraw_all()
+        if self._scroll_offset.y != v:
+            self._scroll_offset.y = v
+            tag_redraw_all("UI_Element scrollTop")
 
     @property
     def scrollLeft(self):
@@ -1057,8 +1058,9 @@ class UI_Element_Properties:
         v = min(v, self._dynamic_content_size.width - self._absolute_size.width + self._mbp_width)
         v = max(v, 0)
         v = -v
-        self._scroll_offset.x = v
-        tag_redraw_all()
+        if self._scroll_offset.x != v:
+            self._scroll_offset.x = v
+            tag_redraw_all("UI_Element scrollLeft")
 
     @property
     def is_visible(self):
@@ -1217,7 +1219,7 @@ class UI_Element_Dirtiness:
         if children: self._dirty_propagation['children'] |= properties
         self._propagate_dirtiness()
         # print('%s had %s dirtied, because %s' % (str(self), str(properties), str(cause)))
-        tag_redraw_all()
+        tag_redraw_all("UI_Element dirty")
     def dirty(self, *args, **kwargs): self._dirty(*args, **kwargs)
 
     @profiler.function
@@ -1231,7 +1233,7 @@ class UI_Element_Dirtiness:
         for child in self._children_all: child.dirty_styling()
         if self._parent is None:
             self._dirty('Dirtying style cache', children=True)
-        tag_redraw_all()
+        tag_redraw_all("UI_Element dirty_styling")
     def dirty_styling(self): self._dirty_styling()
 
     def add_dirty_callback(self, child, properties):
@@ -1252,7 +1254,7 @@ class UI_Element_Dirtiness:
         if children:
             for child in self._children_all:
                 child._dirty_flow(parent=False, children=True)
-        tag_redraw_all()
+        tag_redraw_all("UI_Element dirty_flow")
     def dirty_flow(self, *args, **kwargs): self._dirty_flow(*args, **kwargs)
 
     @property
@@ -1668,7 +1670,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._fontsize = self._computed_styles.get('font-size', NumberUnit(12,'pt')).val()
             self._fontcolor = self._computed_styles.get('color', (0,0,0,1))
             ts = self._computed_styles.get('text-shadow', 'none')
-            if ts == 'none': self._textshadow = 'none'
+            if ts == 'none': self._textshadow = None
             else: self._textshadow = (ts[0].val(), ts[1].val(), ts[-1])
 
             self._whitespace = self._computed_styles.get('white-space', 'normal')
@@ -1982,7 +1984,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
                 size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid) #, force=True)
                 ts = self._parent._textshadow
-                if ts == 'none': tsx,tsy = 0,0
+                if ts is None: tsx,tsy = 0,0
                 else: tsx,tsy,tsc = ts
                 self._static_content_size = Size2D()
                 self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs))
@@ -2179,8 +2181,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                             if sy == 'scroll': h = remaining.clamp_height(h)
                             sz = Size2D(width=w, height=h)
                             element._set_view_size(sz)
-                            line_width += w
-                            line_height = max(line_height, h)
+                            if position != 'fixed':
+                                line_width += w
+                                line_height = max(line_height, h)
                             processed = True
                         else:
                             # element does not fit!  finish of current line, then reprocess current element
@@ -2369,132 +2372,94 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._b = self._t - (self._h - 1)
 
     @profiler.function
-    def _draw(self, depth=0):
+    def _draw(self, depth=0, textshadowoffset=None):
+        if self._innerTextAsIs is not None:
+            self._setup_ltwh()
+            if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h): return
+
+            pr1 = profiler.start('drawing innerTextAsIs')
+            ox,oy = textshadowoffset if textshadowoffset is not None else (0,0)
+            Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+ox, self._t-oy))
+            pr1.done()
+            return
+
         if not self.is_visible: return
 
         pr1 = profiler.start('initialization')
-        if True:
-            self._setup_ltwh()
-            if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
-                pr1.done()
-                return
+        self._setup_ltwh()
+        if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
+            pr1.done()
+            return
 
-            if DEBUG_COLOR_CLEAN:
-                # style, content, size, layout, blocks
-                t_max = 2
-                t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
-                background_override = Color((t, t/2, 0, 0.5))
-            else:
-                background_override = None
+        if DEBUG_COLOR_CLEAN:
+            # style, content, size, layout, blocks
+            t_max = 2
+            t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
+            background_override = Color((t, t/2, 0, 0.5))
+        else:
+            background_override = None
 
-            bgl.glEnable(bgl.GL_BLEND)
+        bgl.glEnable(bgl.GL_BLEND)
 
-            dpi_mult = Globals.drawing.get_dpi_mult()
-            sc = self._style_cache
-            margin_top,  margin_right,  margin_bottom,  margin_left  = sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']
-            padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
-            border_width = sc['border-width']
+        dpi_mult = Globals.drawing.get_dpi_mult()
+        sc = self._style_cache
+        margin_top,  margin_right,  margin_bottom,  margin_left  = sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']
+        padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
+        border_width = sc['border-width']
         pr1.done()
 
         with ScissorStack.wrap(self._l, self._t, self._w, self._h, msg=str(self)):
-            if self._innerTextAsIs is not None:
-                pr1 = profiler.start('drawing text')
-                if True:
-                    if False:
-                        st = dict(self._style_cache)
-                        st['border-width'] = 1
-                        st['border-left-color'] = [1,1,1,0.5]
-                        st['border-right-color'] = [1,1,1,0.5]
-                        st['border-top-color'] = [1,1,1,0.5]
-                        st['border-bottom-color'] = [1,1,1,0.5]
-                        st['padding-left'] = -1
-                        st['padding-right'] = -1
-                        st['padding-top'] = -1
-                        st['padding-bottom'] = -1
-                        ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, st)
-                    # need to set font size each time, but not certain why...
-                    # Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid, force=True)
-                    ts = self._parent._textshadow
-                    if ts != 'none':
-                        tsx,tsy,tsc = ts
-                        Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+tsx, self._t-tsy), color=tsc)
-                    Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l, self._t), color=self._parent._fontcolor)
-                    # no need to reset prev size, since parent will do that
-                pr1.done()
-
-            elif self._src == 'image':
-                pr1 = profiler.start('drawing mbp + image')
-                if True:
-                    if False:
-                        st = dict(self._style_cache)
-                        st['border-width'] = 1
-                        st['border-left-color'] = [1,1,1,0.5]
-                        st['border-right-color'] = [1,1,1,0.5]
-                        st['border-top-color'] = [1,1,1,0.5]
-                        st['border-bottom-color'] = [1,1,1,0.5]
-                        st['padding-left'] = -1
-                        st['padding-right'] = -1
-                        st['padding-top'] = -1
-                        st['padding-bottom'] = -1
-                        ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, st)
-                    ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, self._image_data['texid'], background_override=background_override)
-                pr1.done()
-                #print(self._src_str, (self._l, self._t, self._w, self._h), self._dynamic_full_size, self._dynamic_content_size)
-                #ScissorStack.print_view_stack()
-
-            else:
-                pr = profiler.start('drawing mbp')
-                if True:
-                    ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, background_override=background_override)
-                pr.done()
+            pr = profiler.start('drawing mbp')
+            texture_id = self._image_data['texid'] if self._src == 'image' else -1
+            ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, texture_id, background_override=background_override)
+            pr.done()
 
             pr1 = profiler.start('drawing children')
-            if True:
-                # compute inner scissor area
-                include_margin = True
-                include_padding = False
-                mt,mr,mb,ml = (margin_top, margin_right, margin_bottom, margin_left)  if include_margin  else (0,0,0,0)
-                pt,pr,pb,pl = (padding_top,padding_right,padding_bottom,padding_left) if include_padding else (0,0,0,0)
-                bw = border_width
-                il = round(self._l + (ml + bw + pl))
-                it = round(self._t - (mt + bw + pt))
-                iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
-                ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
+            # compute inner scissor area
+            include_margin = True
+            include_padding = False
+            mt,mr,mb,ml = (margin_top, margin_right, margin_bottom, margin_left)  if include_margin  else (0,0,0,0)
+            pt,pr,pb,pl = (padding_top,padding_right,padding_bottom,padding_left) if include_padding else (0,0,0,0)
+            bw = border_width
+            il = round(self._l + (ml + bw + pl))
+            it = round(self._t - (mt + bw + pt))
+            iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
+            ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
 
-                with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=True):
-                    if self._innerText is not None:
-                        pr2 = profiler.start('drawing innerText')
-                        if True:
-                            size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid) #, force=True)
-                            Globals.drawing.set_font_color(self._fontid, self._fontcolor)
-                            #print('  '*depth, self, len(self._children_all_sorted))
-                            for child in self._children_all_sorted: child._draw(depth + 1)
-                            Globals.drawing.set_font_size(size_prev, fontid=self._fontid) #, force=True)
-                        pr2.done()
-                    else:
-                        #print('  '*depth, self, len(self._children_all_sorted))
-                        for child in self._children_all_sorted: child._draw(depth+1)
+            with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=False):
+                if self._innerText is not None:
+                    pr2 = profiler.start('drawing innerText')
+                    size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)
+                    bgl.glEnable(bgl.GL_BLEND)
+                    if self._textshadow is not None:
+                        tsx,tsy,tsc = self._textshadow
+                        Globals.drawing.set_font_color(self._fontid, tsc)
+                        for child in self._children_all_sorted:
+                            child._draw(depth + 1, textshadowoffset=(tsx,tsy))
+                    Globals.drawing.set_font_color(self._fontid, self._fontcolor)
+                    for child in self._children_all_sorted:
+                        child._draw(depth + 1)
+                    Globals.drawing.set_font_size(size_prev, fontid=self._fontid)
+                    pr2.done()
+                else:
+                    for child in self._children_all_sorted: child._draw(depth+1)
             pr1.done()
 
             vscroll = max(0, self._dynamic_full_size.height - self._h)
-            if vscroll>=1:
+            if vscroll:
                 pr1 = profiler.start('drawing scrollbar')
-                if True:
-                    bgl.glEnable(bgl.GL_BLEND)
-                    w = 3
-                    h = self._h - (mt+bw+pt) - (mb+bw+pb) - 6
-                    px = self._l + self._w - (mr+bw+pr) - w/2 - 5
-                    py0 = self._t - (mt+bw+pt) - 3
-                    py1 = py0 - (h-1)
-                    sh = h * self._h / self._dynamic_full_size.height
-                    sy0 = py0 - (h-sh) * (self._scroll_offset.y / vscroll)
-                    sy1 = sy0 - sh
-                    Globals.drawing.draw2D_line(Point2D((px,sy0)), Point2D((px,sy1)), Color((1,1,1,0.2)), width=w)
-                    if py0>sy0:
-                        Globals.drawing.draw2D_line(Point2D((px,py0)), Point2D((px,sy0+1)), Color((0,0,0,0.2)), width=w)
-                    if sy1>py1:
-                        Globals.drawing.draw2D_line(Point2D((px,sy1-1)), Point2D((px,py1)), Color((0,0,0,0.2)), width=w)
-                    # print(self._dynamic_full_size.height, self._h, vscroll, self._scroll_offset.y)
+                bgl.glEnable(bgl.GL_BLEND)
+                w = 3
+                h = self._h - (mt+bw+pt) - (mb+bw+pb) - 6
+                px = self._l + self._w - (mr+bw+pr) - w/2 - 5
+                py0 = self._t - (mt+bw+pt) - 3
+                py1 = py0 - (h-1)
+                sh = h * self._h / self._dynamic_full_size.height
+                sy0 = py0 - (h-sh) * (self._scroll_offset.y / vscroll)
+                sy1 = sy0 - sh
+                if py0>sy0: Globals.drawing.draw2D_line(Point2D((px,py0)), Point2D((px,sy0+1)), Color((0,0,0,0.2)), width=w)
+                if sy1>py1: Globals.drawing.draw2D_line(Point2D((px,sy1-1)), Point2D((px,py1)), Color((0,0,0,0.2)), width=w)
+                Globals.drawing.draw2D_line(Point2D((px,sy0)), Point2D((px,sy1)), Color((1,1,1,0.2)), width=w)
                 pr1.done()
 
     def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
@@ -2502,7 +2467,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     @profiler.function
     def get_under_mouse(self, p:Point2D):
         if not self.is_visible: return None
-        if self.is_dirty: return None
+        # if self.is_dirty: return None
         if p.x < self._l or p.x >= self._l + self._w: return None
         if p.y > self._t or p.y <= self._t - self._h: return None
         for child in reversed(self._children):
@@ -2688,6 +2653,7 @@ class UI_Document(UI_Document_FSM):
         self._tooltip.is_visible = False
         self._tooltip_message = None
         self._tooltip_wait = None
+        self._tooltip_mouse = None
         self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
         self.fsm.init(self, start='main')
 
@@ -2714,6 +2680,17 @@ class UI_Document(UI_Document_FSM):
     def body(self):
         return self._body
 
+    def _reposition_tooltip(self, force=False):
+        if self._tooltip_mouse == self._mouse and not force: return
+        self._tooltip_mouse = self._mouse
+        if self._tooltip.width_pixels is None or type(self._tooltip.width_pixels) is str or self._tooltip._mbp_width is None or self._tooltip.height_pixels is None or type(self._tooltip.height_pixels) is str or self._tooltip._mbp_height is None:
+            ttl,ttt = self._mouse
+        else:
+            ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + (self._tooltip._mbp_width or 0))
+            ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + (self._tooltip._mbp_height or 0))
+        hp = self._body.height_pixels if type(self._body.height_pixels) is not str else 0.0
+        self._tooltip.reposition(left=ttl, top=ttt - hp)
+
     @profiler.function
     def update(self, context, event):
         if context.area != self._area: return
@@ -2724,9 +2701,9 @@ class UI_Document(UI_Document_FSM):
             self._last_w,self._last_h = w,h
             self._body.dirty('changed document size', children=True)
             self._body.dirty_flow()
-            tag_redraw_all()
+            tag_redraw_all("UI_Element update: w,h change")
 
-        if DEBUG_COLOR_CLEAN: tag_redraw_all()
+        if DEBUG_COLOR_CLEAN: tag_redraw_all("UI_Element DEBUG_COLOR_CLEAN")
 
         self.actions.update(context, event, self._timer, print_actions=False)
 
@@ -2748,14 +2725,7 @@ class UI_Document(UI_Document_FSM):
         if self._tooltip_message and time.time() > self._tooltip_wait:
             # TODO: markdown support??
             self._tooltip.innerText = self._tooltip_message
-            if self._tooltip_mouse != self._mouse:
-                self._tooltip_mouse = self._mouse
-                if self._tooltip.width_pixels is None or type(self._tooltip.width_pixels) is str or self._tooltip._mbp_width is None or self._tooltip.height_pixels is None or type(self._tooltip.height_pixels) is str or self._tooltip._mbp_height is None:
-                    ttl,ttt = self._mouse
-                else:
-                    ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + (self._tooltip._mbp_width or 0))
-                    ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + (self._tooltip._mbp_height or 0))
-                self._tooltip.reposition(left=ttl, top=ttt - self._body.height_pixels)
+            self._reposition_tooltip()
             self._tooltip.is_visible = True
 
         self.fsm.update()
@@ -3043,6 +3013,7 @@ class UI_Document(UI_Document_FSM):
     @profiler.function
     def draw(self, context):
         if self._area != context.area: return
+        # print('UI_Document.draw', random.random())
         w,h = context.region.width, context.region.height
         sz = Size2D(width=w, max_width=w, height=h, max_height=h)
 

@@ -360,12 +360,11 @@ class Drawing:
 
         if fontsize: self.set_font_size(size_prev, fontid=fontid)
 
-    def text_draw2D_simple(self, text, pos:Point2D, *, color=None):
+    @profiler.function
+    def text_draw2D_simple(self, text, pos:Point2D):
         l,t = round(pos[0]),round(pos[1])
         lb = self.line_base
-        bgl.glEnable(bgl.GL_BLEND)
-        self.text_color_set(color, None)
-        fm.draw(text, xyz=(l, t - lb, 0))
+        fm.draw_simple(text, xyz=(l, t - lb, 0))
 
 
     def get_mvp_matrix(self, view3D=True):

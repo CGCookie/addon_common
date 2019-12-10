@@ -22,6 +22,7 @@ import time
 import bpy
 from bpy.types import Operator
 
+from ..common.blender import perform_redraw_all
 from ..common.debug import debugger
 from ..common.profiler import profiler
 from ..common.useractions import Actions
@@ -143,6 +144,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
         try: self.update()
         except Exception as e: self._handle_exception(e, 'call update')
+
+        perform_redraw_all()
 
         if ret: return ret
 

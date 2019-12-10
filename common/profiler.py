@@ -89,9 +89,8 @@ class ProfilerHelper:
 
 class ProfilerHelper_Ignore:
     def __init__(self, *args, **kwargs): pass
-
     def done(self): pass
-
+profilerhelper_ignore = ProfilerHelper_Ignore()
 
 
 
@@ -148,13 +147,15 @@ class Profiler:
         self._clear = True
         self.clear_handler()
 
-    def start(self, text=None, addFile=True, n_backs=1):
+    def start(self, text=None, addFile=True, enabled=True, n_backs=1):
         # assert not Profiler._broken
         if Profiler._broken:
             print('Profiler broken. Ignoring')
-            return ProfilerHelper_Ignore()
+            return profilerhelper_ignore
         if not Profiler._enabled:
-            return ProfilerHelper_Ignore()
+            return profilerhelper_ignore
+        if not enabled:
+            return profilerhelper_ignore
 
         frame = inspect.currentframe()
         for _ in range(n_backs): frame = frame.f_back

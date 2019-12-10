@@ -222,12 +222,23 @@ def toggle_screen_lastop(ctx):
     space.show_region_hud = not space.show_region_hud
 
 
-def tag_redraw_all():
+tagged_redraw_all = False
+tag_reasons = set()
+def tag_redraw_all(reason, only_tag=True):
+    global tagged_redraw_all, tag_reasons
+    tagged_redraw_all = True
+    tag_reasons.add(reason)
+    if not only_tag: perform_redraw_all()
+def perform_redraw_all():
+    global tagged_redraw_all, tag_reasons
+    if not tagged_redraw_all: return
+    if False: print('Redrawing:', tag_reasons)
+    tag_reasons.clear()
+    tagged_redraw_all = False
     for wm in bpy.data.window_managers:
         for win in wm.windows:
             for ar in win.screen.areas:
                 ar.tag_redraw()
-
 
 
 def get_active_object():

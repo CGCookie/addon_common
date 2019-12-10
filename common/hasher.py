@@ -119,14 +119,14 @@ def hash_bmesh(bme:BMesh):
     if bme is None: return None
     assert type(bme) is BMesh, 'Only call hash_bmesh on BMesh objects!'
 
-    bme.verts.ensure_lookup_table()
-    bme.edges.ensure_lookup_table()
-    bme.faces.ensure_lookup_table()
-    return Hasher(
-        [list(v.co) + list(v.normal) + [v.select] for v in bme.verts],
-        [[v.index for v in e.verts] + [e.select] for e in bme.edges],
-        [[v.index for v in f.verts] + [f.select] for f in bme.faces],
-        )
+    # bme.verts.ensure_lookup_table()
+    # bme.edges.ensure_lookup_table()
+    # bme.faces.ensure_lookup_table()
+    # return Hasher(
+    #     [list(v.co) + list(v.normal) + [v.select] for v in bme.verts],
+    #     [[v.index for v in e.verts] + [e.select] for e in bme.edges],
+    #     [[v.index for v in f.verts] + [f.select] for f in bme.faces],
+    #     )
 
     counts = (len(bme.verts), len(bme.edges), len(bme.faces))
     bbox   = BBox(from_bmverts=bme.verts)
