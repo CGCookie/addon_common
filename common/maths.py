@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2017 CG Cookie
+Copyright (C) 2019 CG Cookie
 http://cgcookie.com
 hello@cgcookie.com
 
@@ -27,6 +27,7 @@ from mathutils import Matrix, Vector, Quaternion
 from bmesh.types import BMVert
 from mathutils.geometry import intersect_line_plane, intersect_point_tri
 
+from .colors import colorname_to_color
 from .decorators import stats_wrapper, blender_version_wrapper
 from .profiler import profiler
 
@@ -468,9 +469,11 @@ class Color(Vector):
         if len(v) == 3: self.r, self.g, self.b = v
         else: self.r, self.g, self.b, self.a = v
 
-Color.transparent = Color((0,0,0,0))
-Color.black = Color((0,0,0,1))
-Color.white = Color((1,1,1,1))
+# set colornames in Color, ex: Color.white, Color.black, Color.transparent
+for colorname in colorname_to_color.keys():
+    c = colorname_to_color[colorname]
+    c = (c[0]/255, c[1]/255, c[2]/255, 1.0 if len(c)==3 else c[3])
+    setattr(Color, colorname, Color(c))
 
 
 class Ray(Entity3D):
