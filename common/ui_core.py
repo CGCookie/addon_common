@@ -581,6 +581,12 @@ class UI_Element_Properties:
         ret.extend(e for child in self._children for e in child.getElementsByClassName(class_name))
         return ret
 
+    def getElementsByTagName(self, tag_name):
+        if tag_name is None: return None
+        ret = [self] if tag_name == self._tagName else []
+        ret.extend(e for child in self._children for e in child.getElementsByTagName(tag_name))
+        return ret
+
 
     ######################################3
     # children methods
