@@ -362,17 +362,19 @@ def collapsible(label, **kwargs):
 class Markdown:
     # markdown line (first line only, ex: table)
     line_tests = {
-        'h1':    re.compile(r'# +(?P<text>.+)'),
-        'h2':    re.compile(r'## +(?P<text>.+)'),
-        'h3':    re.compile(r'### +(?P<text>.+)'),
-        'ul':    re.compile(r'(?P<indent> *)- +(?P<text>.+)'),
-        'img':   re.compile(r'!\[(?P<caption>[^\]]*)\]\((?P<filename>[^\]]+)\)'),
-        'table': re.compile(r'\| +(([^|]*?) +\|)+'),
+        'h1':     re.compile(r'# +(?P<text>.+)'),
+        'h2':     re.compile(r'## +(?P<text>.+)'),
+        'h3':     re.compile(r'### +(?P<text>.+)'),
+        'ul':     re.compile(r'(?P<indent> *)- +(?P<text>.+)'),
+        'ol':     re.compile(r'(?P<indent> *)\d+\. +(?P<text>.+)'),
+        'img':    re.compile(r'!\[(?P<caption>[^\]]*)\]\((?P<filename>[^) ]+)(?P<style>[^)]*)\)'),
+        'table':  re.compile(r'\| +(([^|]*?) +\|)+'),
     }
 
     # markdown inline
     inline_tests = {
         'br':     re.compile(r'<br */?> *'),
+        'img':    re.compile(r'!\[(?P<caption>[^\]]*)\]\((?P<filename>[^) ]+)(?P<style>[^)]*)\)'),
         'bold':   re.compile(r'\*(?P<text>.+?)\*'),
         'code':   re.compile(r'`(?P<text>[^`]+)`'),
         'link':   re.compile(r'\[(?P<text>.+?)\]\((?P<link>.+?)\)'),
@@ -463,6 +465,9 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None):
             else:
                 if t == 'br':
                     container.append_child(br())
+                elif t == 'img':
+                    style = m.group('style').strip() or None
+                    UI_Element(tagName='img', classes='inline', style=style, src=m.group('filename'), title=m.group('caption'), parent=container)
                 elif t == 'code':
                     container.append_child(code(innerText=m.group('text')))
                 elif t == 'link':
@@ -480,8 +485,7 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None):
                     process_words(m.group('text'), lambda word: i(innerText=word, parent=container))
                 else:
                     assert False, 'Unhandled inline markdown type "%s" ("%s") with "%s"' % (str(t), str(m), line)
-                para = para[m.end():] #.strip()
-            #para = para.lstrip()
+                para = para[m.end():]
         container.defer_dirty_propagation = False
 
     ui_mdown.defer_dirty_propagation = True
@@ -490,55 +494,71 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None):
     paras = mdown.split('\n\n')         # split into paragraphs
     for para in paras:
         t,m = Markdown.match_line(para)
+
         if t is None:
             p_element = ui_mdown.append_child(p())
             process_para(p_element, para)
+
+        elif t in ['h1','h2','h3']:
+            hn = {'h1':h1, 'h2':h2, 'h3':h3}[t]
+            #hn(innerText=m.group('text'), parent=ui_mdown)
+            ui_hn = hn(parent=ui_mdown)
+            process_para(ui_hn, m.group('text'))
+
+        elif t == 'ul':
+            ui_ul = UI_Element(tagName='ul', parent=ui_mdown)
+            ui_ul.defer_dirty_propagation = True
+            para = para[2:]
+            for litext in re.split(r'\n- ', para):
+                ui_li = UI_Element(tagName='li', parent=ui_ul)
+                UI_Element(tagName='img', classes='dot', src='radio.png', parent=ui_li)
+                span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
+                process_para(span_element, litext)
+            ui_ul.defer_dirty_propagation = False
+
+        elif t == 'ol':
+            ui_ol = UI_Element(tagName='ol', parent=ui_mdown)
+            ui_ol.defer_dirty_propagation = True
+            para = para[2:]
+            for ili,litext in enumerate(re.split(r'\n\d+\. ', para)):
+                ui_li = UI_Element(tagName='li', parent=ui_ol)
+                UI_Element(tagName='span', classes='number', innerText='%d.'%(ili+1), parent=ui_li)
+                span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
+                process_para(span_element, litext)
+            ui_ol.defer_dirty_propagation = False
+
+        elif t == 'img':
+            style = m.group('style').strip() or None
+            UI_Element(tagName='img', style=style, src=m.group('filename'), title=m.group('caption'), parent=ui_mdown)
+
+        elif t == 'table':
+            # table!
+            def split_row(row):
+                row = re.sub(r'^\| ', r'', row)
+                row = re.sub(r' \|$', r'', row)
+                return [col.strip() for col in row.split(' | ')]
+            data = [l for l in para.split('\n')]
+            header = split_row(data[0])
+            add_header = any(header)
+            align = data[1]
+            data = [split_row(row) for row in data[2:]]
+            rows,cols = len(data),len(data[0])
+            table_element = table(parent=ui_mdown)
+            if add_header:
+                tr_element = tr(parent=table_element)
+                for c in range(cols):
+                    th(innerText=header[c], parent=tr_element)
+                    #t.set(0, c, process_para(header[c], shadowcolor=(0,0,0,0.5)))
+            for r in range(rows):
+                tr_element = tr(parent=table_element)
+                for c in range(cols):
+                    td_element = td(parent=tr_element)
+                    process_para(td_element, data[r][c])
+                    #t.set(r+(1 if add_header else 0), c, process_para(data[r][c]))
+            pass
+
         else:
-            if t == 'h1':
-                h1(innerText=m.group('text'), parent=ui_mdown)
-            elif t == 'h2':
-                h2(innerText=m.group('text'), parent=ui_mdown)
-            elif t == 'h3':
-                h3(innerText=m.group('text'), parent=ui_mdown)
-            elif t == 'ul':
-                ui_ul = UI_Element(tagName='ul', parent=ui_mdown)
-                ui_ul.defer_dirty_propagation = True
-                para = para[2:]
-                for litext in re.split(r'\n- ', para):
-                    ui_li = UI_Element(tagName='li', parent=ui_ul)
-                    UI_Element(tagName='img', src='radio.png', parent=ui_li)
-                    span_element = UI_Element(tagName='span', parent=ui_li)
-                    process_para(span_element, litext)
-                ui_ul.defer_dirty_propagation = False
-            elif t == 'img':
-                UI_Element(tagName='img', src=m.group('filename'), title=m.group('caption'), parent=ui_mdown)
-            elif t == 'table':
-                # table!
-                def split_row(row):
-                    row = re.sub(r'^\| ', r'', row)
-                    row = re.sub(r' \|$', r'', row)
-                    return [col.strip() for col in row.split(' | ')]
-                data = [l for l in para.split('\n')]
-                header = split_row(data[0])
-                add_header = any(header)
-                align = data[1]
-                data = [split_row(row) for row in data[2:]]
-                rows,cols = len(data),len(data[0])
-                table_element = table(parent=ui_mdown)
-                if add_header:
-                    tr_element = tr(parent=table_element)
-                    for c in range(cols):
-                        th(innerText=header[c], parent=tr_element)
-                        #t.set(0, c, process_para(header[c], shadowcolor=(0,0,0,0.5)))
-                for r in range(rows):
-                    tr_element = tr(parent=table_element)
-                    for c in range(cols):
-                        td_element = td(parent=tr_element)
-                        process_para(td_element, data[r][c])
-                        #t.set(r+(1 if add_header else 0), c, process_para(data[r][c]))
-                pass
-            else:
-                assert False, 'Unhandled markdown line type "%s" ("%s") with "%s"' % (str(t), str(m), para)
+            assert False, 'Unhandled markdown line type "%s" ("%s") with "%s"' % (str(t), str(m), para)
 
     ui_mdown.defer_dirty_propagation = False
 
