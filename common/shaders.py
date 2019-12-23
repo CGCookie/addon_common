@@ -52,7 +52,6 @@ class Shader():
         logging and error-checking not quite working :(
         '''
 
-
         bgl.glCompileShader(shader)
 
         # report shader compilation log (if any)
@@ -170,13 +169,13 @@ class Shader():
         bgl.glShaderSource(self.shaderVert, srcVertex)
         bgl.glShaderSource(self.shaderFrag, srcFragment)
 
-        dprint('RetopoFlow Shader Info: %s (%d)' % (self.name,self.shaderProg))
+        print('RetopoFlow Shader Info: %s (%d)' % (self.name,self.shaderProg))
         logv = self.shader_compile(name, self.shaderVert, srcVertex)
         logf = self.shader_compile(name, self.shaderFrag, srcFragment)
         if len(logv.strip()):
-            dprint('  vert log:\n' + '\n'.join(('    '+l) for l in logv.splitlines()))
+            print('  vert log:\n' + '\n'.join(('    '+l) for l in logv.splitlines()))
         if len(logf.strip()):
-            dprint('  frag log:\n' + '\n'.join(('    '+l) for l in logf.splitlines()))
+            print('  frag log:\n' + '\n'.join(('    '+l) for l in logf.splitlines()))
 
         bgl.glAttachShader(self.shaderProg, self.shaderVert)
         bgl.glAttachShader(self.shaderProg, self.shaderFrag)
