@@ -84,19 +84,30 @@ def setupBMeshShader(shader):
 bmeshShader = Shader.load_from_file('bmeshShader', 'bmesh_render.glsl', funcStart=setupBMeshShader)
 
 
+derrs = {
+    getattr(bgl, k): s
+    for (k,s) in [
+        # https://www.khronos.org/opengl/wiki/OpenGL_Error#Meaning_of_errors
+        ('GL_INVALID_ENUM', 'invalid enum'),
+        ('GL_INVALID_VALUE', 'invalid value'),
+        ('GL_INVALID_OPERATION', 'invalid operation'),
+        ('GL_STACK_OVERFLOW', 'stack overflow'),    # does not exist in b3d 2.8x for OSX??
+        ('GL_STACK_UNDERFLOW', 'stack underflow'),  # does not exist in b3d 2.8x for OSX??
+        ('GL_OUT_OF_MEMORY', 'out of memory'),
+        ('GL_INVALID_FRAMEBUFFER_OPERATION', 'invalid framebuffer operation'),
+        ('GL_CONTEXT_LOST', 'context lost'),
+        ('GL_TABLE_TOO_LARGE', 'table too large'),  # deprecated in OpenGL 3.0, removed in 3.1 core and above
+    ]
+    if hasattr(bgl, k)
+}
+
+
 def glCheckError(title):
+    global derrs
+
     err = bgl.glGetError()
     if err == bgl.GL_NO_ERROR: return
 
-    derrs = {
-        bgl.GL_INVALID_ENUM: 'invalid enum',
-        bgl.GL_INVALID_VALUE: 'invalid value',
-        bgl.GL_INVALID_OPERATION: 'invalid operation',
-        bgl.GL_INVALID_FRAMEBUFFER_OPERATION: 'invalid framebuffer operation',
-        bgl.GL_OUT_OF_MEMORY: 'out of memory',
-        #bgl.GL_STACK_OVERFLOW: 'stack overflow',
-        #bgl.GL_STACK_UNDERFLOW: 'stack underflow',
-    }
     if err in derrs:
         print('ERROR (%s): %s' % (title, derrs[err]))
     else:
@@ -165,7 +176,7 @@ def glSetOptions(prefix, opts):
         glCheckError('setting %s to %s' % (str(opt), str(opts[opt])))
     def set_linewidth(v):
         dpi_mult = opts.get('dpi mult', 1.0)
-        bgl.glLineWidth(v*dpi_mult)
+        #bgl.glLineWidth(v*dpi_mult)
         glCheckError('setting line width to %s' % (str(v*dpi_mult)))
     def set_pointsize(v):
         dpi_mult = opts.get('dpi mult', 1.0)
@@ -457,6 +468,8 @@ class BGLBufferedRender:
 
     @profiler.function
     def _check_error(self, title):
+        global derrs
+
         if not self.DEBUG_CHKERR:
             return
 
@@ -464,15 +477,6 @@ class BGLBufferedRender:
         if err == bgl.GL_NO_ERROR:
             return
 
-        derrs = {
-            bgl.GL_INVALID_ENUM: 'invalid enum',
-            bgl.GL_INVALID_VALUE: 'invalid value',
-            bgl.GL_INVALID_OPERATION: 'invalid operation',
-            bgl.GL_STACK_OVERFLOW: 'stack overflow',
-            bgl.GL_STACK_UNDERFLOW: 'stack underflow',
-            bgl.GL_OUT_OF_MEMORY: 'out of memory',
-            bgl.GL_INVALID_FRAMEBUFFER_OPERATION: 'invalid framebuffer operation',
-        }
         if err in derrs:
             print('ERROR (%s): %s' % (title, derrs[err]))
         else:
