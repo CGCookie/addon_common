@@ -199,10 +199,6 @@ void main() {
     vec3  rgb   = vColor.rgb;
     float alpha = vColor.a;
 
-    //gl_FragColor = coloring(vColor);
-    //gl_FragDepth = gl_FragCoord.z * 0.9999;
-    //return;
-
     if(use_rounding && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) discard;
 
     if(perspective) {

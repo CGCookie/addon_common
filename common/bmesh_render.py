@@ -296,6 +296,14 @@ class BufferedRender_Batch:
 
         shader.bind()
 
+        # set defaults
+        shader.uniform_float('color', (1,1,1,0.5))
+        shader.uniform_float('color_selected', (0.5,1,0.5,0.5))
+        shader.uniform_float('hidden', 0.9)
+        shader.uniform_float('offset', 0)
+        shader.uniform_float('dotoffset', 0)
+        shader.uniform_float('vert_scale', (1, 1, 1))
+
         nosel = opts.get('no selection', False)
         shader.uniform_bool('use_selection', [not nosel]) # must be a sequence!?
         shader.uniform_bool('use_rounding',  [self.gltype == bgl.GL_POINTS]) # must be a sequence!?
@@ -321,9 +329,9 @@ class BufferedRender_Batch:
             mz = 'z' in symmetry
             mirroring = (mx, my, mz)
             # shader.uniform_float('mirror_o', symmetry_frame.o)
-            #shader.uniform_float('mirror_x', symmetry_frame.x)
-            #shader.uniform_float('mirror_y', symmetry_frame.y)
-            #shader.uniform_float('mirror_z', symmetry_frame.z)
+            # shader.uniform_float('mirror_x', symmetry_frame.x)
+            # shader.uniform_float('mirror_y', symmetry_frame.y)
+            # shader.uniform_float('mirror_z', symmetry_frame.z)
         shader.uniform_int('mirror_view', [{'Edge': 1, 'Face': 2}.get(symmetry_view, 0)])
         shader.uniform_float('mirror_effect', symmetry_effect)
         shader.uniform_bool('mirroring', mirroring)
@@ -337,7 +345,6 @@ class BufferedRender_Batch:
         shader.uniform_float('clip_start', spc.clip_start)
         shader.uniform_float('clip_end', spc.clip_end)
         shader.uniform_float('view_distance', r3d.view_distance)
-        shader.uniform_float('vert_scale', Vector((1, 1, 1)))
         shader.uniform_float('screen_size', Vector((area.width, area.height)))
 
         focus = opts.get('focus mult', 1.0)
