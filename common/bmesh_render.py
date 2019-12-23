@@ -227,7 +227,7 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 from .shaders import Shader
 
-tri_vs, tri_fs = Shader.parse_file('bmesh_render_tris.glsl', includeVersion=False)
+tri_vs, tri_fs = Shader.parse_file('bmesh_render_tris.glsl', includeVersion=True)
 tri_shader = gpu.types.GPUShader(tri_vs, tri_fs)
 edge_shader = None
 point_shader = None

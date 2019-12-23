@@ -1,8 +1,10 @@
+#version 330
+
 uniform vec4  color;            // color of geometry if not selected
 uniform vec4  color_selected;   // color of geometry if selected
 
-uniform bool use_selection;     // false: ignore selected, true: consider selected
-uniform bool use_rounding;      // false: draw normally; true: rounding (for points)
+uniform bool  use_selection;    // false: ignore selected, true: consider selected
+uniform bool  use_rounding;     // false: draw normally; true: rounding (for points)
 
 uniform mat4  matrix_m;         // model xform matrix
 uniform mat3  matrix_mn;        // model xform matrix for normal (inv transpose of matrix_m)
@@ -23,11 +25,11 @@ uniform vec3  mirror_z;         // mirroring z-axis wrt world
 uniform float hidden;           // affects alpha for geometry below surface. 0=opaque, 1=transparent
 uniform vec3  vert_scale;       // used for mirroring
 uniform float normal_offset;    // how far to push geometry along normal
-uniform bool constrain_offset;  // should constrain offset by focus
+uniform bool  constrain_offset; // should constrain offset by focus
 
 uniform vec3  dir_forward;      // forward direction
 
-uniform bool perspective;
+uniform bool  perspective;
 uniform float clip_start;
 uniform float clip_end;
 uniform float view_distance;
@@ -70,8 +72,6 @@ varying vec4 vColor;            // color of geometry (considers selection)
 
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
-
-#version 330
 
 vec4 get_pos(void) {
     float mult = 1.0;
@@ -129,8 +129,6 @@ void main() {
 
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
-
-#version 330
 
 out vec4 outColor;
 
