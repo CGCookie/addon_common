@@ -342,7 +342,7 @@ class BufferedRender_Batch:
 
         focus = opts.get('focus mult', 1.0)
         shader.uniform_float('focus_mult',       focus)
-        shader.uniform_float('cull_backfaces',   1.0 if opts.get('cull backfaces', False) else 0.0)
+        shader.uniform_bool('cull_backfaces',   [opts.get('cull backfaces', False)])
         shader.uniform_float('alpha_backface',   opts.get('alpha backface', 0.5))
 
         self.set_options(self.options_prefix, opts)

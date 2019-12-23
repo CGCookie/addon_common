@@ -1,8 +1,8 @@
 uniform vec4  color;            // color of geometry if not selected
 uniform vec4  color_selected;   // color of geometry if selected
 
-uniform bool use_selection;    // false: ignore selected, true: consider selected
-uniform bool use_rounding;     // false: draw normally; true: rounding (for points)
+uniform bool use_selection;     // false: ignore selected, true: consider selected
+uniform bool use_rounding;      // false: draw normally; true: rounding (for points)
 
 uniform mat4  matrix_m;         // model xform matrix
 uniform mat3  matrix_mn;        // model xform matrix for normal (inv transpose of matrix_m)
@@ -12,7 +12,7 @@ uniform mat4  matrix_v;         // view xform matrix
 uniform mat3  matrix_vn;        // view xform matrix for normal
 uniform mat4  matrix_p;         // projection matrix
 
-uniform int mirror_view;      // 0=none; 1=draw edge at plane; 2=color faces on far side of plane
+uniform int   mirror_view;      // 0=none; 1=draw edge at plane; 2=color faces on far side of plane
 uniform float mirror_effect;    // strength of effect: 0=none, 1=full
 uniform bvec3 mirroring;        // mirror along axis: 0=false, 1=true
 uniform vec3  mirror_o;         // mirroring origin wrt world
@@ -23,7 +23,7 @@ uniform vec3  mirror_z;         // mirroring z-axis wrt world
 uniform float hidden;           // affects alpha for geometry below surface. 0=opaque, 1=transparent
 uniform vec3  vert_scale;       // used for mirroring
 uniform float normal_offset;    // how far to push geometry along normal
-uniform bool constrain_offset; // should constrain offset by focus
+uniform bool constrain_offset;  // should constrain offset by focus
 
 uniform vec3  dir_forward;      // forward direction
 
@@ -37,7 +37,7 @@ uniform float focus_mult;
 uniform float offset;
 uniform float dotoffset;
 
-uniform float cull_backfaces;   // 0=no, 1=yes
+uniform bool  cull_backfaces;
 uniform float alpha_backface;
 
 
@@ -214,7 +214,7 @@ void main() {
         float l_clip = (l - clip_start) / clip;
         float d = -dot(vCNormal, v) / l;
         if(d <= 0.0) {
-            if(cull_backfaces > 0.5) {
+            if(cull_backfaces) {
                 alpha = 0.0;
                 discard;
             } else {
@@ -239,7 +239,7 @@ void main() {
         float l_clip = (l - clip_start) / clip;
         float d = dot(vCNormal, v) / l;
         if(d <= 0.0) {
-            if(cull_backfaces > 0.5) {
+            if(cull_backfaces) {
                 alpha = 0.0;
                 discard;
             } else {
