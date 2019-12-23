@@ -130,7 +130,8 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-out vec4 outColor;
+//out vec4 outColor;
+layout(location = 0) out vec4 outColor;
 
 vec3 xyz(vec4 v) { return v.xyz / v.w; }
 
