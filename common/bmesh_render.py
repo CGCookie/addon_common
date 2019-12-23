@@ -160,7 +160,9 @@ def glSetOptions(prefix, opts):
 
     def set_if_set(opt, cb):
         opt = '%s%s' % (prefix, opt)
-        if opt in opts: cb(opts[opt])
+        if opt not in opts: return
+        cb(opts[opt])
+        glCheckError('setting %s to %s' % (str(opt), str(opts[opt])))
     dpi_mult = opts.get('dpi mult', 1.0)
     set_if_set('offset',         lambda v: bmeshShader.assign('offset', v))
     set_if_set('dotoffset',      lambda v: bmeshShader.assign('dotoffset', v))
