@@ -29,15 +29,17 @@ from .debug import dprint
 
 from ..ext.bgl_ext import VoidBufValue
 
-# note: not all supported by user system, but we don't need latest functionality
-# https://github.com/mattdesl/lwjgl-basics/wiki/GLSL-Versions
-# OpenGL  GLSL    OpenGL  GLSL
-#  2.0    110      2.1    120
-#  3.0    130      3.1    140
-#  3.2    150      3.3    330
-#  4.0    400      4.1    410
-#  4.2    420      4.3    430
-dprint('GLSL Version: ' + bgl.glGetString(bgl.GL_SHADING_LANGUAGE_VERSION))
+# note: not all supported by user system, but we don't need full functionality
+# https://en.wikipedia.org/wiki/OpenGL_Shading_Language#Versions
+#     OpenGL  GLSL    OpenGL  GLSL
+#      2.0    110      4.0    400
+#      2.1    120      4.1    410
+#      3.0    130      4.2    420
+#      3.1    140      4.3    430
+#      3.2    150      4.4    440
+#      3.3    330      4.5    450
+#                      4.6    460
+print('(shaders) GLSL Version:', bgl.glGetString(bgl.GL_SHADING_LANGUAGE_VERSION))
 
 DEBUG_PRINT = False
 
