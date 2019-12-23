@@ -163,15 +163,25 @@ def glSetOptions(prefix, opts):
         if opt not in opts: return
         cb(opts[opt])
         glCheckError('setting %s to %s' % (str(opt), str(opts[opt])))
-    dpi_mult = opts.get('dpi mult', 1.0)
+    def set_linewidth(v):
+        dpi_mult = opts.get('dpi mult', 1.0)
+        bgl.glLineWidth(v*dpi_mult)
+        glCheckError('setting line width to %s' % (str(v*dpi_mult)))
+    def set_pointsize(v):
+        dpi_mult = opts.get('dpi mult', 1.0)
+        bgl.glPointSize(v*dpi_mult)
+        glCheckError('setting point size to %s' % (str(v*dpi_mult)))
+    def set_stipple(v):
+        glEnableStipple(v)
+        glCheckError('setting stipple to %s' % (str(v)))
     set_if_set('offset',         lambda v: bmeshShader.assign('offset', v))
     set_if_set('dotoffset',      lambda v: bmeshShader.assign('dotoffset', v))
     set_if_set('color',          lambda v: bmeshShader.assign('color', v))
     set_if_set('color selected', lambda v: bmeshShader.assign('color_selected', v))
     set_if_set('hidden',         lambda v: bmeshShader.assign('hidden', v))
-    set_if_set('width',          lambda v: bgl.glLineWidth(v*dpi_mult))
-    set_if_set('size',           lambda v: bgl.glPointSize(v*dpi_mult))
-    set_if_set('stipple',        lambda v: glEnableStipple(v))
+    set_if_set('width',          set_linewidth)
+    set_if_set('size',           set_pointsize)
+    set_if_set('stipple',        set_stipple)
 
 
 def glSetMirror(symmetry=None, view=None, effect=0.0, frame: Frame=None):
