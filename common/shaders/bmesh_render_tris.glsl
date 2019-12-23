@@ -201,7 +201,10 @@ void main() {
     vec3  rgb   = vColor.rgb;
     float alpha = vColor.a;
 
-    if(use_rounding && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) discard;
+    if(use_rounding && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) {
+        discard;
+        return;
+    }
 
     if(perspective) {
         // perspective projection
