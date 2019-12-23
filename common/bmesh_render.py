@@ -92,10 +92,10 @@ def glCheckError(title):
         bgl.GL_INVALID_ENUM: 'invalid enum',
         bgl.GL_INVALID_VALUE: 'invalid value',
         bgl.GL_INVALID_OPERATION: 'invalid operation',
-        bgl.GL_STACK_OVERFLOW: 'stack overflow',
-        bgl.GL_STACK_UNDERFLOW: 'stack underflow',
-        bgl.GL_OUT_OF_MEMORY: 'out of memory',
         bgl.GL_INVALID_FRAMEBUFFER_OPERATION: 'invalid framebuffer operation',
+        bgl.GL_OUT_OF_MEMORY: 'out of memory',
+        #bgl.GL_STACK_OVERFLOW: 'stack overflow',
+        #bgl.GL_STACK_UNDERFLOW: 'stack underflow',
     }
     if err in derrs:
         print('ERROR (%s): %s' % (title, derrs[err]))
