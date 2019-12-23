@@ -1,8 +1,8 @@
 uniform vec4  color;            // color of geometry if not selected
 uniform vec4  color_selected;   // color of geometry if selected
-uniform float use_selection;    // 0.0: ignore selected, 1.0: consider selected
 
-uniform float use_rounding;     // 0.0: draw normally; 1.0: rounding (for points)
+uniform bool use_selection;    // false: ignore selected, true: consider selected
+uniform bool use_rounding;     // false: draw normally; true: rounding (for points)
 
 uniform mat4  matrix_m;         // model xform matrix
 uniform mat3  matrix_mn;        // model xform matrix for normal (inv transpose of matrix_m)
@@ -12,9 +12,9 @@ uniform mat4  matrix_v;         // view xform matrix
 uniform mat3  matrix_vn;        // view xform matrix for normal
 uniform mat4  matrix_p;         // projection matrix
 
-uniform float mirror_view;      // 0=none; 1=draw edge at plane; 2=color faces on far side of plane
+uniform int mirror_view;      // 0=none; 1=draw edge at plane; 2=color faces on far side of plane
 uniform float mirror_effect;    // strength of effect: 0=none, 1=full
-uniform vec3  mirroring;        // mirror along axis: 0=false, 1=true
+uniform bvec3 mirroring;        // mirror along axis: 0=false, 1=true
 uniform vec3  mirror_o;         // mirroring origin wrt world
 uniform vec3  mirror_x;         // mirroring x-axis wrt world
 uniform vec3  mirror_y;         // mirroring y-axis wrt world
@@ -23,11 +23,11 @@ uniform vec3  mirror_z;         // mirroring z-axis wrt world
 uniform float hidden;           // affects alpha for geometry below surface. 0=opaque, 1=transparent
 uniform vec3  vert_scale;       // used for mirroring
 uniform float normal_offset;    // how far to push geometry along normal
-uniform float constrain_offset; // should constrain offset by focus
+uniform bool constrain_offset; // should constrain offset by focus
 
 uniform vec3  dir_forward;      // forward direction
 
-uniform float perspective;
+uniform bool perspective;
 uniform float clip_start;
 uniform float clip_end;
 uniform float view_distance;
@@ -73,11 +73,9 @@ varying vec4 vColor;            // color of geometry (considers selection)
 
 #version 330
 
-bool floatnear(float v, float n) { return abs(v-n) < 0.5; }
-
 vec4 get_pos(void) {
     float mult = 1.0;
-    if(floatnear(constrain_offset, 0.0)) {
+    if(constrain_offset) {
         mult = 1.0;
     } else {
         float clip_dist  = clip_end - clip_start;
@@ -123,7 +121,7 @@ void main() {
 
     gl_Position = vPPosition;
 
-    vColor = (use_selection < 0.5 || selected < 0.5) ? color : color_selected;
+    vColor = (!use_selection || selected < 0.5) ? color : color_selected;
     vColor.a *= 1.0 - hidden;
 }
 
@@ -138,18 +136,16 @@ out vec4 outColor;
 
 vec3 xyz(vec4 v) { return v.xyz / v.w; }
 
-bool floatnear(float v, float n) { return abs(v-n) < 0.5; }
-
 // adjusts color based on mirroring settings and fragment position
 vec4 coloring(vec4 orig) {
     vec4 mixer = vec4(0.6, 0.6, 0.6, 0.0);
-    if(floatnear(mirror_view, 0.0)) {
+    if(mirror_view == 0) {
         // NO SYMMETRY VIEW
-    } else if(floatnear(mirror_view, 1.0)) {
+    } else if(mirror_view == 1) {
         // EDGE VIEW
         float edge_width = 5.0 / screen_size.y;
         vec3 viewdir;
-        if(floatnear(perspective, 1.0)) {
+        if(perspective) {
             viewdir = normalize(xyz(vCPosition));
         } else {
             viewdir = vec3(0,0,1);
@@ -165,32 +161,32 @@ vec4 coloring(vec4 orig) {
         vec3 diffp_z = xyz(vPTPosition_z) - xyz(vPPosition);
         vec3 aspect = vec3(1.0, screen_size.y / screen_size.x, 0.0);
 
-        if(floatnear(mirroring.x, 1.0) && length(diffp_x * aspect) < edge_width * (1.0 - pow(abs(dot(viewdir,dirc_x)), 10.0))) {
+        if(mirroring.x && length(diffp_x * aspect) < edge_width * (1.0 - pow(abs(dot(viewdir,dirc_x)), 10.0))) {
             float s = (vTPosition.x < 0.0) ? 1.0 : 0.1;
             mixer.r = 1.0;
             mixer.a = mirror_effect * s + mixer.a * (1.0 - s);
         }
-        if(floatnear(mirroring.y, 1.0) && length(diffp_y * aspect) < edge_width * (1.0 - pow(abs(dot(viewdir,dirc_y)), 10.0))) {
+        if(mirroring.y && length(diffp_y * aspect) < edge_width * (1.0 - pow(abs(dot(viewdir,dirc_y)), 10.0))) {
             float s = (vTPosition.y > 0.0) ? 1.0 : 0.1;
             mixer.g = 1.0;
             mixer.a = mirror_effect * s + mixer.a * (1.0 - s);
         }
-        if(floatnear(mirroring.z, 1.0) && length(diffp_z * aspect) < edge_width * (1.0 - pow(abs(dot(viewdir,dirc_z)), 10.0))) {
+        if(mirroring.z && length(diffp_z * aspect) < edge_width * (1.0 - pow(abs(dot(viewdir,dirc_z)), 10.0))) {
             float s = (vTPosition.z < 0.0) ? 1.0 : 0.1;
             mixer.b = 1.0;
             mixer.a = mirror_effect * s + mixer.a * (1.0 - s);
         }
-    } else if(floatnear(mirror_view, 2.0)) {
+    } else if(mirror_view == 2) {
         // FACE VIEW
-        if(floatnear(mirroring.x, 1.0) && vTPosition.x < 0.0) {
+        if(mirroring.x && vTPosition.x < 0.0) {
             mixer.r = 1.0;
             mixer.a = mirror_effect;
         }
-        if(floatnear(mirroring.y, 1.0) && vTPosition.y > 0.0) {
+        if(mirroring.y && vTPosition.y > 0.0) {
             mixer.g = 1.0;
             mixer.a = mirror_effect;
         }
-        if(floatnear(mirroring.z, 1.0) && vTPosition.z < 0.0) {
+        if(mirroring.z && vTPosition.z < 0.0) {
             mixer.b = 1.0;
             mixer.a = mirror_effect;
         }
@@ -209,9 +205,9 @@ void main() {
     //gl_FragDepth = gl_FragCoord.z * 0.9999;
     //return;
 
-    if(use_rounding > 0.5 && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) discard;
+    if(use_rounding && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) discard;
 
-    if(floatnear(perspective, 1.0)) {
+    if(perspective) {
         // perspective projection
         vec3 v = vCPosition.xyz / vCPosition.w;
         float l = length(v);

@@ -297,8 +297,8 @@ class BufferedRender_Batch:
         shader.bind()
 
         nosel = opts.get('no selection', False)
-        shader.uniform_float('use_selection',    0.0 if nosel else 1.0)
-        shader.uniform_float('use_rounding',     1.0 if self.gltype == bgl.GL_POINTS else 0.0)
+        shader.uniform_bool('use_selection', [not nosel]) # must be a sequence!?
+        shader.uniform_bool('use_rounding',  [self.gltype == bgl.GL_POINTS]) # must be a sequence!?
 
         shader.uniform_float('matrix_m',    opts['matrix model'])
         shader.uniform_float('matrix_mn',   opts['matrix normal'])
@@ -314,26 +314,26 @@ class BufferedRender_Batch:
         symmetry_frame = opts.get('symmetry frame', None)
         symmetry_view = opts.get('symmetry view', None)
         symmetry_effect = opts.get('symmetry effect', 0.0)
-        mirroring = (0, 0, 0)
+        mirroring = (False, False, False)
         if symmetry and symmetry_frame:
-            mx = 1.0 if 'x' in symmetry else 0.0
-            my = 1.0 if 'y' in symmetry else 0.0
-            mz = 1.0 if 'z' in symmetry else 0.0
+            mx = 'x' in symmetry
+            my = 'y' in symmetry
+            mz = 'z' in symmetry
             mirroring = (mx, my, mz)
             # shader.uniform_float('mirror_o', symmetry_frame.o)
             #shader.uniform_float('mirror_x', symmetry_frame.x)
             #shader.uniform_float('mirror_y', symmetry_frame.y)
             #shader.uniform_float('mirror_z', symmetry_frame.z)
-        shader.uniform_float('mirror_view', {'Edge': 1, 'Face': 2}.get(symmetry_view, 0))
+        shader.uniform_int('mirror_view', [{'Edge': 1, 'Face': 2}.get(symmetry_view, 0)])
         shader.uniform_float('mirror_effect', symmetry_effect)
-        shader.uniform_float('mirroring', mirroring)
+        shader.uniform_bool('mirroring', mirroring)
 
         shader.uniform_float('normal_offset',    opts.get('normal offset', 0.0))
-        shader.uniform_float('constrain_offset', 1.0 if opts.get('constrain offset', True) else 0.0)
+        shader.uniform_bool('constrain_offset', [opts.get('constrain offset', True)]) # must be a sequence!?
 
         ctx = bpy.context
         area, spc, r3d = ctx.area, ctx.space_data, ctx.space_data.region_3d
-        shader.uniform_float('perspective', 1.0 if r3d.view_perspective != 'ORTHO' else 0.0)
+        shader.uniform_bool('perspective', [r3d.view_perspective != 'ORTHO']) # must be a sequence!?
         shader.uniform_float('clip_start', spc.clip_start)
         shader.uniform_float('clip_end', spc.clip_end)
         shader.uniform_float('view_distance', r3d.view_distance)
