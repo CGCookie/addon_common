@@ -1,5 +1,7 @@
 #version 330
 
+uniform bool  use_coloring;
+
 uniform vec4  color;            // color of geometry if not selected
 uniform vec4  color_selected;   // color of geometry if selected
 
@@ -130,7 +132,6 @@ void main() {
 /////////////////////////////////////////////////////////////////////////
 // fragment shader
 
-//out vec4 outColor;
 layout(location = 0) out vec4 outColor;
 
 vec3 xyz(vec4 v) { return v.xyz / v.w; }
@@ -252,5 +253,9 @@ void main() {
 
     alpha *= pow(max(vCNormal.z, 0.01), 0.25);
 
-    outColor = coloring(vec4(rgb, alpha));
+    if(use_coloring) {
+        outColor = coloring(vec4(rgb, alpha));
+    } else {
+        outColor = vec4(rgb, alpha);
+    }
 }
