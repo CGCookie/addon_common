@@ -26,7 +26,8 @@ uniform vec4  border_bottom_color;
 
 uniform vec4  background_color;
 
-uniform float using_image;
+uniform int       using_image;
+uniform int       image_fit;
 uniform sampler2D image;
 
 attribute vec2 pos;
@@ -162,13 +163,88 @@ int get_region() {
 
 vec4 mix_image(vec4 bg) {
     vec4 c = bg;
-    float w = width  - (margin_left + border_width + padding_left + padding_right  + border_width + margin_right);
-    float h = height - (margin_top  + border_width + padding_top  + padding_bottom + border_width + margin_bottom);
-    float tx = screen_pos.x - (left + (margin_left + border_width + padding_left));
-    float ty = screen_pos.y - (top  - (margin_top  + border_width + padding_top));
-    vec2 texcoord = vec2(tx / (w), -ty / (h));
-    if((0 <= texcoord.x && texcoord.x < 1) && (0 <= texcoord.y && texcoord.y < 1)) {
-        vec4 t = texture(image, texcoord);
+    // drawing space
+    float dw = width  - (margin_left + border_width + padding_left + padding_right  + border_width + margin_right);
+    float dh = height - (margin_top  + border_width + padding_top  + padding_bottom + border_width + margin_bottom);
+    float dx = screen_pos.x - (left + (margin_left + border_width + padding_left));
+    float dy = -(screen_pos.y - (top  - (margin_top  + border_width + padding_top)));
+    float dsx = dx / dw;
+    float dsy = dy / dh;
+    // texture
+    vec2 tsz = textureSize(image, 0);
+    float tw = tsz.x, th = tsz.y;
+    float tx, ty;
+    vec4 debug_color = vec4(0,0,0,0);
+    switch(image_fit) {
+        case 0:
+            // object-fit: fill = stretch / squash to fill entire drawing space (non-uniform scale)
+            // do nothing here
+            tx = tw * dx / dw;
+            ty = th * dy / dh;
+            break;
+        case 1: {
+            // object-fit: contain = uniformly scale texture to fit entirely in drawing space (will be letterboxed)
+            // find smaller scaled dimension, and use that
+            float _tw, _th;
+            if(dw / dh < tw / th) {
+                // scaling by height is too big, so scale by width
+                _tw = tw;
+                _th = tw * dh / dw;
+            } else {
+                _tw = th * dw / dh;
+                _th = th;
+            }
+            tx = dsx * _tw - (_tw - tw) / 2.0;
+            ty = dsy * _th - (_th - th) / 2.0;
+            break; }
+        case 2: {
+            // object-fit: cover = uniformly scale texture to fill entire drawing space (will be cropped)
+            // find larger scaled dimension, and use that
+            float _tw, _th;
+            if(dw / dh > tw / th) {
+                // scaling by height is too big, so scale by width
+                _tw = tw;
+                _th = tw * dh / dw;
+            } else {
+                _tw = th * dw / dh;
+                _th = th;
+            }
+            tx = dsx * _tw - (_tw - tw) / 2.0;
+            ty = dsy * _th - (_th - th) / 2.0;
+            break; }
+        case 3:
+            // object-fit: scale-down = either none or contain, whichever is smaller
+            if(dw >= tw && dh >= th) {
+                // none
+                tx = dx + (tw - dw) / 2.0;
+                ty = dy + (th - dh) / 2.0;
+            } else {
+                float _tw, _th;
+                if(dw / dh < tw / th) {
+                    // scaling by height is too big, so scale by width
+                    _tw = tw;
+                    _th = tw * dh / dw;
+                } else {
+                    _tw = th * dw / dh;
+                    _th = th;
+                }
+                tx = dsx * _tw - (_tw - tw) / 2.0;
+                ty = dsy * _th - (_th - th) / 2.0;
+            }
+            break;
+        case 4:
+            // object-fit: none (no resizing)
+            tx = dx + (tw - dw) / 2.0;
+            ty = dy + (th - dh) / 2.0;
+            break;
+        default: // error!
+            tx = tw / 2.0;
+            ty = th / 2.0;
+            break;
+    }
+    vec2 texcoord = vec2(tx / tw, ty / th);
+    if(0 <= texcoord.x && texcoord.x < 1 && 0 <= texcoord.y && texcoord.y < 1) {
+        vec4 t = texture(image, texcoord) + debug_color;
         float a = t.a + c.a * (1.0 - t.a);
         c = vec4((t.rgb * t.a + c.rgb * c.a * (1.0 - t.a)) / a, a);
 
@@ -220,6 +296,6 @@ void main() {
     else if(region == REGION_BACKGROUND)       c = background_color;
     else if(region == REGION_ERROR)            c = vec4(1,0,0,1);  // should never hit here
     else                                       c = vec4(1,0,1,1);  // should really never hit here
-    if(using_image > 0.5) c = mix_image(c);
+    if(using_image > 0) c = mix_image(c);
     outColor = c;
 }

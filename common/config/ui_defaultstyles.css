@@ -130,6 +130,8 @@ br {
 }
 
 img {
+    /*max-width: 100%;*/
+    object-fit: contain;
     border-width: 1px;
     border-color: rgba(0,0,0,0.25);
     background-color: hsla(200, 100%, 62.5%, 0.0); /* rgba(255,0,0,0); */

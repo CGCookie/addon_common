@@ -228,7 +228,7 @@ class UI_Draw:
             shader.bind()
             shader.uniform_float("uMVPMatrix", get_pixel_matrix())
 
-        def draw(left, top, width, height, dpi_mult, style, texture_id, background_override):
+        def draw(left, top, width, height, dpi_mult, style, texture_id, texture_fit, background_override):
             nonlocal shader, batch
             def get_v(style_key):
                 v = style[style_key]
@@ -259,12 +259,13 @@ class UI_Draw:
                 shader.uniform_float('background_color',    background_override)
             else:
                 shader.uniform_float('background_color',    get_v('background-color'))
+            shader.uniform_int('image_fit', texture_fit)
             if texture_id == -1:
-                shader.uniform_float('using_image', 0)
+                shader.uniform_int('using_image', 0)
             else:
                 bgl.glActiveTexture(bgl.GL_TEXTURE0)
                 bgl.glBindTexture(bgl.GL_TEXTURE_2D, texture_id)
-                shader.uniform_float('using_image', 1)
+                shader.uniform_int('using_image', 1)
                 shader.uniform_int('image', 0)
             batch.draw(shader)
 
@@ -287,8 +288,17 @@ class UI_Draw:
         ''' only need to call once every redraw '''
         UI_Draw._update()
 
-    def draw(self, left, top, width, height, dpi_mult, style, texture_id=-1, background_override=None):
-        UI_Draw._draw(left, top, width, height, dpi_mult, style, texture_id, background_override)
+    texture_fit_map = {
+        'fill':       0, # default.  stretch/squash to fill entire container
+        'contain':    1, # scaled to maintain aspect ratio, fit within container
+        'cover':      2, # scaled to maintain aspect ratio, fill entire container
+        'scale-down': 3, # same as none or contain, whichever is smaller
+        'none':       4, # not resized
+    }
+    def draw(self, left, top, width, height, dpi_mult, style, texture_id=-1, texture_fit='fill', background_override=None):
+        texture_fit = self.texture_fit_map.get(texture_fit, 0)
+        #if texture_id != -1: print('texture_fit', texture_fit)
+        UI_Draw._draw(left, top, width, height, dpi_mult, style, texture_id, texture_fit, background_override)
 
 
 ui_draw = Globals.set(UI_Draw())
@@ -2417,7 +2427,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         with ScissorStack.wrap(self._l, self._t, self._w, self._h, msg=str(self)):
             pr = profiler.start('drawing mbp')
             texture_id = self._image_data['texid'] if self._src == 'image' else -1
-            ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, texture_id, background_override=background_override)
+            texture_fit = self._computed_styles.get('object-fit', 'fill')
+            ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, texture_id, texture_fit, background_override=background_override)
             pr.done()
 
             pr1 = profiler.start('drawing children')
