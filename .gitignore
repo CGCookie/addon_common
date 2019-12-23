@@ -102,3 +102,7 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# addon updater temp folder
+common/updater_tmp/*
+!common/updater_tmp/.gitignore

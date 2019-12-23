@@ -51,6 +51,7 @@ DEFAULT_PER_PAGE = 30
 # The main class
 # -----------------------------------------------------------------------------
 
+
 class Singleton_updater(object):
     """
     This is the singleton class to reference a copy from,
@@ -108,11 +109,10 @@ class Singleton_updater(object):
         self.skip_tag = None
 
         # get from module data
-        self._addon = __package__.lower()
-        self._addon_package = __package__  # must not change
-        self._updater_path = os.path.join(os.path.dirname(__file__),
-                                        self._addon+"_updater")
-        self._addon_root = os.path.dirname(__file__)
+        self._addon = __package__.split('.')[0].lower()
+        self._addon_package = __package__.split('.')[0]  # must be set to addon's package!
+        self._updater_path = os.path.join(os.path.dirname(__file__), 'updater_tmp')
+        self._addon_root = os.path.join('..', '..', os.path.dirname(__file__))
         self._json = {}
         self._error = None
         self._error_msg = None
@@ -143,6 +143,13 @@ class Singleton_updater(object):
     @addon.setter
     def addon(self, value):
         self._addon = str(value)
+
+    @property
+    def addon_package(self):
+        return self._addon_package
+    @addon_package.setter
+    def addon_package(self, value):
+        self._addon_package = value
 
     @property
     def api_url(self):
