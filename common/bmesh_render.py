@@ -504,6 +504,7 @@ class BGLBufferedRender:
         bmeshShader.assign('alpha_backface', opts.get('alpha backface', 0.5))
         bmeshShader.assign('normal_offset', opts.get('normal offset', 0.0))
         bmeshShader.assign('constrain_offset', 1.0 if opts.get('constrain offset', True) else 0.0)
+        bmeshShader.assign('use_rounding', 1.0 if self.gltype == bgl.GL_POINTS else 0.0)
 
         bmeshShader.vertexAttribPointer(self.vbo_pos,  'vert_pos',  3, bgl.GL_FLOAT)
         self._check_error('draw: vertex attrib array pos')

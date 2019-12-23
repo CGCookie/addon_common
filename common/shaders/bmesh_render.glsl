@@ -2,6 +2,8 @@ uniform vec4  color;            // color of geometry if not selected
 uniform vec4  color_selected;   // color of geometry if selected
 uniform float use_selection;    // 0.0: ignore selected, 1.0: consider selected
 
+uniform float use_rounding;     // 0.0: draw normally; 1.0: rounding (for points)
+
 uniform mat4  matrix_m;         // model xform matrix
 uniform mat3  matrix_mn;        // model xform matrix for normal (inv transpose of matrix_m)
 uniform mat4  matrix_t;         // target xform matrix
@@ -206,6 +208,8 @@ void main() {
     //gl_FragColor = coloring(vColor);
     //gl_FragDepth = gl_FragCoord.z * 0.9999;
     //return;
+
+    if(use_rounding > 0.5 && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) discard;
 
     if(floatnear(perspective, 1.0)) {
         // perspective projection
