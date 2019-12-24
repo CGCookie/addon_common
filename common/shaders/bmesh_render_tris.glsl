@@ -215,7 +215,7 @@ void main() {
 
     if(perspective) {
         // perspective projection
-        vec3 v = vCPosition.xyz / vCPosition.w;
+        vec3 v = xyz(vCPosition);
         float l = length(v);
         float l_clip = (l - clip_start) / clip;
         float d = -dot(vCNormal, v) / l;
