@@ -206,6 +206,12 @@ void main() {
         return;
     }
 
+    if(!use_coloring) {
+        alpha *= pow(max(vCNormal.z, 0.01), 0.25);
+        outColor = vec4(rgb, alpha);
+        return;
+    }
+
     if(perspective) {
         // perspective projection
         vec3 v = vCPosition.xyz / vCPosition.w;
@@ -216,6 +222,7 @@ void main() {
             if(cull_backfaces) {
                 alpha = 0.0;
                 discard;
+                return;
             } else {
                 alpha *= alpha_backface;
             }
@@ -241,6 +248,7 @@ void main() {
             if(cull_backfaces) {
                 alpha = 0.0;
                 discard;
+                return;
             } else {
                 alpha *= alpha_backface;
             }
@@ -255,10 +263,5 @@ void main() {
     }
 
     alpha *= pow(max(vCNormal.z, 0.01), 0.25);
-
-    if(use_coloring) {
-        outColor = coloring(vec4(rgb, alpha));
-    } else {
-        outColor = vec4(rgb, alpha);
-    }
+    outColor = coloring(vec4(rgb, alpha));
 }

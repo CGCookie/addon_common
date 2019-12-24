@@ -297,7 +297,7 @@ class BufferedRender_Batch:
         shader.bind()
 
         # set defaults
-        shader.uniform_bool('use_coloring', [True])
+        shader.uniform_bool('use_coloring', [False])
         shader.uniform_float('color', (1,1,1,0.5))
         shader.uniform_float('color_selected', (0.5,1,0.5,0.5))
         shader.uniform_float('hidden', 0.9)
