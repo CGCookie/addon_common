@@ -307,7 +307,7 @@ class BufferedRender_Batch:
 
         nosel = opts.get('no selection', False)
         shader.uniform_bool('use_selection', [not nosel]) # must be a sequence!?
-        shader.uniform_bool('use_rounding',  [self.gltype == bgl.GL_POINTS]) # must be a sequence!?
+        # shader.uniform_bool('use_rounding',  [self.gltype == bgl.GL_POINTS]) # must be a sequence!?
 
         shader.uniform_float('matrix_m',    opts['matrix model'])
         shader.uniform_float('matrix_mn',   opts['matrix normal'])

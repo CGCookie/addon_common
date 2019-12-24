@@ -6,7 +6,7 @@ uniform vec4  color;            // color of geometry if not selected
 uniform vec4  color_selected;   // color of geometry if selected
 
 uniform bool  use_selection;    // false: ignore selected, true: consider selected
-uniform bool  use_rounding;     // false: draw normally; true: rounding (for points)
+//uniform bool  use_rounding;     // false: draw normally; true: rounding (for points)
 
 uniform mat4  matrix_m;         // model xform matrix
 uniform mat3  matrix_mn;        // model xform matrix for normal (inv transpose of matrix_m)
@@ -201,11 +201,10 @@ void main() {
     vec3  rgb   = vColor.rgb;
     float alpha = vColor.a;
 
-    if(use_rounding && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) {
-        alpha *= 1.0;
-        //discard;
-        //return;
-    }
+    // if(use_rounding && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) {
+    //     discard;
+    //     return;
+    // }
 
     if(!use_coloring) {
         alpha *= pow(max(vCNormal.z, 0.01), 0.25);
