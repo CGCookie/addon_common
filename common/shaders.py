@@ -84,9 +84,11 @@ class Shader():
 
     @staticmethod
     def parse_string(string, includeVersion=True):
+        # NOTE: GEOMETRY SHADER NOT FULLY SUPPORTED, YET
+        #       need to find a way to handle in/out
         uniforms, varyings, attributes, consts = [],[],[],[]
-        vertSource, fragSource = [],[]
-        vertVersion, fragVersion = '', ''
+        vertSource, geoSource, fragSource = [],[],[]
+        vertVersion, geoVersion, fragVersion = '','',''
         mode = None
         lines = string.splitlines()
         assert '// vertex shader' in lines, 'could not detect vertex shader'
@@ -103,16 +105,22 @@ class Shader():
             elif line.startswith('#version '):
                 if mode == 'vert':
                     vertVersion = line
+                elif mode == 'geo':
+                    geoVersion = line
                 elif mode == 'frag':
                     fragVersion = line
             elif line == '// vertex shader':
                 mode = 'vert'
+            elif line == '// geometry shader':
+                mode = 'geo'
             elif line == '// fragment shader':
                 mode = 'frag'
             else:
                 if not line.strip(): continue
                 if mode == 'vert':
                     vertSource.append(line)
+                elif mode == 'geo':
+                    geoSource.append(line)
                 elif mode == 'frag':
                     fragSource.append(line)
         v_attributes = [a.replace('attribute ', 'in ') for a in attributes]

@@ -227,7 +227,7 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 from .shaders import Shader
 
-tri_vs, tri_fs = Shader.parse_file('bmesh_render_tris.glsl', includeVersion=True)
+tri_vs, tri_fs = Shader.parse_file('bmesh_render_tris.glsl', includeVersion=False)
 tri_shader = gpu.types.GPUShader(tri_vs, tri_fs)
 edge_shader = None
 point_shader = None
@@ -318,13 +318,12 @@ class BufferedRender_Batch:
         shader.bind()
 
         # set defaults
-        self.uniform_bool('use_coloring', [True])
-        self.uniform_float('color', (1,1,1,0.5))
+        self.uniform_float('color',          (1,1,1,0.5))
         self.uniform_float('color_selected', (0.5,1,0.5,0.5))
-        self.uniform_float('hidden', 0.9)
-        self.uniform_float('offset', 0)
-        self.uniform_float('dotoffset', 0)
-        self.uniform_float('vert_scale', (1, 1, 1))
+        self.uniform_float('hidden',         0.9)
+        self.uniform_float('offset',         0)
+        self.uniform_float('dotoffset',      0)
+        self.uniform_float('vert_scale',     (1, 1, 1))
 
         nosel = opts.get('no selection', False)
         self.uniform_bool('use_selection', [not nosel]) # must be a sequence!?
