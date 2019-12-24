@@ -83,11 +83,13 @@ class Shader():
         return log
 
     @staticmethod
-    def parse_string(string, includeVersion=True):
+    def parse_string(string, includeVersion=True, constant_overrides=None, define_overrides=None):
         # NOTE: GEOMETRY SHADER NOT FULLY SUPPORTED, YET
         #       need to find a way to handle in/out
+        constant_overrides = constant_overrides or {}
+        define_overrides = define_overrides or {}
         uniforms, varyings, attributes, consts = [],[],[],[]
-        vertSource, geoSource, fragSource = [],[],[]
+        vertSource, geoSource, fragSource, commonSource = [],[],[],[]
         vertVersion, geoVersion, fragVersion = '','',''
         mode = None
         lines = string.splitlines()
@@ -101,6 +103,22 @@ class Shader():
             elif line.startswith('varying '):
                 varyings.append(line)
             elif line.startswith('const '):
+                m = re.match(r'const +(?P<type>bool|int|float) +(?P<var>[a-zA-Z0-9_]+) *= *(?P<val>[^;]+);', line)
+                if m is None:
+                    print('Shader could not match const line:', line)
+                elif m.group('var') in constant_overrides:
+                    line = 'const %s %s = %s' % (m.group('type'), m.group('var'), constant_overrides[m.group('var')])
+                consts.append(line)
+            elif line.startswith('#define '):
+                m0 = re.match(r'#define +(?P<var>[a-zA-Z0-9_]+)$', line)
+                m1 = re.match(r'#define +(?P<var>[a-zA-Z0-9_]+) +(?P<val>.+)$', line)
+                if m0 and m0.group('var') in define_overrides:
+                    if not define_overrides[m0.group('var')]:
+                        line = ''
+                if m1 and m1.group('var') in define_overrides:
+                    line = '#define %s %s' % (m1.group('var'), define_overrides[m1.group('var')])
+                if not m0 and not m1:
+                    print('Shader could not match #define line:', line)
                 consts.append(line)
             elif line.startswith('#version '):
                 if mode == 'vert':
@@ -123,21 +141,23 @@ class Shader():
                     geoSource.append(line)
                 elif mode == 'frag':
                     fragSource.append(line)
+                else:
+                    commonSource.append(line)
         v_attributes = [a.replace('attribute ', 'in ') for a in attributes]
         v_varyings = [v.replace('varying ', 'out ') for v in varyings]
         f_varyings = [v.replace('varying ', 'in ') for v in varyings]
         srcVertex = '\n'.join(
             ([vertVersion] if includeVersion else []) +
-            uniforms + v_attributes + v_varyings + consts + vertSource
+            uniforms + v_attributes + v_varyings + consts + commonSource + vertSource
         )
         srcFragment = '\n'.join(
             ([fragVersion] if includeVersion else []) +
-            uniforms + f_varyings + consts + fragSource
+            uniforms + f_varyings + consts + commonSource + fragSource
         )
         return (srcVertex, srcFragment)
 
     @staticmethod
-    def parse_file(filename, includeVersion=True):
+    def parse_file(filename, includeVersion=True, constant_overrides=None, define_overrides=None):
         filename_guess = os.path.join(os.path.dirname(__file__), 'shaders', filename)
         if os.path.exists(filename):
             pass
@@ -147,7 +167,7 @@ class Shader():
             assert False, "Shader file could not be found: %s" % filename
 
         string = open(filename, 'rt').read()
-        return Shader.parse_string(string, includeVersion=includeVersion)
+        return Shader.parse_string(string, includeVersion=includeVersion, constant_overrides=constant_overrides, define_overrides=define_overrides)
 
     @staticmethod
     def load_from_string(name, string, *args, **kwargs):

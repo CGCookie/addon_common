@@ -80,7 +80,8 @@ class CookieCutter_UI:
         self._cc_blenderui_init()
         self.drawcallbacks.init(self)
         self._ignore_ui_events = False
-        self._area.tag_redraw()
+        # self._area.tag_redraw()
+        tag_redraw_all('CC ui_init', only_tag=False)
 
     @property
     def ignore_ui_events(self):
@@ -116,7 +117,8 @@ class CookieCutter_UI:
         self._handle_preview   = self._space.draw_handler_add(preview,   tuple(), 'WINDOW', 'PRE_VIEW')
         self._handle_postview  = self._space.draw_handler_add(postview,  tuple(), 'WINDOW', 'POST_VIEW')
         self._handle_postpixel = self._space.draw_handler_add(postpixel, tuple(), 'WINDOW', 'POST_PIXEL')
-        self._area.tag_redraw()
+        # self._area.tag_redraw()
+        tag_redraw_all('CC ui_start', only_tag=False)
 
     def _cc_ui_update(self):
         # print('\x1b[2J', end='')

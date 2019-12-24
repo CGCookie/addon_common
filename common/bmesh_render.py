@@ -35,6 +35,7 @@ import os
 import re
 import math
 import ctypes
+import random
 import traceback
 
 import bmesh
@@ -250,7 +251,15 @@ class BufferedRender_Batch:
 
     def buffer(self, pos, norm, sel):
         if self.shader == None: return
-        self.batch = batch_for_shader(self.shader, self.shader_type, {'vert_pos':pos, 'vert_norm':norm, 'selected':sel})
+        data = {
+            'vert_pos': pos,
+            'vert_norm': norm,
+            'selected': sel,
+            'vert_offset': [(0,0) for _ in pos], #[(random.random(), random.random()) for _ in pos],
+            'vert_dir0': [(random.random(), random.random()) for _ in pos],
+            'vert_dir1': [(random.random(), random.random()) for _ in pos],
+        }
+        self.batch = batch_for_shader(self.shader, self.shader_type, data)
         self.count = len(pos)
 
     def set_options(self, prefix, opts):
@@ -324,6 +333,7 @@ class BufferedRender_Batch:
         self.uniform_float('offset',         0)
         self.uniform_float('dotoffset',      0)
         self.uniform_float('vert_scale',     (1, 1, 1))
+        self.uniform_float('radius',         random.random()*10)
 
         nosel = opts.get('no selection', False)
         self.uniform_bool('use_selection', [not nosel]) # must be a sequence!?

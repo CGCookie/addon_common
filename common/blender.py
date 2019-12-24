@@ -232,7 +232,7 @@ def tag_redraw_all(reason, only_tag=True):
 def perform_redraw_all():
     global tagged_redraw_all, tag_reasons
     if not tagged_redraw_all: return
-    if False: print('Redrawing:', tag_reasons)
+    if True: print('Redrawing:', tag_reasons)
     tag_reasons.clear()
     tagged_redraw_all = False
     for wm in bpy.data.window_managers:

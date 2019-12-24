@@ -1,5 +1,3 @@
-const bool USE_ROUNDING = false;
-
 uniform vec4  color;            // color of geometry if not selected
 uniform vec4  color_selected;   // color of geometry if selected
 
@@ -41,8 +39,13 @@ uniform float dotoffset;
 uniform bool  cull_backfaces;
 uniform float alpha_backface;
 
+uniform float radius;
+
 
 attribute vec3  vert_pos;       // position wrt model
+attribute vec2  vert_offset;
+attribute vec2  vert_dir0;
+attribute vec2  vert_dir1;
 attribute vec3  vert_norm;      // normal wrt model
 attribute float selected;       // is vertex selected?  0=no; 1=yes
 
@@ -85,6 +88,8 @@ vec4 get_pos(void) {
 }
 
 void main() {
+    vec4 off = vec4(radius * (vert_dir0 * vert_offset.x + vert_dir1 * vert_offset.y) / screen_size, 0, 0);
+
     vec4 pos  = get_pos();
     vec3 norm = normalize(vert_norm * vert_scale);
 
@@ -100,7 +105,7 @@ void main() {
     vMPosition  = pos;
     vWPosition  = wpos;
     vCPosition  = matrix_v * wpos;
-    vPPosition  = matrix_p * matrix_v * wpos;
+    vPPosition  = matrix_p * matrix_v * wpos + off;
 
     vMNormal    = norm;
     vWNormal    = wnorm;
@@ -113,9 +118,9 @@ void main() {
     vCTPosition_x = matrix_v * vWTPosition_x;
     vCTPosition_y = matrix_v * vWTPosition_y;
     vCTPosition_z = matrix_v * vWTPosition_z;
-    vPTPosition_x = matrix_p * vCTPosition_x;
-    vPTPosition_y = matrix_p * vCTPosition_y;
-    vPTPosition_z = matrix_p * vCTPosition_z;
+    vPTPosition_x = matrix_p * vCTPosition_x + off;
+    vPTPosition_y = matrix_p * vCTPosition_y + off;
+    vPTPosition_z = matrix_p * vCTPosition_z + off;
     vTNormal      = tnorm;
 
     gl_Position = vPPosition;
@@ -198,10 +203,12 @@ void main() {
     vec3  rgb   = vColor.rgb;
     float alpha = vColor.a;
 
-    if(USE_ROUNDING && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) {
+#ifdef USE_ROUNDING
+    if(length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) {
         discard;
         return;
     }
+#endif
 
     if(perspective) {
         // perspective projection
