@@ -202,8 +202,9 @@ void main() {
     float alpha = vColor.a;
 
     if(use_rounding && length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) {
-        discard;
-        return;
+        alpha *= 1.0;
+        //discard;
+        //return;
     }
 
     if(!use_coloring) {
