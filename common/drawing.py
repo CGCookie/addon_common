@@ -93,6 +93,7 @@ class Cursors:
 
     @staticmethod
     def set(cursor):
+        # print('Cursors.set', cursor)
         cursor = Cursors._cursors.get(cursor, 'DEFAULT')
         for wm in bpy.data.window_managers:
             for win in wm.windows:
@@ -1196,7 +1197,8 @@ class DrawCallbacks:
 
     def _call(self, n):
         for fn in self._fns[n]: fn(self.obj)
-    def reset_pre(self): self._called_pre = False
+    def reset_pre(self):
+        self._called_pre = False
     def _pre(self):
         if self._called_pre: return
         self._call('pre')

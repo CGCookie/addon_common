@@ -37,6 +37,7 @@ class CookieCutter_Blender:
         self._screen = self.context.screen
         self._region = self.context.region
         self._rgn3d = self.context.space_data.region_3d
+        self.viewaa_store()
         self.manipulator_store()
         self.panels_store()
         self.overlays_store()
@@ -45,6 +46,7 @@ class CookieCutter_Blender:
         self.overlays_restore()
         self.panels_restore()
         self.manipulator_restore()
+        self.viewaa_restore()
         self.cursor_modal_restore()
         self.header_text_restore()
 
@@ -170,3 +172,10 @@ class CookieCutter_Blender:
     def gizmo_restore(self):       self.manipulator_set(self._manipulator)
     def gizmo_hide(self):          self.manipulator_set(False)
     def gizmo_show(self):          self.manipulator_set(True)
+
+    def viewaa_store(self):         self._viewaa = self.context.preferences.system.viewport_aa
+    def viewaa_restore(self):       self.context.preferences.system.viewport_aa = self._viewaa
+    def viewaa_set(self, v):        self.context.preferences.system.viewport_aa = v
+    def viewaa_simplify(self):
+        if self._viewaa == 'OFF': return
+        self.viewaa_set('FXAA')

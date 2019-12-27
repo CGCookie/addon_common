@@ -80,7 +80,6 @@ class CookieCutter_UI:
         self._cc_blenderui_init()
         self.drawcallbacks.init(self)
         self._ignore_ui_events = False
-        # self._area.tag_redraw()
         tag_redraw_all('CC ui_init', only_tag=False)
 
     @property
@@ -92,16 +91,19 @@ class CookieCutter_UI:
 
     def _cc_ui_start(self):
         def preview():
+            # print('***** preview')
             try: self.drawcallbacks.pre3d()
             except Exception as e:
                 self._handle_exception(e, 'draw pre3d')
                 ScissorStack.end(force=True)
         def postview():
+            # print('***** postview')
             try: self.drawcallbacks.post3d()
             except Exception as e:
                 self._handle_exception(e, 'draw post3d')
                 ScissorStack.end(force=True)
         def postpixel():
+            # print('***** postpixel')
             bgl.glEnable(bgl.GL_MULTISAMPLE)
             bgl.glEnable(bgl.GL_BLEND)
             try: self.drawcallbacks.post2d()
@@ -117,7 +119,6 @@ class CookieCutter_UI:
         self._handle_preview   = self._space.draw_handler_add(preview,   tuple(), 'WINDOW', 'PRE_VIEW')
         self._handle_postview  = self._space.draw_handler_add(postview,  tuple(), 'WINDOW', 'POST_VIEW')
         self._handle_postpixel = self._space.draw_handler_add(postpixel, tuple(), 'WINDOW', 'POST_PIXEL')
-        # self._area.tag_redraw()
         tag_redraw_all('CC ui_start', only_tag=False)
 
     def _cc_ui_update(self):
@@ -140,7 +141,6 @@ class CookieCutter_UI:
         self._space.draw_handler_remove(self._handle_postview,  'WINDOW')
         self._space.draw_handler_remove(self._handle_postpixel, 'WINDOW')
         self.region_restore()
-        #self._area.tag_redraw()
         tag_redraw_all('CC ui_end', only_tag=False)
 
 

@@ -154,8 +154,6 @@ def label(**kwargs):
     return UI_Element(tagName='label', **kwargs)
 
 def input_radio(**kwargs):
-    # TODO: "label" arg should create a label ui_element
-    # TODO: strip input ui_element to only be checkmark!
     helper_argtranslate('label', 'innerText', kwargs)
     kw_label = helper_argsplitter({'innerText'}, kwargs)
     kw_all = helper_argsplitter({'title'}, kwargs)
@@ -182,8 +180,6 @@ def input_radio(**kwargs):
     return ui_proxy
 
 def input_checkbox(**kwargs):
-    # TODO: "label" arg should create a label ui_element
-    # TODO: strip input ui_element to only be checkmark!
     helper_argtranslate('label', 'innerText', kwargs)
     kw_label = helper_argsplitter({'innerText'}, kwargs)
     kw_all = helper_argsplitter({'title'}, kwargs)

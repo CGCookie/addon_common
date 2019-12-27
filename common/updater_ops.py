@@ -21,6 +21,8 @@ import os
 import bpy
 from bpy.app.handlers import persistent
 
+from .blender import tag_redraw_all
+
 # updater import, import safely
 # Prevents popups for users with invalid python installs e.g. missing libraries
 try:
@@ -702,13 +704,7 @@ def post_update_callback(module_name, res=None):
 
 
 def ui_refresh(update_status):
-    print('Updater_Ops UI_REFRESH')
-    # find a way to just re-draw self?
-    # callback intended for trigger by async thread
-    for windowManager in bpy.data.window_managers:
-        for window in windowManager.windows:
-            for area in window.screen.areas:
-                area.tag_redraw()
+    tag_redraw_all('Updater_Ops UI_REFRESH')
 
 
 def check_for_update_background():
