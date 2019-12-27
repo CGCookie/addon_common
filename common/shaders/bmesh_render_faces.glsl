@@ -2,6 +2,7 @@ uniform vec4  color;            // color of geometry if not selected
 uniform vec4  color_selected;   // color of geometry if selected
 
 uniform bool  use_selection;    // false: ignore selected, true: consider selected
+uniform bool  use_rounding;
 
 uniform mat4  matrix_m;         // model xform matrix
 uniform mat3  matrix_mn;        // model xform matrix for normal (inv transpose of matrix_m)
@@ -25,6 +26,7 @@ uniform float normal_offset;    // how far to push geometry along normal
 uniform bool  constrain_offset; // should constrain offset by focus
 
 uniform vec3  dir_forward;      // forward direction
+uniform float unit_scaling_factor;
 
 uniform bool  perspective;
 uniform float clip_start;
@@ -43,21 +45,13 @@ uniform float radius;
 
 
 attribute vec3  vert_pos;       // position wrt model
-attribute vec2  vert_offset;
-attribute vec2  vert_dir0;
-attribute vec2  vert_dir1;
 attribute vec3  vert_norm;      // normal wrt model
 attribute float selected;       // is vertex selected?  0=no; 1=yes
 
 
 varying vec4 vPPosition;        // final position (projected)
 varying vec4 vCPosition;        // position wrt camera
-varying vec4 vWPosition;        // position wrt world
-varying vec4 vMPosition;        // position wrt model
 varying vec4 vTPosition;        // position wrt target
-varying vec4 vWTPosition_x;     // position wrt target world
-varying vec4 vWTPosition_y;     // position wrt target world
-varying vec4 vWTPosition_z;     // position wrt target world
 varying vec4 vCTPosition_x;     // position wrt target camera
 varying vec4 vCTPosition_y;     // position wrt target camera
 varying vec4 vCTPosition_z;     // position wrt target camera
@@ -65,17 +59,13 @@ varying vec4 vPTPosition_x;     // position wrt target projected
 varying vec4 vPTPosition_y;     // position wrt target projected
 varying vec4 vPTPosition_z;     // position wrt target projected
 varying vec3 vCNormal;          // normal wrt camera
-varying vec3 vWNormal;          // normal wrt world
-varying vec3 vMNormal;          // normal wrt model
-varying vec3 vTNormal;          // normal wrt target
 varying vec4 vColor;            // color of geometry (considers selection)
-
 
 
 /////////////////////////////////////////////////////////////////////////
 // vertex shader
 
-vec4 get_pos(void) {
+vec4 get_pos(vec3 p) {
     float mult = 1.0;
     if(constrain_offset) {
         mult = 1.0;
@@ -84,13 +74,17 @@ vec4 get_pos(void) {
         float focus = (view_distance - clip_start) / clip_dist + 0.04;
         mult = focus;
     }
-    return vec4((vert_pos + vert_norm * normal_offset * mult) * vert_scale, 1.0);
+    return vec4((p + vert_norm * normal_offset * mult * unit_scaling_factor) * vert_scale, 1.0);
+}
+
+vec4 xyz(vec4 v) {
+    return vec4(v.xyz / abs(v.w), sign(v.w));
 }
 
 void main() {
-    vec4 off = vec4(radius * (vert_dir0 * vert_offset.x + vert_dir1 * vert_offset.y) / screen_size, 0, 0);
+    //vec4 off = vec4(radius * (vert_dir0 * vert_offset.x + vert_dir1 * vert_offset.y) / screen_size, 0, 0);
 
-    vec4 pos  = get_pos();
+    vec4 pos = get_pos(vert_pos);
     vec3 norm = normalize(vert_norm * vert_scale);
 
     vec4 wpos = matrix_m * pos;
@@ -102,26 +96,18 @@ void main() {
         dot(wnorm, mirror_y),
         dot(wnorm, mirror_z));
 
-    vMPosition  = pos;
-    vWPosition  = wpos;
     vCPosition  = matrix_v * wpos;
-    vPPosition  = matrix_p * matrix_v * wpos + off;
+    vPPosition  = xyz(matrix_p * matrix_v * wpos);
 
-    vMNormal    = norm;
-    vWNormal    = wnorm;
     vCNormal    = normalize(matrix_vn * wnorm);
 
     vTPosition    = tpos;
-    vWTPosition_x = matrix_t * vec4(0.0, tpos.y, tpos.z, 1.0);
-    vWTPosition_y = matrix_t * vec4(tpos.x, 0.0, tpos.z, 1.0);
-    vWTPosition_z = matrix_t * vec4(tpos.x, tpos.y, 0.0, 1.0);
-    vCTPosition_x = matrix_v * vWTPosition_x;
-    vCTPosition_y = matrix_v * vWTPosition_y;
-    vCTPosition_z = matrix_v * vWTPosition_z;
-    vPTPosition_x = matrix_p * vCTPosition_x + off;
-    vPTPosition_y = matrix_p * vCTPosition_y + off;
-    vPTPosition_z = matrix_p * vCTPosition_z + off;
-    vTNormal      = tnorm;
+    vCTPosition_x = matrix_v * matrix_t * vec4(0.0, tpos.y, tpos.z, 1.0);
+    vCTPosition_y = matrix_v * matrix_t * vec4(tpos.x, 0.0, tpos.z, 1.0);
+    vCTPosition_z = matrix_v * matrix_t * vec4(tpos.x, tpos.y, 0.0, 1.0);
+    vPTPosition_x = matrix_p * vCTPosition_x;
+    vPTPosition_y = matrix_p * vCTPosition_y;
+    vPTPosition_z = matrix_p * vCTPosition_z;
 
     gl_Position = vPPosition;
 
@@ -202,13 +188,6 @@ void main() {
     float focus = (view_distance - clip_start) / clip + 0.04;
     vec3  rgb   = vColor.rgb;
     float alpha = vColor.a;
-
-#ifdef USE_ROUNDING
-    if(length(gl_PointCoord - vec2(0.5,0.5)) > 0.5) {
-        discard;
-        return;
-    }
-#endif
 
     if(perspective) {
         // perspective projection

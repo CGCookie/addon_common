@@ -228,38 +228,54 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 from .shaders import Shader
 
-tri_vs, tri_fs = Shader.parse_file('bmesh_render_tris.glsl', includeVersion=False)
-tri_shader = gpu.types.GPUShader(tri_vs, tri_fs)
-edge_shader = None
-point_shader = None
+verts_vs, verts_fs = Shader.parse_file('bmesh_render_verts.glsl', includeVersion=False)
+verts_shader = gpu.types.GPUShader(verts_vs, verts_fs)
+edges_vs, edges_fs = Shader.parse_file('bmesh_render_edges.glsl', includeVersion=False)
+edges_shader = gpu.types.GPUShader(edges_vs, edges_fs)
+faces_vs, faces_fs = Shader.parse_file('bmesh_render_faces.glsl', includeVersion=False)
+faces_shader = gpu.types.GPUShader(faces_vs, faces_fs)
 
 
 class BufferedRender_Batch:
     _quarantine = {}
 
     def __init__(self, gltype):
-        global tri_shader, edge_shader, point_shader
+        global faces_shader, edges_shader, verts_shader
         self.count = 0
         self.gltype = gltype
         self.shader, self.shader_type, self.gltype_name, self.gl_count, self.options_prefix = {
-            bgl.GL_POINTS:    (point_shader, 'POINTS', 'points',    1, 'point'),
-            bgl.GL_LINES:     (edge_shader,  'LINES',  'lines',     2, 'line'),
-            bgl.GL_TRIANGLES: (tri_shader,   'TRIS',   'triangles', 3, 'poly'),
+            bgl.GL_POINTS:    (verts_shader, 'POINTS', 'points',    1, 'point'),
+            bgl.GL_LINES:     (edges_shader, 'LINES',  'lines',     2, 'line'),
+            bgl.GL_TRIANGLES: (faces_shader, 'TRIS',   'triangles', 3, 'poly'),
         }[self.gltype]
         self.batch = None
         self._quarantine.setdefault(self.shader, set())
 
     def buffer(self, pos, norm, sel):
         if self.shader == None: return
-        data = {
-            'vert_pos': pos,
-            'vert_norm': norm,
-            'selected': sel,
-            'vert_offset': [(0,0) for _ in pos], #[(random.random(), random.random()) for _ in pos],
-            'vert_dir0': [(random.random(), random.random()) for _ in pos],
-            'vert_dir1': [(random.random(), random.random()) for _ in pos],
+        if self.shader_type == 'POINTS':
+            data = {
+                'vert_pos':    [p for p in pos  for __ in range(6)],
+                'vert_norm':   [n for n in norm for __ in range(6)],
+                'selected':    [s for s in sel  for __ in range(6)],
+                'vert_offset': [o for _ in pos for o in [(0,0), (1,0), (0,1), (0,1), (1,0), (1,1)]],
+            }
+        elif self.shader_type == 'LINES':
+            data = {
+                'vert_pos0':   [p0 for (p0,p1) in zip(pos[0::2], pos[1::2] ) for __ in range(6)],
+                'vert_pos1':   [p1 for (p0,p1) in zip(pos[0::2], pos[1::2] ) for __ in range(6)],
+                'vert_norm':   [n0 for (n0,n1) in zip(norm[0::2],norm[1::2]) for __ in range(6)],
+                'selected':    [s0 for (s0,s1) in zip(sel[0::2], sel[1::2] ) for __ in range(6)],
+                'vert_offset': [o  for _ in pos[0::2] for o in [(0,0), (0,1), (1,1), (0,0), (1,1), (1,0)]],
         }
-        self.batch = batch_for_shader(self.shader, self.shader_type, data)
+        elif self.shader_type == 'TRIS':
+            data = {
+                'vert_pos':    pos,
+                'vert_norm':   norm,
+                'selected':    sel,
+            }
+        else: assert False, 'BufferedRender_Batch.buffer: Unhandled type: ' + self.shader_type
+        self.batch = batch_for_shader(self.shader, 'TRIS', data) # self.shader_type, data)
         self.count = len(pos)
 
     def set_options(self, prefix, opts):
@@ -285,11 +301,16 @@ class BufferedRender_Batch:
         #     glEnableStipple(v)
         #     glCheckError('setting stipple to %s' % (str(v)))
 
+        dpi_mult = opts.get('dpi mult', 1.0)
         set_if_set('color',          lambda v: self.uniform_float('color', v))
         set_if_set('color selected', lambda v: self.uniform_float('color_selected', v))
         set_if_set('hidden',         lambda v: self.uniform_float('hidden', v))
         set_if_set('offset',         lambda v: self.uniform_float('offset', v))
         set_if_set('dotoffset',      lambda v: self.uniform_float('dotoffset', v))
+        if self.shader_type == 'POINTS':
+            set_if_set('size',       lambda v: self.uniform_float('radius', v*dpi_mult))
+        elif self.shader_type == 'LINES':
+            set_if_set('width',      lambda v: self.uniform_float('radius', v*dpi_mult))
         # set_if_set('width',          set_linewidth)
         # set_if_set('size',           set_pointsize)
         # set_if_set('stipple',        set_stipple)
@@ -333,7 +354,7 @@ class BufferedRender_Batch:
         self.uniform_float('offset',         0)
         self.uniform_float('dotoffset',      0)
         self.uniform_float('vert_scale',     (1, 1, 1))
-        self.uniform_float('radius',         random.random()*10)
+        self.uniform_float('radius',         1) #random.random()*10)
 
         nosel = opts.get('no selection', False)
         self.uniform_bool('use_selection', [not nosel]) # must be a sequence!?
@@ -347,6 +368,7 @@ class BufferedRender_Batch:
         self.uniform_float('matrix_vn',   opts['matrix view normal'])
         self.uniform_float('matrix_p',    opts['matrix projection'])
         self.uniform_float('dir_forward', opts['forward direction'])
+        self.uniform_float('unit_scaling_factor', opts['unit scaling factor'])
 
         mx, my, mz = opts.get('mirror x', False), opts.get('mirror y', False), opts.get('mirror z', False)
         symmetry = opts.get('symmetry', None)

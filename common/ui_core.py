@@ -3042,23 +3042,20 @@ class UI_Document(UI_Document_FSM):
             self._body.dirty('DPI changed', children=True)
             self._body.dirty_styling()
             self._body.dirty_flow()
-
-        ScissorStack.start(context)
-        bgl.glEnable(bgl.GL_BLEND)
-
         if (w,h) != self._last_sz:
             self._last_sz = (w,h)
             self._body._dirty_flow()
             # self._body.dirty('region size changed', 'style', children=True)
+
+        ScissorStack.start(context)
+        bgl.glEnable(bgl.GL_BLEND)
         self._body._clean()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
         self._body._set_view_size(sz)
         self._body._call_postflow()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
         self._body._set_view_size(sz)
-        #print('UI_Document.draw')
         self._body._draw()
-
         ScissorStack.end()
 
 ui_document = Globals.set(UI_Document())

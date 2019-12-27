@@ -122,16 +122,9 @@ class CookieCutter_UI:
         tag_redraw_all('CC ui_start', only_tag=False)
 
     def _cc_ui_update(self):
-        # print('\x1b[2J', end='')
-        # print('\033c', end='')
-        # print('\n' * 2, end='')
-        # print('--------- ' + str(random.random()))
         self.drawing.update_dpi()
-        if self._ignore_ui_events:
-            return False
+        if self._ignore_ui_events: return False
         ret = self.document.update(self.context, self.event)
-        # ret = self.wm.modal(self.context, self.event)
-        #if self.wm.has_focus(): return True
         if ret and 'hover' in ret: return True
         return False
 
