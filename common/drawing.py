@@ -204,7 +204,7 @@ class Drawing:
     @staticmethod
     @blender_version_wrapper('>=','2.80')
     def update_dpi():
-        Drawing._dpi_mult = Drawing._prefs.view.ui_scale * Drawing._prefs.system.pixel_size
+        Drawing._dpi_mult = Drawing._prefs.view.ui_scale #* Drawing._prefs.system.pixel_size
 
     @staticmethod
     def initialize():
