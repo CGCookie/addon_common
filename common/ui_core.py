@@ -2401,7 +2401,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if not self.is_visible: return
 
-        pr1 = profiler.start('initialization')
+        pr1 = profiler.start('_draw initialization')
         self._setup_ltwh()
         if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
             pr1.done()

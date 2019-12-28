@@ -155,9 +155,24 @@ class CookieCutter_Blender:
     def manipulator_set(self, v): self._space.show_manipulator = v
 
     @blender_version_wrapper(">=", "2.80")
-    def manipulator_get(self):    return self._space.show_gizmo
+    def manipulator_get(self):
+        # return self._space.show_gizmo
+        spc = self._space
+        settings = { k:getattr(spc, k) for k in dir(spc) if k.startswith('show_gizmo') }
+        print('manipulator_settings:', settings)
+        return settings
     @blender_version_wrapper(">=", "2.80")
-    def manipulator_set(self, v): self._space.show_gizmo = v
+    def manipulator_set(self, v):
+        # self._space.show_gizmo = v
+        spc = self._space
+        if type(v) is bool:
+            for k in dir(spc):
+                # DO NOT CHANGE `show_gizmo` VALUE
+                if not k.startswith('show_gizmo_'): continue
+                setattr(spc, k, v)
+        else:
+            for k,v_ in v.items():
+                setattr(spc, k, v_)
 
     def overlays_store(self):   self._overlays = self.overlays_get()
     def overlays_restore(self): self.overlays_set(self._overlays)
