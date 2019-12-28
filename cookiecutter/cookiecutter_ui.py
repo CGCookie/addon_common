@@ -169,25 +169,21 @@ class CookieCutter_UI:
     def region_darken(self):
         if hasattr(self, '_region_darkened'): return    # already darkened!
         self._region_darkened = True
+        self._postpixel_callbacks = []
 
-        # darken all spaces except SpaceView3D (handled separately)
-        spaces = [getattr(bpy.types, s) for s in dir(bpy.types) if s.startswith('Space') and s != 'SpaceView3D']
-        spaces = [s for s in spaces if hasattr(s, 'draw_handler_add')]
+        # darken all spaces
+        spaces = [(getattr(bpy.types, n), n) for n in dir(bpy.types) if n.startswith('Space')]
+        spaces = [(s,n) for (s,n) in spaces if hasattr(s, 'draw_handler_add')]
 
         # https://docs.blender.org/api/blender2.8/bpy.types.Region.html#bpy.types.Region.type
         #     ['WINDOW', 'HEADER', 'CHANNELS', 'TEMPORARY', 'UI', 'TOOLS', 'TOOL_PROPS', 'PREVIEW', 'NAVIGATION_BAR', 'EXECUTE']
         # NOTE: b280 has no TOOL_PROPS region for SpaceView3D!
-        areas  = ['WINDOW', 'HEADER', 'CHANNELS', 'TEMPORARY', 'UI', 'TOOLS', 'TOOL_PROPS', 'PREVIEW', 'HUD', 'NAVIGATION_BAR', 'EXECUTE', 'FOOTER', 'TOOL_HEADER'] #['WINDOW', 'HEADER', 'UI', 'TOOLS', 'NAVIGATION_BAR']
+        # handling SpaceView3D differently!
+        general_areas  = ['WINDOW', 'HEADER', 'CHANNELS', 'TEMPORARY', 'UI', 'TOOLS', 'TOOL_PROPS', 'PREVIEW', 'HUD', 'NAVIGATION_BAR', 'EXECUTE', 'FOOTER', 'TOOL_HEADER'] #['WINDOW', 'HEADER', 'UI', 'TOOLS', 'NAVIGATION_BAR']
+        SpaceView3D_areas = ['TOOLS', 'UI', 'HEADER', 'TOOL_PROPS']
 
-        self._postpixel_callbacks = []
-        s = SpaceView3D
-        for a in ['TOOLS', 'UI', 'HEADER', 'TOOL_PROPS']:
-            try:
-                cb = s.draw_handler_add(self._cc_region_draw_cover, tuple(), a, 'POST_PIXEL')
-                self._postpixel_callbacks += [(s, a, cb)]
-            except:
-                pass
-        for s in spaces:
+        for (s,n) in spaces:
+            areas = SpaceView3D_areas if n == 'SpaceView3D' else general_areas
             for a in areas:
                 try:
                     cb = s.draw_handler_add(self._cc_region_draw_cover, tuple(), a, 'POST_PIXEL')
