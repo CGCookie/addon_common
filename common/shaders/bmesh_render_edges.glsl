@@ -99,7 +99,7 @@ void main() {
     vec2 ppos1 = xyz(matrix_p * matrix_v * matrix_m * pos1).xy;
     vec2 pdir0 = normalize(ppos1 - ppos0);
     vec2 pdir1 = vec2(-pdir0.y, pdir0.x);
-    vec4 off = vec4((radius + 4.0) * pdir1 * vert_offset.y / screen_size, 0, 0);
+    vec4 off = vec4((radius + 2.0) * pdir1 * (vert_offset.y-0.5) / screen_size, 0, 0);
 
     vec4 pos = pos0 + vert_offset.x * (pos1 - pos0);
     vec3 norm = normalize(vert_norm * vert_scale);

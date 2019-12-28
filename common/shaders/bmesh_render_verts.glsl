@@ -85,7 +85,7 @@ vec4 xyz(vec4 v) {
 
 void main() {
     vec2 vo = vert_offset * 2 - vec2(1, 1);
-    vec4 off = vec4((radius + 2) * (vec2(1,0) * vo.x + vec2(0,1) * vo.y) / screen_size, 0, 0);
+    vec4 off = vec4((radius + 2) * vo / screen_size, 0, 0);
 
     vec4 pos = get_pos(vert_pos);
     vec3 norm = normalize(vert_norm * vert_scale);
