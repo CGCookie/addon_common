@@ -50,7 +50,7 @@ from mathutils import Vector, Matrix, Quaternion
 from mathutils.bvhtree import BVHTree
 
 from .debug import dprint
-from .shaders import Shader, buf_zero
+from .shaders import Shader
 from .utils import shorten_floats
 from .maths import Point, Direction, Frame, XForm
 from .maths import invert_matrix, matrix_normal

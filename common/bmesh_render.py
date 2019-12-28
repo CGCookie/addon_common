@@ -51,7 +51,7 @@ from mathutils import Vector, Matrix, Quaternion
 from mathutils.bvhtree import BVHTree
 
 from .debug import dprint
-from .shaders import Shader, buf_zero
+from .shaders import Shader
 from .utils import shorten_floats
 from .maths import Point, Direction, Frame, XForm
 from .maths import invert_matrix, matrix_normal
@@ -71,20 +71,6 @@ from .decorators import blender_version_wrapper
 #      3.3    330      4.5    450
 #                      4.6    460
 print('(bmesh_render) GLSL Version:', bgl.glGetString(bgl.GL_SHADING_LANGUAGE_VERSION))
-
-
-def setupBMeshShader(shader):
-    ctx = bpy.context
-    area, spc, r3d = ctx.area, ctx.space_data, ctx.space_data.region_3d
-    shader.assign('perspective', 1.0 if r3d.view_perspective !=
-                  'ORTHO' else 0.0)
-    shader.assign('clip_start', spc.clip_start)
-    shader.assign('clip_end', spc.clip_end)
-    shader.assign('view_distance', r3d.view_distance)
-    shader.assign('vert_scale', Vector((1, 1, 1)))
-    shader.assign('screen_size', Vector((area.width, area.height)))
-
-bmeshShader = Shader.load_from_file('bmeshShader', 'bmesh_render.glsl', funcStart=setupBMeshShader)
 
 
 
@@ -289,17 +275,6 @@ class BufferedRender_Batch:
             if opt not in opts: return
             cb(opts[opt])
             glCheckError('setting %s to %s' % (str(opt), str(opts[opt])))
-        # def set_linewidth(v):
-        #     dpi_mult = opts.get('dpi mult', 1.0)
-        #     #bgl.glLineWidth(v*dpi_mult)
-        #     glCheckError('setting line width to %s' % (str(v*dpi_mult)))
-        # def set_pointsize(v):
-        #     dpi_mult = opts.get('dpi mult', 1.0)
-        #     bgl.glPointSize(v*dpi_mult)
-        #     glCheckError('setting point size to %s' % (str(v*dpi_mult)))
-        # def set_stipple(v):
-        #     glEnableStipple(v)
-        #     glCheckError('setting stipple to %s' % (str(v)))
 
         dpi_mult = opts.get('dpi mult', 1.0)
         set_if_set('color',          lambda v: self.uniform_float('color', v))
@@ -311,9 +286,6 @@ class BufferedRender_Batch:
             set_if_set('size',       lambda v: self.uniform_float('radius', v*dpi_mult))
         elif self.shader_type == 'LINES':
             set_if_set('width',      lambda v: self.uniform_float('radius', v*dpi_mult))
-        # set_if_set('width',          set_linewidth)
-        # set_if_set('size',           set_pointsize)
-        # set_if_set('stipple',        set_stipple)
 
     def _draw(self, sx, sy, sz):
         self.uniform_float('vert_scale', (sx, sy, sz))
@@ -419,185 +391,4 @@ class BufferedRender_Batch:
             if mx and my and mz: self._draw(-1, -1, -1)
 
         gpu.shader.unbind()
-
-
-
-#############################################################################################################
-#############################################################################################################
-#############################################################################################################
-
-
-class BGLBufferedRender:
-    DEBUG_PRINT = False
-
-    def __init__(self, gltype):
-        self.count = 0
-        self.gltype = gltype
-        self.gltype_name, self.gl_count, self.options_prefix = {
-            bgl.GL_POINTS:    ('points',    1, 'point'),
-            bgl.GL_LINES:     ('lines',     2, 'line'),
-            bgl.GL_TRIANGLES: ('triangles', 3, 'poly'),
-        }[self.gltype]
-
-        # self.vao = bgl.Buffer(bgl.GL_INT, 1)
-        # bgl.glGenVertexArrays(1, self.vao)
-        # bgl.glBindVertexArray(self.vao[0])
-
-        self.vbos = bgl.Buffer(bgl.GL_INT, 4)
-        bgl.glGenBuffers(4, self.vbos)
-        self.vbo_pos = self.vbos[0]
-        self.vbo_norm = self.vbos[1]
-        self.vbo_sel = self.vbos[2]
-        self.vbo_idx = self.vbos[3]
-
-        self.render_indices = False
-
-    def __del__(self):
-        bgl.glDeleteBuffers(4, self.vbos)
-        del self.vbos
-
-    @profiler.function
-    def buffer(self, pos, norm, sel, idx):
-        sizeOfFloat, sizeOfInt = 4, 4
-        self.count = 0
-        count = len(pos)
-        counts = list(map(len, [pos, norm, sel]))
-
-        goodcounts = all(c == count for c in counts)
-        assert goodcounts, ('All arrays must contain '
-                            'the same number of elements %s' % str(counts))
-
-        if count == 0:
-            return
-
-        try:
-            buf_pos = bgl.Buffer(bgl.GL_FLOAT, [count, 3], pos)
-            buf_norm = bgl.Buffer(bgl.GL_FLOAT, [count, 3], norm)
-            buf_sel = bgl.Buffer(bgl.GL_FLOAT, count, sel)
-            if idx:
-                # WHY NO GL_UNSIGNED_INT?????
-                buf_idx = bgl.Buffer(bgl.GL_INT, count, idx)
-            if self.DEBUG_PRINT:
-                print('buf_pos  = ' + shorten_floats(str(buf_pos)))
-                print('buf_norm = ' + shorten_floats(str(buf_norm)))
-        except Exception as e:
-            print(
-                'ERROR (buffer): caught exception while '
-                'buffering to Buffer ' + str(e))
-            raise e
-        try:
-            bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, self.vbo_pos)
-            bgl.glBufferData(bgl.GL_ARRAY_BUFFER, count * 3 *
-                             sizeOfFloat, buf_pos,
-                             bgl.GL_STATIC_DRAW)
-            glCheckError('buffer: vbo_pos')
-            bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, self.vbo_norm)
-            bgl.glBufferData(bgl.GL_ARRAY_BUFFER, count * 3 *
-                             sizeOfFloat, buf_norm,
-                             bgl.GL_STATIC_DRAW)
-            glCheckError('buffer: vbo_norm')
-            bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, self.vbo_sel)
-            bgl.glBufferData(bgl.GL_ARRAY_BUFFER, count * 1 *
-                             sizeOfFloat, buf_sel,
-                             bgl.GL_STATIC_DRAW)
-            glCheckError('buffer: vbo_sel')
-            if idx:
-                bgl.glBindBuffer(bgl.GL_ELEMENT_ARRAY_BUFFER, self.vbo_idx)
-                bgl.glBufferData(bgl.GL_ELEMENT_ARRAY_BUFFER,
-                                 count * sizeOfInt, buf_idx,
-                                 bgl.GL_STATIC_DRAW)
-                glCheckError('buffer: vbo_idx')
-        except Exception as e:
-            print(
-                'ERROR (buffer): caught exception while '
-                'buffering from Buffer ' + str(e))
-            raise e
-        finally:
-            bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, 0)
-            bgl.glBindBuffer(bgl.GL_ELEMENT_ARRAY_BUFFER, 0)
-        del buf_pos, buf_norm, buf_sel
-        if idx:
-            del buf_idx
-
-        if idx:
-            self.count = len(idx)
-            self.render_indices = True
-        else:
-            self.count = len(pos)
-            self.render_indices = False
-
-    @profiler.function
-    def _draw(self, sx, sy, sz):
-        bmeshShader.assign('vert_scale', (sx, sy, sz))
-        if self.DEBUG_PRINT:
-            print('==> drawing %d %s (%d)  (%d verts)' % (
-                self.count / self.gl_count,
-                self.gltype_name, self.gltype, self.count))
-        if self.render_indices:
-            bgl.glDrawElements(self.gltype, self.count,
-                               bgl.GL_UNSIGNED_INT, buf_zero)
-            glCheckError('_draw: glDrawElements (%d, %d, %d)' % (
-                self.gltype, self.count, bgl.GL_UNSIGNED_INT))
-        else:
-            bgl.glDrawArrays(self.gltype, 0, self.count)
-            glCheckError('_draw: glDrawArrays (%d)' % self.count)
-
-    @profiler.function
-    def draw(self, opts):
-        if self.count == 0:
-            return
-
-        if self.gltype == bgl.GL_LINES:
-            if opts.get('line width', 1.0) <= 0:
-                return
-        elif self.gltype == bgl.GL_POINTS:
-            if opts.get('point size', 1.0) <= 0:
-                return
-        nosel = opts.get('no selection', False)
-        mx, my, mz = opts.get('mirror x', False), opts.get(
-            'mirror y', False), opts.get('mirror z', False)
-        focus = opts.get('focus mult', 1.0)
-
-        bmeshShader.assign('focus_mult', focus)
-        bmeshShader.assign('use_selection', 0.0 if nosel else 1.0)
-        bmeshShader.assign('cull_backfaces', 1.0 if opts.get('cull backfaces', False) else 0.0)
-        bmeshShader.assign('alpha_backface', opts.get('alpha backface', 0.5))
-        bmeshShader.assign('normal_offset', opts.get('normal offset', 0.0))
-        bmeshShader.assign('constrain_offset', 1.0 if opts.get('constrain offset', True) else 0.0)
-        bmeshShader.assign('use_rounding', 1.0 if self.gltype == bgl.GL_POINTS else 0.0)
-
-        bmeshShader.vertexAttribPointer(self.vbo_pos,  'vert_pos',  3, bgl.GL_FLOAT)
-        glCheckError('draw: vertex attrib array pos')
-        bmeshShader.vertexAttribPointer(self.vbo_norm, 'vert_norm', 3, bgl.GL_FLOAT)
-        glCheckError('draw: vertex attrib array norm')
-        bmeshShader.vertexAttribPointer(self.vbo_sel,  'selected',  1, bgl.GL_FLOAT)
-        glCheckError('draw: vertex attrib array sel')
-        bgl.glBindBuffer(bgl.GL_ELEMENT_ARRAY_BUFFER, self.vbo_idx)
-        glCheckError('draw: element array buffer idx')
-
-        glSetOptions(self.options_prefix, opts)
-        self._draw(1, 1, 1)
-
-        if mx or my or mz:
-            glSetOptions('%s mirror' % self.options_prefix, opts)
-            if mx:
-                self._draw(-1,  1,  1)
-            if my:
-                self._draw(1, -1,  1)
-            if mz:
-                self._draw(1,  1, -1)
-            if mx and my:
-                self._draw(-1, -1,  1)
-            if mx and mz:
-                self._draw(-1,  1, -1)
-            if my and mz:
-                self._draw(1, -1, -1)
-            if mx and my and mz:
-                self._draw(-1, -1, -1)
-
-        bmeshShader.disableVertexAttribArray('vert_pos')
-        bmeshShader.disableVertexAttribArray('vert_norm')
-        bmeshShader.disableVertexAttribArray('selected')
-        bgl.glBindBuffer(bgl.GL_ELEMENT_ARRAY_BUFFER, 0)
-        bgl.glBindBuffer(bgl.GL_ARRAY_BUFFER, 0)
 
