@@ -2671,6 +2671,7 @@ class UI_Document(UI_Document_FSM):
         self._tooltip_message = None
         self._tooltip_wait = None
         self._tooltip_mouse = None
+        self._reposition_tooltip_before_draw = False
         self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
         self.fsm.init(self, start='main')
 
@@ -2742,8 +2743,8 @@ class UI_Document(UI_Document_FSM):
         if self._tooltip_message and time.time() > self._tooltip_wait:
             # TODO: markdown support??
             self._tooltip.innerText = self._tooltip_message
-            self._reposition_tooltip()
             self._tooltip.is_visible = True
+            self._reposition_tooltip_before_draw = True
 
         self.fsm.update()
 
@@ -3056,6 +3057,9 @@ class UI_Document(UI_Document_FSM):
         self._body._call_postflow()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
         self._body._set_view_size(sz)
+        if self._reposition_tooltip_before_draw:
+            self._reposition_tooltip_before_draw = False
+            self._reposition_tooltip()
         self._body._draw()
         ScissorStack.end()
 
