@@ -3049,6 +3049,7 @@ class UI_Document(UI_Document_FSM):
 
         ScissorStack.start(context)
         bgl.glEnable(bgl.GL_BLEND)
+        bgl.glDisable(bgl.GL_DEPTH_TEST)
         self._body._clean()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
         self._body._set_view_size(sz)

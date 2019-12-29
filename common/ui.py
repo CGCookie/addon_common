@@ -267,6 +267,7 @@ def input_text(**kwargs):
         data['text'] = None
         #print('container:', ui_container._dynamic_full_size, ' input:', ui_input._dynamic_full_size, type(ui_input.value), ui_input.value)
     def keypress(e):
+        if data['text'] == None: return
         if type(e.key) is int:
             # https://www.w3schools.com/jsref/tryit.asp?filename=tryjsref_event_key_keycode2
             # TODO: use enum rather than magic numbers!

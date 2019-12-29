@@ -772,7 +772,7 @@ class Drawing:
             draw_type.end()
         except Exception as e:
             print('Exception caught while in Drawing.draw with %s' % str(draw_type))
-            print(e)
+            debugger.print_exception()
         self.glCheckError('done with draw')
         self._draw = None
 
@@ -878,8 +878,9 @@ class CC_2D_POINTS(CC_DRAW):
 
     @classmethod
     def vertex(cls, p:Point2D):
-        shader_2D_point.uniform_float('center', p)
-        batch_2D_point.draw(shader_2D_point)
+        if p:
+            shader_2D_point.uniform_float('center', p)
+            batch_2D_point.draw(shader_2D_point)
 
 
 class CC_2D_LINES(CC_DRAW):
@@ -891,6 +892,7 @@ class CC_2D_LINES(CC_DRAW):
         shader_2D_lineseg.uniform_float('color0', cls._default_color)
         cls.stipple(offset=0)
         cls._c = 0
+        cls._last_p = None
 
     @classmethod
     def update(cls):
@@ -905,9 +907,10 @@ class CC_2D_LINES(CC_DRAW):
 
     @classmethod
     def vertex(cls, p:Point2D):
-        shader_2D_lineseg.uniform_float('pos%d' % cls._c, p)
+        if p: shader_2D_lineseg.uniform_float('pos%d' % cls._c, p)
         cls._c = (cls._c + 1) % 2
-        if cls._c == 0: batch_2D_lineseg.draw(shader_2D_lineseg)
+        if cls._c == 0 and cls._last_p and p: batch_2D_lineseg.draw(shader_2D_lineseg)
+        cls._last_p = p
 
 class CC_2D_LINE_STRIP(CC_2D_LINES):
     @classmethod
@@ -920,9 +923,10 @@ class CC_2D_LINE_STRIP(CC_2D_LINES):
         if cls._last_p is None:
             cls._last_p = p
         else:
-            shader_2D_lineseg.uniform_float('pos0', cls._last_p)
-            shader_2D_lineseg.uniform_float('pos1', p)
-            batch_2D_lineseg.draw(shader_2D_lineseg)
+            if cls._last_p and p:
+                shader_2D_lineseg.uniform_float('pos0', cls._last_p)
+                shader_2D_lineseg.uniform_float('pos1', p)
+                batch_2D_lineseg.draw(shader_2D_lineseg)
             cls._last_p = p
 
 class CC_2D_LINE_LOOP(CC_2D_LINES):
@@ -937,14 +941,15 @@ class CC_2D_LINE_LOOP(CC_2D_LINES):
         if cls._first_p is None:
             cls._first_p = cls._last_p = p
         else:
-            shader_2D_lineseg.uniform_float('pos0', cls._last_p)
-            shader_2D_lineseg.uniform_float('pos1', p)
-            batch_2D_lineseg.draw(shader_2D_lineseg)
+            if cls._last_p and p:
+                shader_2D_lineseg.uniform_float('pos0', cls._last_p)
+                shader_2D_lineseg.uniform_float('pos1', p)
+                batch_2D_lineseg.draw(shader_2D_lineseg)
             cls._last_p = p
 
     @classmethod
     def end(cls):
-        if cls._last_p:
+        if cls._last_p and cls._first_p:
             shader_2D_lineseg.uniform_float('pos0', cls._last_p)
             shader_2D_lineseg.uniform_float('pos1', cls._first_p)
             batch_2D_lineseg.draw(shader_2D_lineseg)
@@ -952,71 +957,85 @@ class CC_2D_LINE_LOOP(CC_2D_LINES):
 
 
 class CC_2D_TRIANGLES(CC_DRAW):
-    @staticmethod
-    def begin():
+    @classmethod
+    def begin(cls):
         shader_2D_triangle.bind()
         #shader_2D_triangle.uniform_float('screensize', (Drawing._instance.area.width, Drawing._instance.area.height))
         shader_2D_triangle.uniform_float('MVPMatrix', Drawing._instance.get_pixel_matrix())
-        CC_2D_TRIANGLES._c = 0
-        CC_2D_TRIANGLES._last_color = None
+        cls._c = 0
+        cls._last_color = None
+        cls._last_p0 = None
+        cls._last_p1 = None
 
-    @staticmethod
-    def color(c:Color):
+    @classmethod
+    def color(cls, c:Color):
         if c is None: return
-        shader_2D_triangle.uniform_float('color%d' % CC_2D_TRIANGLES._c, c)
-        CC_2D_TRIANGLES._last_color = c
+        shader_2D_triangle.uniform_float('color%d' % cls._c, c)
+        cls._last_color = c
 
-    @staticmethod
-    def vertex(p:Point2D):
-        shader_2D_triangle.uniform_float('pos%d' % CC_2D_TRIANGLES._c, p)
-        CC_2D_TRIANGLES._c = (CC_2D_TRIANGLES._c + 1) % 3
-        if CC_2D_TRIANGLES._c == 0: batch_2D_triangle.draw(shader_2D_triangle)
-        CC_2D_TRIANGLES.color(CC_2D_TRIANGLES._last_color)
+    @classmethod
+    def vertex(cls, p:Point2D):
+        if p: shader_2D_triangle.uniform_float('pos%d' % cls._c, p)
+        cls._c = (cls._c + 1) % 3
+        if cls._c == 0 and p and cls._last_p0 and cls._last_p1: batch_2D_triangle.draw(shader_2D_triangle)
+        cls.color(cls._last_color)
+        cls._last_p1 = cls._last_p0
+        cls._last_p0 = p
 
 class CC_2D_TRIANGLE_FAN(CC_DRAW):
-    @staticmethod
-    def begin():
+    @classmethod
+    def begin(cls):
         shader_2D_triangle.bind()
-        #shader_2D_triangle.uniform_float('screensize', (Drawing._instance.area.width, Drawing._instance.area.height))
         shader_2D_triangle.uniform_float('MVPMatrix', Drawing._instance.get_pixel_matrix())
-        CC_2D_TRIANGLE_FAN._c = 0
-        CC_2D_TRIANGLE_FAN._last_color = None
+        cls._c = 0
+        cls._last_color = None
+        cls._first_p = None
+        cls._last_p = None
+        cls._is_first = True
 
-    @staticmethod
-    def color(c:Color):
+    @classmethod
+    def color(cls, c:Color):
         if c is None: return
-        shader_2D_triangle.uniform_float('color%d' % CC_2D_TRIANGLE_FAN._c, c)
-        CC_2D_TRIANGLE_FAN._last_color = c
+        shader_2D_triangle.uniform_float('color%d' % cls._c, c)
+        cls._last_color = c
 
-    @staticmethod
-    def vertex(p:Point2D):
-        shader_2D_triangle.uniform_float('pos%d' % CC_2D_TRIANGLE_FAN._c, p)
-        CC_2D_TRIANGLE_FAN._c += 1
-        if CC_2D_TRIANGLE_FAN._c == 3:
-            batch_2D_triangle.draw(shader_2D_triangle)
-            CC_2D_TRIANGLE_FAN._c = 1
-        CC_2D_TRIANGLE_FAN.color(CC_2D_TRIANGLE_FAN._last_color)
+    @classmethod
+    def vertex(cls, p:Point2D):
+        if p: shader_2D_triangle.uniform_float('pos%d' % cls._c, p)
+        cls._c += 1
+        if cls._c == 3:
+            if p and cls._first_p and cls._last_p: batch_2D_triangle.draw(shader_2D_triangle)
+            cls._c = 1
+        cls.color(cls._last_color)
+        if cls._is_first:
+            cls._first_p = p
+            cls._is_first = False
+        else: cls._last_p = p
 
 class CC_3D_TRIANGLES(CC_DRAW):
-    @staticmethod
-    def begin():
+    @classmethod
+    def begin(cls):
         shader_3D_triangle.bind()
         shader_3D_triangle.uniform_float('MVPMatrix', Drawing._instance.get_view_matrix())
-        CC_3D_TRIANGLES._c = 0
-        CC_3D_TRIANGLES._last_color = None
+        cls._c = 0
+        cls._last_color = None
+        cls._last_p0 = None
+        cls._last_p1 = None
 
-    @staticmethod
-    def color(c:Color):
+    @classmethod
+    def color(cls, c:Color):
         if c is None: return
-        shader_3D_triangle.uniform_float('color%d' % CC_3D_TRIANGLES._c, c)
-        CC_3D_TRIANGLES._last_color = c
+        shader_3D_triangle.uniform_float('color%d' % cls._c, c)
+        cls._last_color = c
 
-    @staticmethod
-    def vertex(p:Point):
-        shader_3D_triangle.uniform_float('pos%d' % CC_3D_TRIANGLES._c, p)
-        CC_3D_TRIANGLES._c = (CC_3D_TRIANGLES._c + 1) % 3
-        if CC_3D_TRIANGLES._c == 0: batch_3D_triangle.draw(shader_3D_triangle)
-        CC_3D_TRIANGLES.color(CC_3D_TRIANGLES._last_color)
+    @classmethod
+    def vertex(cls, p:Point):
+        if p: shader_3D_triangle.uniform_float('pos%d' % cls._c, p)
+        cls._c = (cls._c + 1) % 3
+        if cls._c == 0 and p and cls._last_p0 and cls._last_p1: batch_3D_triangle.draw(shader_3D_triangle)
+        cls.color(cls._last_color)
+        cls._last_p1 = cls._last_p0
+        cls._last_p0 = p
 
 ######################################################################################################
 

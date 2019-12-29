@@ -142,18 +142,3 @@ class BoundFloat(BoundVar):
             # ignoring all exceptions?
             raise IgnoreChange()
 
-
-
-# class BoundBool_String(BoundVar):
-#     def __init__(self, value_str, str_value):
-#         super().__init__(value_str, frame=depth=2)
-#         self.str_value = str_value
-
-
-# class BoundBool(BoundVar):
-#     def __init__(self, value_str):
-#         super().__init__(value_str, frame_depth=2)
-
-
-# class BoundBool_InSet(BoundVar):
-#     def __init__(self, value_str, )
