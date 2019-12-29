@@ -1017,8 +1017,7 @@ class BBox:
             from_coords = [bmv.co for bmv in from_bmverts]
         else:
             from_coords = list(from_coords)
-        mx, my, mz = from_coords[0]
-        Mx, My, Mz = mx, my, mz
+        Mx, My, Mz = mx, my, mz = from_coords[0]
         for x, y, z in from_coords:
             mx, my, mz = min(mx, x), min(my, y), min(mz, z)
             Mx, My, Mz = max(Mx, x), max(My, y), max(Mz, z)
