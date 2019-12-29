@@ -185,7 +185,7 @@ def input_checkbox(**kwargs):
     kw_all = helper_argsplitter({'title'}, kwargs)
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
-    ui_input = UI_Element(tagName='input', type='checkbox', can_focus=True, **kwargs, **kw_all)
+    ui_input = UI_Element(tagName='input', type='checkbox', can_focus=False, **kwargs, **kw_all)
     ui_checkmark = UI_Element(tagName='img', classes='checkbox',  parent=ui_input, **kw_all)
     ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label, **kw_all)
     def mouseclick(e):
