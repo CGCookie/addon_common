@@ -156,7 +156,52 @@ class Debugger:
     #     if exc_traceback:
     #         print("*** tb_lineno:", exc_traceback.tb_lineno)
 
+
+class ExceptionHandler:
+    _universal = []
+
+    def __init__(self, universal=False):
+        self._single = []
+        self._universal_only = universal
+
+    @staticmethod
+    def add_universal_callback(fn):
+        ExceptionHandler._universal += [fn]
+
+    def add_callback(self, fn, universal=None):
+        if universal:
+            self._universal += [fn]
+        if universal is None and self._universal_only:
+            self._universal += [fn]
+        else:
+            self._single += [fn]
+
+    def wrap(self, def_val, only=Exception):
+        def wrapper(fn):
+            def wrapped(*args, **kwargs):
+                ret = def_val
+                try:
+                    ret = fn(*args, **kwargs)
+                except only as e:
+                    self.handle_exception(e)
+                return ret
+            return wrapped
+        return wrapper
+
+    def handle_exception(self, e):
+        for fn in itertools.chain(self._universal, self._single):
+            try:
+                fn(e)
+            except Exception as e2:
+                print('Caught exception while calling back exception callbacks: %s' % fn.__name__)
+                print('original: %s' % str(e))
+                print('additional: %s' % str(e2))
+                debugger.print_exception()
+
+
 debugger = Debugger()
 dprint = debugger.dprint
+exceptionhandler = ExceptionHandler(universal=True)
 Globals.set(debugger)
 Globals.dprint = dprint
+Globals.exceptionhandler = exceptionhandler

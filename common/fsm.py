@@ -15,8 +15,9 @@ https://github.com/CGCookie/retopoflow
 
 import inspect
 
-from ..common.debug import debugger
-from ..common.utils import find_fns
+from .debug import ExceptionHandler
+from .debug import debugger
+from .utils import find_fns
 
 
 def get_state(state, substate):
@@ -26,20 +27,10 @@ class FSM:
     def __init__(self):
         self.wrapper = self._create_wrapper()
         self.onlyinstate_wrapper = self._create_onlyinstate_wrapper()
-        self._exception_callbacks = []
+        self._exceptionhandler = ExceptionHandler()
 
-    def add_exception_callback(self, fn):
-        self._exception_callbacks += [fn]
-
-    def _callback_exception_callbacks(self, e):
-        for fn in self._exception_callbacks:
-            try:
-                fn(e)
-            except Exception as e2:
-                print('Caught exception while calling back exception callbacks: %s' % fn.__name__)
-                print('original: %s' % str(e))
-                print('additional: %s' % str(e2))
-                debugger.print_exception()
+    def add_exception_callback(self, fn, universal=True):
+        self._exceptionhandler.add_callback(fn, universal=universal)
 
     def _create_wrapper(self):
         fsm = self
@@ -67,7 +58,8 @@ class FSM:
                         ))
                         debugger.print_exception()
                         print(e)
-                        fsm._callback_exception_callbacks(e)
+                        fsm._exceptionhandler.handle_exception(e)
+                        fsm.force_set_state(fsm._reset_state, call_exit=False, call_enter=True)
                         return
                 run.fnname = self.fnname
                 run.fsmstate = self.state
@@ -98,17 +90,19 @@ class FSM:
                         ))
                         debugger.print_exception()
                         print(e)
-                        fsm._callback_exception_callbacks(e)
+                        fsm._exceptionhandler.handle_exception(e)
+                        fsm.force_set_state(fsm._reset_state, call_exit=False, call_enter=True)
                         return self.default
                 run.fnname = self.fnname
                 run.fsmstate = ' '.join(self.states)
                 return run
         return FSM_OnlyInState
 
-    def init(self, obj, start='main'):
+    def init(self, obj, start='main', reset_state='main'):
         self._obj = obj
         self._state_next = start
         self._state = None
+        self._reset_state = reset_state
         self._fsm_states = {}
         self._fsm_states_handled = { st for (st,fn) in find_fns(self._obj, 'fsmstate') }
         for (m,fn) in find_fns(self._obj, 'fsmstate_full'):
@@ -126,7 +120,7 @@ class FSM:
         except Exception as e:
             print('Caught exception in state ("%s")' % (s))
             debugger.print_exception()
-            self._callback_exception_callbacks(e)
+            self._exceptionhandler.hondle_exception(e)
             return
 
     def update(self):
