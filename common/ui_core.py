@@ -21,6 +21,7 @@ Created by Jonathan Denning, Jonathan Williamson
 
 import os
 import re
+import math
 import time
 import random
 from inspect import signature
@@ -2195,6 +2196,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                             # clamp width and height only if scrolling (respectively)
                             if sx == 'scroll': w = remaining.clamp_width(w)
                             if sy == 'scroll': h = remaining.clamp_height(h)
+                            w = math.floor(w)
+                            h = math.floor(h)
                             sz = Size2D(width=w, height=h)
                             element._set_view_size(sz)
                             if position != 'fixed':
