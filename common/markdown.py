@@ -49,6 +49,7 @@ class Markdown:
     @staticmethod
     def preprocess(txt):
         # process message similarly to Markdown
+        txt = re.sub(r'<!--.*?-->', r'', txt)   # remove comments
         txt = re.sub(r'^\n*', r'', txt)         # remove leading \n
         txt = re.sub(r'\n*$', r'', txt)         # remove trailing \n
         txt = re.sub(r'\n\n\n*', r'\n\n', txt)  # 2+ \n => \n\n
