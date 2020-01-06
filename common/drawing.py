@@ -188,7 +188,16 @@ if bversion() >= "2.80":
 class Drawing:
     _instance = None
     _dpi_mult = 1
+    _custom_dpi_mult = 1
     _prefs = get_preferences()
+
+    @staticmethod
+    def get_custom_dpi_mult():
+        return Drawing._custom_dpi_mult
+    @staticmethod
+    def set_custom_dpi_mult(v):
+        Drawing._custom_dpi_mult = v
+        Drawing.update_dpi()
 
     @staticmethod
     @blender_version_wrapper('<','2.79')
@@ -204,7 +213,7 @@ class Drawing:
     @staticmethod
     @blender_version_wrapper('>=','2.80')
     def update_dpi():
-        Drawing._dpi_mult = Drawing._prefs.view.ui_scale * Drawing._prefs.system.dpi / 72 #* Drawing._prefs.system.pixel_size
+        Drawing._dpi_mult = Drawing._custom_dpi_mult * Drawing._prefs.view.ui_scale * Drawing._prefs.system.dpi / 72 #* Drawing._prefs.system.pixel_size
 
     @staticmethod
     def initialize():

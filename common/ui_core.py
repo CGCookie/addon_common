@@ -995,8 +995,9 @@ class UI_Element_Properties:
         if l != 'auto':
             if type(l) is NumberUnit: l = l.val(base=rew)
         else:
+            dpi_mult = Globals.drawing.get_dpi_mult()
             r = self.style_right
-            w = self.width_pixels if self.width_pixels != 'auto' else 0
+            w = self.width_pixels*dpi_mult if self.width_pixels != 'auto' else 0
             # if r != 'auto': print(l,rew,r,w)
             if type(r) is NumberUnit: l = rew - (w + r.val(base=rew))
             elif r != 'auto':         l = rew - (w + r)
@@ -1011,8 +1012,9 @@ class UI_Element_Properties:
         if t != 'auto':
             if type(t) is NumberUnit: t = t.val(base=reh)
         else:
+            dpi_mult = Globals.drawing.get_dpi_mult()
             b = self.style_bottom
-            h = self.height_pixels if self.height_pixels != 'auto' else 0
+            h = self.height_pixels*dpi_mult if self.height_pixels != 'auto' else 0
             if type(b) is NumberUnit: t = h + b.val(base=reh)
             elif b != 'auto':         t = h + b
         return t
