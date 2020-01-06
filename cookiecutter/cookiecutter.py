@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2018 CG Cookie
+Copyright (C) 2020 CG Cookie
 
 https://github.com/CGCookie/retopoflow
 

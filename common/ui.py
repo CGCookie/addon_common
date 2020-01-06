@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2019 CG Cookie
+Copyright (C) 2020 CG Cookie
 http://cgcookie.com
 hello@cgcookie.com
 
@@ -44,11 +44,12 @@ from .utils import kwargopts, iter_head
 from .ui_styling import UI_Styling
 
 from .boundvar import BoundVar
-from .globals import Globals
 from .decorators import blender_version_wrapper
-from .maths import Point2D, Vec2D, clamp, mid, Color, Box2D, Size2D
 from .drawing import Drawing, ScissorStack
 from .fontmanager import FontManager
+from .globals import Globals
+from .maths import Point2D, Vec2D, clamp, mid, Color, Box2D, Size2D
+from .markdown import Markdown
 
 from ..ext import png
 
@@ -355,67 +356,6 @@ def collapsible(label, **kwargs):
     return ui_proxy
 
 
-
-class Markdown:
-    # markdown line (first line only, ex: table)
-    line_tests = {
-        'h1':     re.compile(r'# +(?P<text>.+)'),
-        'h2':     re.compile(r'## +(?P<text>.+)'),
-        'h3':     re.compile(r'### +(?P<text>.+)'),
-        'ul':     re.compile(r'(?P<indent> *)- +(?P<text>.+)'),
-        'ol':     re.compile(r'(?P<indent> *)\d+\. +(?P<text>.+)'),
-        'img':    re.compile(r'!\[(?P<caption>[^\]]*)\]\((?P<filename>[^) ]+)(?P<style>[^)]*)\)'),
-        'table':  re.compile(r'\| +(([^|]*?) +\|)+'),
-    }
-
-    # markdown inline
-    inline_tests = {
-        'br':     re.compile(r'<br */?> *'),
-        'img':    re.compile(r'!\[(?P<caption>[^\]]*)\]\((?P<filename>[^) ]+)(?P<style>[^)]*)\)'),
-        'bold':   re.compile(r'\*(?P<text>.+?)\*'),
-        'code':   re.compile(r'`(?P<text>[^`]+)`'),
-        'link':   re.compile(r'\[(?P<text>.+?)\]\((?P<link>.+?)\)'),
-        'italic': re.compile(r'_(?P<text>.+?)_'),
-    }
-
-    # https://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url
-    re_url    = re.compile(r'^((https?)|mailto)://([-a-zA-Z0-9@:%._\+~#=]+\.)*?[-a-zA-Z0-9@:%._+~#=]+\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*)$')
-
-    @staticmethod
-    def preprocess(txt):
-        # process message similarly to Markdown
-        txt = re.sub(r'^\n*', r'', txt)         # remove leading \n
-        txt = re.sub(r'\n*$', r'', txt)         # remove trailing \n
-        txt = re.sub(r'\n\n\n*', r'\n\n', txt)  # 2+ \n => \n\n
-        txt = re.sub(r'---', r'—', txt)         # em dash
-        txt = re.sub(r'--', r'–', txt)          # en dash
-        return txt
-
-    @staticmethod
-    def is_url(txt): return Markdown.re_url.match(txt) is not None
-
-    @staticmethod
-    def match_inline(line):
-        #line = line.lstrip()    # ignore leading spaces
-        for (t,r) in Markdown.inline_tests.items():
-            m = r.match(line)
-            if m: return (t, m)
-        return (None, None)
-
-    @staticmethod
-    def match_line(line):
-        line = line.rstrip()    # ignore trailing spaces
-        for (t,r) in Markdown.line_tests.items():
-            m = r.match(line)
-            if m: return (t, m)
-        return (None, None)
-
-    @staticmethod
-    def split_word(line):
-        if ' ' not in line:
-            return (line,'')
-        i = line.index(' ') + 1
-        return (line[:i],line[i:])
 
 
 def get_mdown_path(fn, ext=None, subfolders=None):

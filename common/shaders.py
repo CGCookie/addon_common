@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2018 CG Cookie
+Copyright (C) 2020 CG Cookie
 
 Created by Jonathan Denning, Jonathan Williamson
 
