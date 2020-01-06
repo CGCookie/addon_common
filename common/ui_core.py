@@ -138,7 +138,7 @@ def load_image_png(fn):
     return load_image_png.cache[fn]
 
 
-def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR):
+def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR_MIPMAP_LINEAR):
     if not hasattr(load_texture, 'cache'): load_texture.cache = {}
     if fn_image not in load_texture.cache:
         image = load_image_png(fn_image)
