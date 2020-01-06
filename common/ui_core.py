@@ -38,7 +38,7 @@ from .fsm import FSM
 
 from .useractions import Actions, kmi_to_keycode
 
-from .debug import debugger
+from .debug import debugger, dprint
 from .boundvar import BoundVar
 from .globals import Globals
 from .decorators import debug_test_call, blender_version_wrapper
@@ -131,7 +131,7 @@ def load_image_png(fn):
         # have not seen this image before
         # note: assuming 4 channels (rgba) per pixel!
         path = get_image_path(fn)
-        print('Loading image "%s" (%s)' % (str(fn), str(path)))
+        dprint('Loading image "%s" (%s)' % (str(fn), str(path)))
         # w,h,d,m = png.Reader(path).read()
         w,h,d,m = png.Reader(path).asRGBA()
         load_image_png.cache[fn] = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]

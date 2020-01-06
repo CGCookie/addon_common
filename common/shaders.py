@@ -24,8 +24,8 @@ import bpy
 import bgl
 import ctypes
 
-from .globals import Globals
 from .debug import dprint
+from .globals import Globals
 
 from ..ext.bgl_ext import VoidBufValue
 
@@ -199,7 +199,7 @@ class Shader():
         bgl.glShaderSource(self.shaderVert, srcVertex)
         bgl.glShaderSource(self.shaderFrag, srcFragment)
 
-        print('RetopoFlow Shader Info: %s (%d)' % (self.name,self.shaderProg))
+        dprint('RetopoFlow Shader Info: %s (%d)' % (self.name,self.shaderProg))
         logv = self.shader_compile(name, self.shaderVert, srcVertex)
         logf = self.shader_compile(name, self.shaderFrag, srcFragment)
         if len(logv.strip()):
