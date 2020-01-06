@@ -40,6 +40,7 @@ a vanilla Vector.
 
 
 float_inf = float('inf')
+zero_threshold = 0.0000001
 
 
 class Entity2D:
@@ -104,7 +105,7 @@ class Vec2D(Vector, Entity2D):
     def project(self, other):
         ''' returns the projection of self onto other '''
         olen2 = other.length_squared
-        if olen2 <= 0.00000001: return Vec2D((0,0))
+        if olen2 <= zero_threshold: return Vec2D((0,0))
         return (self.dot(other) / olen2) * other
 
 
@@ -122,7 +123,7 @@ class Vec(VecUtils, Entity3D):
     def project(self, other):
         ''' returns the projection of self onto other '''
         olen2 = other.length_squared
-        if olen2 <= 0.00000001: return Vec3D((0,0,0))
+        if olen2 <= zero_threshold: return Vec3D((0,0,0))
         return (self.dot(other) / olen2) * other
 
 
@@ -535,6 +536,7 @@ class Plane(Entity3D):
     def __init__(self, o: Point, n: Normal):
         self.o = o
         self.n = n
+        self.d = o.dot(n)
 
     def __str__(self):
         return '<Plane (%0.4f, %0.4f, %0.4f), (%0.4f, %0.4f, %0.4f)>' % (
@@ -545,9 +547,9 @@ class Plane(Entity3D):
     def __repr__(self):
         return self.__str__()
 
-    def side(self, p: Point):
+    def side(self, p: Point, threshold=zero_threshold):
         d = (p - self.o).dot(self.n)
-        if abs(d) < 0.000001:
+        if abs(d) < threshold:
             return 0
         return -1 if d < 0 else 1
 
@@ -593,6 +595,8 @@ class Plane(Entity3D):
                 return [(p1, p1)]
             if s2 == 0 and s0 == s1:
                 return [(p2, p2)]
+            # one point on plane, other two on different sides
+            # pass through and catch this case below
         # two points on one side, one point on the other
         p01 = intersect_line_plane(p0, p1, self.o, self.n)
         p12 = intersect_line_plane(p1, p2, self.o, self.n)
@@ -622,7 +626,7 @@ class Plane(Entity3D):
         return abs(sum(self.side(p) for p in points)) != 2
 
     @profiler.function
-    def edge_intersection(self, points: List[Point]):
+    def edge_clamp(self, points: List[Point]):
         s0, s1 = map(self.side, points)
         if abs(s0 + s1) == 2:
             return []   # points on same side
@@ -636,9 +640,19 @@ class Plane(Entity3D):
         p01 = Point(intersect_line_plane(p0, p1, self.o, self.n))
         return [(p01, p01)]
 
+    def edge_intersection(self, p0:Point, p1:Point, threshold=zero_threshold):
+        s0, s1 = self.side(p0,threshold=threshold), self.side(p1,threshold=threshold)
+        if s0 == 0: return Point(p0)    # p0 is on plane
+        if s1 == 0: return Point(p1)    # p1 is on plane
+        if s0 == s1: return None        # points on same side
+        # points on opposite sides of plane, might be parallel to plane...
+        p = intersect_line_plane(p0, p1, self.o, self.n)
+        return Point(p) if p else None
+
     def edge_crosses(self, points):
         p0, p1 = points
-        return self.side(p0) != self.side(p1)
+        s0, s1 = self.side(p0), self.side(p1)
+        return (s0 == 0 and s1 == 0) or s0 != s1
 
     def edge_coplanar(self, points):
         p0, p1 = points
@@ -1432,7 +1446,7 @@ class Accel2D:
             self.p1 = verts[1].co
             self.v01 = self.p1 - self.p0
             self.l = self.v01.length
-            self.d01 = self.v01 / max(self.l, 0.00000001)
+            self.d01 = self.v01 / max(self.l, zero_threshold)
             self.is_valid = True
         def closest(self, p):
             v0p = p - self.p0
@@ -1928,7 +1942,7 @@ def triangle2D_area(p0, p1, p2):
 def segment2D_intersection(a0, a1, b0, b1):
     # get distance from b0 to a0---a1
     dir_a0a1 = a1 - a0
-    dist_a0a1 = max(0.00000001, dir_a0a1.length)
+    dist_a0a1 = max(zero_threshold, dir_a0a1.length)
     dir_a0a1 /= dist_a0a1
     vec_a0b0 = b0 - a0
     closest_b0_a0a1 = a0 + dir_a0a1 * dir_a0a1.dot(vec_a0b0)
@@ -1939,10 +1953,10 @@ def segment2D_intersection(a0, a1, b0, b1):
         return b0
     pdir_a0a1_b0 /= dist_a0a1_b0
     dir_b0b1 = b1 - b0
-    dist_b0b1 = max(0.00000001, dir_b0b1.length)
+    dist_b0b1 = max(zero_threshold, dir_b0b1.length)
     dir_b0b1 /= dist_b0b1
     dot = dir_b0b1.dot(pdir_a0a1_b0)
-    if abs(dot) <= 0.0000001:
+    if abs(dot) <= zero_threshold:
         # a0-a1 and b0-b1 are nearly parallel
         return None
     dist_intersection_b0b1 = dist_a0a1_b0 / dot

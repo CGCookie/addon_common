@@ -2466,7 +2466,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             pr1.done()
 
             vscroll = max(0, self._dynamic_full_size.height - self._h)
-            if vscroll:
+            if vscroll >= 1:
                 pr1 = profiler.start('drawing scrollbar')
                 bgl.glEnable(bgl.GL_BLEND)
                 w = 3
