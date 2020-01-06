@@ -138,7 +138,8 @@ void main() {
     gl_Position = vPPosition;
 
     vColor = (!use_selection || selected < 0.5) ? color : color_selected;
-    vColor.a *= 1.0 - hidden;
+    vColor.a *= (selected > 0.5) ? 1.0 : 1.0 - hidden;
+    //vColor.a *= 1.0 - hidden;
 }
 
 
