@@ -38,16 +38,16 @@ from .fsm import FSM
 
 from .useractions import Actions, kmi_to_keycode
 
-from .debug import debugger, dprint
 from .boundvar import BoundVar
-from .globals import Globals
+from .debug import debugger, dprint
 from .decorators import debug_test_call, blender_version_wrapper
-from .maths import Vec2D, Color, mid, Box2D, Size1D, Size2D, Point2D, RelPoint2D, clamp, NumberUnit
-from .shaders import Shader
 from .fontmanager import FontManager
-from .utils import iter_head
-from .profiler import profiler
+from .globals import Globals
 from .hasher import Hasher
+from .maths import Vec2D, Color, mid, Box2D, Size1D, Size2D, Point2D, RelPoint2D, Index2D, clamp, NumberUnit
+from .profiler import profiler
+from .shaders import Shader
+from .utils import iter_head
 
 from ..ext import png
 
@@ -1412,6 +1412,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._scroll_offset        = Vec2D((0,0))
         self._absolute_pos         = None       # abs pos of element from relative info; cached in draw
         self._absolute_size        = None       # viewing size of element; set by parent
+        self._tablecell_table      = None       # table that this cell belongs to
+        self._tablecell_pos        = None       # overriding position if table-cell
+        self._tablecell_size       = None       # overriding size if table-cell
 
         self._viewing_box = Box2D(topleft=(0,0), size=(-1,-1))  # topleft+size: set by parent element
         self._inside_box  = Box2D(topleft=(0,0), size=(-1,-1))  # inside area of viewing box (less margins, paddings, borders)
@@ -1946,7 +1949,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             blocked_inlines = False
             for child in self._children_all:
                 d = child._computed_styles.get('display', 'inline')
-                if d == 'inline':
+                if d in {'inline', 'table-cell'}:
                     if not blocked_inlines:
                         blocked_inlines = True
                         self._blocks.append([child])
@@ -2063,6 +2066,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         parent_size    = kwargs['parent_size']      # size of inside of parent
         nonstatic_elem = kwargs['nonstatic_elem']   # last non-static element
         document_elem  = kwargs['document_elem']    # whole document element (root)
+        table_data     = kwargs['table_data']       # data structure for current table (could be empty)
+
+        table_elem     = table_data.get('element', None)    # parent table element
+        table_index2D  = table_data.get('index2D', None)    # current position in table (i=row,j=col)
+        table_cells    = table_data.get('cells', None)      # cells of table as tuples (element, size)
 
         styles       = self._computed_styles
         style_pos    = styles.get('position', 'static')
@@ -2073,6 +2081,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._absolute_pos = None
         self._document_elem = document_elem
         self._nonstatic_elem = nonstatic_elem
+        self._tablecell_table = None
+        self._tablecell_pos = None
+        self._tablecell_size = None
 
         self._update_position()
 
@@ -2129,8 +2140,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             # self has no children
             dw = self._static_content_size.width
             dh = self._static_content_size.height
-            #if self._src_str:
-            #    print(self._src_str, (dw, dh), (min_width, min_height), (width, height), (max_width, max_height))
 
         else:
             # self has no static content, so flow and size is determined from children
@@ -2149,7 +2158,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if self._innerText is not None and self._whitespace in {'nowrap', 'pre'}:
                 inside_size.min_width = inside_size.width = inside_size.max_width = float('inf')
 
-            lines = []
+            if display == 'table':
+                table_elem = self
+                table_index2D = Index2D(0, 0)
+                table_cells = {}
+                table_data = { 'elem': table_elem, 'index2D': table_index2D, 'cells': table_cells }
+
             accum_width  = 0    # max width for all lines
             accum_height = 0    # sum heights for all lines
             for block in self._blocks:
@@ -2185,7 +2199,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                             fitting_pos=pos,
                             parent_size=inside_size,
                             nonstatic_elem=next_nonstatic_elem,
-                            document_elem=document_elem
+                            document_elem=document_elem,
+                            table_data=table_data,
                         )
                         w = element._dynamic_full_size.width
                         h = element._dynamic_full_size.height
@@ -2208,14 +2223,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                             processed = True
                         else:
                             # element does not fit!  finish of current line, then reprocess current element
-                            lines.append(cur_line)
                             accum_height += line_height
                             accum_width = max(accum_width, line_width)
                             new_line = True
                             element._dirty_flow(parent=False, children=True)
                             #element._dirtying_flow = True
                 if cur_line:
-                    lines.append(cur_line)
                     accum_height += line_height
                     accum_width = max(accum_width, line_width)
             dw = accum_width
@@ -2242,6 +2255,36 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._dynamic_full_size = Size2D(width=dw, height=dh)
         # if self._tagName == 'body': print(self._dynamic_content_size, self._dynamic_full_size)
 
+        if display == 'table-row':
+            table_index2D.update(i=0, j_off=1)
+        elif display == 'table-cell':
+            idx = table_index2D.to_tuple()
+            table_cells[idx] = (self, self._dynamic_full_size)
+            table_index2D.update(i_off=1)
+        elif display == 'table':
+            inds = table_cells.keys()
+            ind_is = sorted({ i for (i,j) in inds })
+            ind_js = sorted({ j for (i,j) in inds })
+            ind_is_js = { i:sorted({ j for (_i,j) in inds if i==_i }) for i in ind_is }
+            ind_js_is = { j:sorted({ i for (i,_j) in inds if j==_j }) for j in ind_js }
+            ws = { i:max(table_cells[(i,j)][1].width  for j in ind_is_js[i]) for i in ind_is }
+            hs = { j:max(table_cells[(i,j)][1].height for i in ind_js_is[j]) for j in ind_js }
+            # override dynamic full size
+            px,py = mbp_left,mbp_top
+            for i in ind_is:
+                for j in ind_is_js[i]:
+                    element = table_cells[(i,j)][0]
+                    element._tablecell_table = self
+                    element._tablecell_pos = RelPoint2D((px, -py))
+                    element._tablecell_size = Size2D(width=ws[i], height=hs[j])
+                    py += hs[j]
+                px += ws[i]
+                py = mbp_top
+            fw = sum(ws.values())
+            fh = sum(hs.values())
+            self._dynamic_content_size = Size2D(width=fw, height=fh)
+            self._dynamic_full_size = Size2D(width=fw+mbp_width, height=fh+mbp_height)
+
         self._tmp_max_width = max_width
 
         self._dirtying_flow = False
@@ -2254,7 +2297,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         pl,pt     = self.left_pixels,self.top_pixels
 
         # position element
-        if style_pos in {'fixed', 'absolute'}:
+        if self._tablecell_table:
+            self._relative_element = self._tablecell_table
+            self._relative_pos = RelPoint2D(self._tablecell_pos)
+            self._relative_offset = RelPoint2D((0, 0))
+
+        elif style_pos in {'fixed', 'absolute'}:
             # pt,pr,pb,pl = self.top,self.right,self.bottom,self.left
             # # TODO: ignoring units, which could be %!!
             self._relative_element = self._document_elem if style_pos == 'fixed' else self._nonstatic_elem
@@ -2279,6 +2327,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 pt = 0
             self._relative_pos = RelPoint2D((pl, pt)) # ((pl + mbp_left, pt - mbp_top))
             self._relative_offset = RelPoint2D((mbp_left, -mbp_top))
+
         elif style_pos == 'relative':
             if pl == 'auto':
                 pl = 0
@@ -2287,6 +2336,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._relative_element = self._parent
             self._relative_pos = RelPoint2D(self._fitting_pos)
             self._relative_offset = RelPoint2D((pl, pt))
+
         else:
             self._relative_element = self._parent
             self._relative_pos = RelPoint2D(self._fitting_pos)
@@ -2379,16 +2429,24 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     @profiler.function
     def _setup_ltwh(self):
         # parent_pos = self._parent.absolute_pos if self._parent else Point2D((0, self._parent_size.max_height-1))
-        parent_pos = self._relative_element.absolute_pos if self._relative_element and self._relative_element != self else Point2D((0, self._parent_size.max_height-1))
-        if not parent_pos: parent_pos = RelPoint2D.ZERO
-        rel_pos = self._relative_pos or RelPoint2D.ZERO
-        rel_offset = self._relative_offset or RelPoint2D.ZERO
-        abs_pos = parent_pos + rel_pos + rel_offset
+        if self._tablecell_table:
+            table_pos = self._tablecell_table.absolute_pos
+            # rel_pos = self._relative_pos or RelPoint2D.ZERO
+            # rel_offset = self._relative_offset or RelPoint2D.ZERO
+            abs_pos = table_pos + self._tablecell_pos
+            abs_size = self._tablecell_size
+        else:
+            parent_pos = self._relative_element.absolute_pos if self._relative_element and self._relative_element != self else Point2D((0, self._parent_size.max_height-1))
+            if not parent_pos: parent_pos = RelPoint2D.ZERO
+            rel_pos = self._relative_pos or RelPoint2D.ZERO
+            rel_offset = self._relative_offset or RelPoint2D.ZERO
+            abs_pos = parent_pos + rel_pos + rel_offset
+            abs_size = self._absolute_size
         self._absolute_pos = abs_pos + self._scroll_offset
         self._l = int(abs_pos.x)
         self._t = int(abs_pos.y)
-        self._w = int(self._absolute_size.width)
-        self._h = int(self._absolute_size.height)
+        self._w = int(abs_size.width)
+        self._h = int(abs_size.height)
         self._r = self._l + (self._w - 1)
         self._b = self._t - (self._h - 1)
 
@@ -3057,10 +3115,10 @@ class UI_Document(UI_Document_FSM):
         bgl.glEnable(bgl.GL_BLEND)
         bgl.glDisable(bgl.GL_DEPTH_TEST)
         self._body._clean()
-        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
+        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
         self._body._set_view_size(sz)
         self._body._call_postflow()
-        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body)
+        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
         self._body._set_view_size(sz)
         if self._reposition_tooltip_before_draw:
             self._reposition_tooltip_before_draw = False

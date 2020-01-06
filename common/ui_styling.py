@@ -148,19 +148,19 @@ token_rules = [
     ]),
     ('value', convert_token_to_string, [
         r'auto',
-        r'inline|block|none|flexbox',               # display
-        r'visible|hidden|scroll|auto',              # overflow, overflow-x, overflow-y
-        r'static|absolute|relative|fixed|sticky',   # position
-        r'column|row',                              # flex-direction
-        r'nowrap|wrap',                             # flex-wrap
-        r'flex-start|flex-end|center|stretch',      # justify-content, align-content, align-items
-        r'normal|italic',                           # font-style
-        r'normal|bold',                             # font-weight
-        r'serif|sans-serif|monospace',              # font-family
-        r'normal|nowrap|pre|pre-wrap|pre-line',     # white-space
-        r'normal|none',                             # content (more in url and string below)
-        r'fill|contain|cover|none|scale-down',      # object-fit
-        r'none',                                    # text-shadow
+        r'inline|block|none|flexbox|table(-row|-cell)?',    # display
+        r'visible|hidden|scroll|auto',                      # overflow, overflow-x, overflow-y
+        r'static|absolute|relative|fixed|sticky',           # position
+        r'column|row',                                      # flex-direction
+        r'nowrap|wrap',                                     # flex-wrap
+        r'flex-start|flex-end|center|stretch',              # justify-content, align-content, align-items
+        r'normal|italic',                                   # font-style
+        r'normal|bold',                                     # font-weight
+        r'serif|sans-serif|monospace',                      # font-family
+        r'normal|nowrap|pre|pre-wrap|pre-line',             # white-space
+        r'normal|none',                                     # content (more in url and string below)
+        r'fill|contain|cover|none|scale-down',              # object-fit
+        r'none',                                            # text-shadow
     ]),
     ('url', get_converter_to_string('url'), [
         r'url\([\'"]?(?P<url>[^)]*?)[\'"]?\)',

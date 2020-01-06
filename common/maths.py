@@ -127,6 +127,27 @@ class Vec(VecUtils, Entity3D):
         return (self.dot(other) / olen2) * other
 
 
+class Index2D:
+    def __init__(self, i, j):
+        self._i = i
+        self._j = j
+    def __iter__(self): yield from (self._i, self._j)
+    @property
+    def i(self): return self._i
+    @i.setter
+    def i(self, i): self._i = i
+    @property
+    def j(self): return self._j
+    @j.setter
+    def j(self, j): self._j = j
+    def update(self, i=None, j=None, i_off=None, j_off=None):
+        if i is not None: self._i = i
+        if j is not None: self._j = j
+        if i_off is not None: self._i += i_off
+        if j_off is not None: self._j += j_off
+    def to_tuple(self): return (self._i, self._j)
+
+
 class Point2D(Vector, Entity2D):
     @stats_wrapper
     def __init__(self, *args, **kwargs):

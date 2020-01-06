@@ -375,7 +375,7 @@ div.mdown span {
 
 div.mdown table {
     width: 100%;
-    display: block;
+    display: table;
     background: rgba(0,0,0,0.2);
     border: 1px rgba(0,0,0,1);
     margin: 0px 10px;
@@ -383,19 +383,19 @@ div.mdown table {
 }
 div.mdown tr {
     width: 100%;
-    display: block;
+    display: table-row;
     margin: 0px 0px;
     border: 0px;
     padding: 0px 2px;
 }
 div.mdown th {
-    display: inline;
+    display: table-cell;
     margin: 0px;
     border: 0px;
-    padding: 0px;
+    padding: 2px;
 }
 div.mdown td {
-    display: inline;
+    display: table-cell;
     margin: 0px;
     border: 0px;
     padding: 2px;

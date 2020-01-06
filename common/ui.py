@@ -485,13 +485,11 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None):
                 tr_element = tr(parent=table_element)
                 for c in range(cols):
                     th(innerText=header[c], parent=tr_element)
-                    #t.set(0, c, process_para(header[c], shadowcolor=(0,0,0,0.5)))
             for r in range(rows):
                 tr_element = tr(parent=table_element)
                 for c in range(cols):
                     td_element = td(parent=tr_element)
                     process_para(td_element, data[r][c])
-                    #t.set(r+(1 if add_header else 0), c, process_para(data[r][c]))
             pass
 
         else:
