@@ -495,6 +495,7 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None):
         else:
             assert False, 'Unhandled markdown line type "%s" ("%s") with "%s"' % (str(t), str(m), para)
 
+    ui_mdown.scrollToTop()
     ui_mdown.defer_dirty_propagation = False
 
 

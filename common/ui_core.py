@@ -1066,6 +1066,11 @@ class UI_Element_Properties:
             self._scroll_offset.y = v
             tag_redraw_all("UI_Element scrollTop")
 
+    def scrollToTop(self):
+        if self._scroll_offset.y != 0:
+            self._scroll_offset.y = 0
+            tag_redraw_all("UI_Element scrollToTop")
+
     @property
     def scrollLeft(self):
         # TODO: clamp value?
