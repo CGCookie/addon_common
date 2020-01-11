@@ -181,6 +181,8 @@ class Point2D(Vector, Entity2D):
             return Point2D((self.x - other.x, self.y - other.y))
         elif t is Point2D:
             return Vec2D((self.x - other.x, self.y - other.y))
+        elif t is RelPoint2D:
+            return Point2D((self.x - other.x, self.y - other.y))
         assert False, "unhandled type of other: %s (%s)" % (str(other), str(t))
 
     def distance_squared_to(self, other) -> float:

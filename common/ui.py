@@ -255,14 +255,25 @@ def input_text(**kwargs):
             dx = ui_cursor._l - vl - 2
             ui_input.scrollLeft = ui_input.scrollLeft + dx
             ui_input._setup_ltwh()
+    def set_cursor(e):
+        data['idx'] = ui_input.get_text_index(e.mouse)
+        data['pos'] = None
+        ui_input.dirty_flow()
     def focus(e):
         if type(ui_input.value) is float:
             s = '%0.4f' % ui_input.value
         else:
             s = str(ui_input.value)
         data['orig'] = data['text'] = s
-        data['idx'] = 0 # len(data['text'])
-        data['pos'] = None
+        set_cursor(e)
+    def mousemove(e):
+        if data['text'] is None: return
+        if not e.button[0]: return
+        set_cursor(e)
+    def mousedown(e):
+        if data['text'] is None: return
+        if not e.button[0]: return
+        set_cursor(e)
     def blur(e):
         ui_input.value = data['text']
         data['text'] = None
@@ -309,6 +320,8 @@ def input_text(**kwargs):
     ui_input.add_eventListener('on_focus', focus)
     ui_input.add_eventListener('on_blur', blur)
     ui_input.add_eventListener('on_keypress', keypress)
+    ui_input.add_eventListener('on_mousemove', mousemove)
+    ui_input.add_eventListener('on_mousedown', mousedown)
 
     ui_proxy = UI_Proxy(ui_container)
     ui_proxy.map('value', ui_input)

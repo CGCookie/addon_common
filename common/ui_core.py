@@ -461,12 +461,13 @@ class UI_Event:
         'bubbling',
     ]
 
-    def __init__(self, target=None, mouse=None, key=None):
+    def __init__(self, target=None, mouse=None, button=None, key=None):
         self._eventPhase = 'none'
         self._cancelBubble = False
         self._cancelCapture = False
         self._target = target
         self._mouse = mouse
+        self._button = button
         self._key = key
         self._defaultPrevented = False
 
@@ -503,6 +504,9 @@ class UI_Event:
 
     @property
     def mouse(self): return self._mouse
+
+    @property
+    def button(self): return self._button
 
     @property
     def key(self): return self._key
@@ -1102,6 +1106,14 @@ class UI_Element_Properties:
         self._dirty('changing visibility can affect everything', parent=True, children=True)
         #self._dirty_styling()
         #self._dirty_flow()
+
+    # self.get_is_visible() is same as self.is_visible() except it doesn't check parent
+    def get_is_visible(self):
+        if self._is_visible is None:
+            v = self._computed_styles.get('display', 'auto') != 'none'
+        else:
+            v = self._is_visible
+        return v
 
     @property
     def is_scrollable(self):
@@ -1912,19 +1924,48 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     @profiler.function
     def get_text_pos(self, index):
         if self._innerText is None: return None
-        index = clamp(index, 0, len(self._text_map))
+        index = clamp(index, 0, len(self._text_map)-1)
         m = self._text_map[index]
         e = m['ui_element']
         idx = m['idx']
         offset = m['offset']
         pre = m['pre']
-        size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid) #, force=True)
-        tw = Globals.drawing.get_text_width(pre)
-        # th = Globals.drawing.get_line_height(pre)
-        Globals.drawing.set_font_size(size_prev, fontid=self._fontid) #, force=True)
-        #print(index, m, e._relative_pos, e._relative_offset, e._scroll_offset, tw)
+        tw = Globals.drawing.get_text_width(pre, fontsize=self._fontsize, fontid=self._fontid)
         e_pos = e._relative_pos + e._relative_offset + e._scroll_offset + RelPoint2D((tw, 0))
         return e_pos
+
+    def get_text_index(self, pos):
+        if self._innerText is None: return None
+        size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)
+        get_text_width = Globals.drawing.get_text_width
+        get_line_height = Globals.drawing.get_line_height
+        self_pos = Point2D((self._l, self._t)) #+ RelPoint2D((self._mbp_left, -self._mbp_top))
+        offset = RelPoint2D(pos - self_pos)
+        # print('get_text_index')
+        # print('  pos:', pos)
+        # print('  self', self_pos)
+        # print('  off', offset)
+        best_dist = None
+        best_index = None
+        for index,m in enumerate(self._text_map):
+            e = m['ui_element']
+            pre = m['pre']
+            char = m['char']
+            pre_w = get_text_width(pre)
+            char_w = get_text_width(char)-1
+            char_h = get_line_height(char)
+            e_pos = Point2D(e._relative_pos + e._relative_offset + e._scroll_offset + RelPoint2D((pre_w, 0)))
+            cx = clamp(offset.x, e_pos.x, e_pos.x + char_w)
+            cy = clamp(offset.y, e_pos.y - char_h, e_pos.y)
+            dist = abs(offset.x - cx) + abs(offset.y - cy)
+            # print('  ', pre, char, e_pos, e_pos+RelPoint2D((char_w,-char_h)), (cx, cy), dist)
+            if best_dist is None or dist <= best_dist:
+                best_dist = dist
+                best_index = index
+                if offset.x - e_pos.x > char_w / 2:
+                    best_index += 1
+        Globals.drawing.set_font_size(size_prev, fontid=self._fontid)
+        return min(best_index, len(self._text_map)-1)
 
     @UI_Element_Utils.add_cleaning_callback('blocks', {'size'})
     @profiler.function
@@ -2597,9 +2638,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 if not cap: cb(details)
 
     @profiler.function
-    def _dispatch_event(self, event, mouse=None, key=None, ui_event=None, stop_at=None):
+    def _dispatch_event(self, event, mouse=None, button=None, key=None, ui_event=None, stop_at=None):
         if mouse is None: mouse = ui_document.actions.mouse
-        if ui_event is None: ui_event = UI_Event(target=self, mouse=mouse, key=key)
+        if button is None: button = (ui_document._lmb, ui_document._mmb, ui_document._rmb)
+        if ui_event is None: ui_event = UI_Event(target=self, mouse=mouse, button=button, key=key)
         path = self.get_pathToRoot()[1:] # skipping first item, which is self
         if stop_at is not None and stop_at in path:
             path = path[:path.index(stop_at)]
@@ -2703,10 +2745,12 @@ class UI_Document(UI_Document_FSM):
             {'PERIOD', 'MINUS', 'SPACE', 'SEMI_COLON', 'COMMA', 'QUOTE', 'ACCENT_GRAVE', 'PLUS', 'SLASH', 'BACK_SLASH', 'EQUAL', 'LEFT_BRACKET', 'RIGHT_BRACKET'},
     }
 
-    doubleclick_time = 0.25
+    doubleclick_time = bpy.context.preferences.inputs.mouse_double_click_time / 1000 # 0.25
+    wheel_scroll_lines = bpy.context.preferences.inputs.wheel_scroll_lines
     allow_disabled_to_blur = False
     key_repeat_delay = 0.1500 * 0.8
     key_repeat_pause = 0.0700 * 0.2
+    show_tooltips = True
     tooltip_delay = 0.50
 
     def __init__(self):
@@ -2748,6 +2792,11 @@ class UI_Document(UI_Document_FSM):
         self._under_mouse = None
         self._under_down = None
         self._focus = None
+
+        self._mouse = Point2D((-1, -1))
+        self._lmb = False
+        self._mmb = False
+        self._rmb = False
 
         self._last_mx = -1
         self._last_my = -1
@@ -2811,7 +2860,7 @@ class UI_Document(UI_Document_FSM):
         if self._tooltip_message and time.time() > self._tooltip_wait:
             # TODO: markdown support??
             self._tooltip.innerText = self._tooltip_message
-            self._tooltip.is_visible = True
+            self._tooltip.is_visible = True and self.show_tooltips
             self._reposition_tooltip_before_draw = True
 
         self.fsm.update()
@@ -2898,7 +2947,8 @@ class UI_Document(UI_Document_FSM):
             if self.actions.event_type == 'TRACKPADPAN':
                 move = self.actions.mouse.y - self.actions.mouse_prev.y
             else:
-                move = Globals.drawing.scale(24) * (-1 if 'UP' in self.actions.event_type else 1)
+                d = self.wheel_scroll_lines * 8
+                move = Globals.drawing.scale(d) * (-1 if 'UP' in self.actions.event_type else 1)
             self.actions.unpress()
             if self._get_scrollable():
                 self._scroll_element.scrollTop = self._scroll_last.y + move
