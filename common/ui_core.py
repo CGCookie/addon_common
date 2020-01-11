@@ -24,6 +24,7 @@ import re
 import math
 import time
 import random
+import contextlib
 from inspect import signature
 import traceback
 
@@ -125,45 +126,54 @@ def get_image_path(fn, ext=None, subfolders=None):
     return iter_head(paths, None)
 
 
+def add_cache(start):
+    def wrapper(fn):
+        fn._cache = start
+        return fn
+    return wrapper
+
+@contextlib.contextmanager
+def temp_bglbuffer(*args):
+    buf = bgl.Buffer(*args)
+    yield buf
+    del buf
+
+
+@add_cache({})
 def load_image_png(fn):
-    if not hasattr(load_image_png, 'cache'): load_image_png.cache = {}
-    if fn not in load_image_png.cache:
+    if fn not in load_image_png._cache:
         # have not seen this image before
         # note: assuming 4 channels (rgba) per pixel!
         path = get_image_path(fn)
-        dprint('Loading image "%s" (%s)' % (str(fn), str(path)))
-        # w,h,d,m = png.Reader(path).read()
+        dprint('Loading image "%s" (path=%s)' % (str(fn), str(path)))
         w,h,d,m = png.Reader(path).asRGBA()
-        load_image_png.cache[fn] = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
-    return load_image_png.cache[fn]
+        load_image_png._cache[fn] = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
+    return load_image_png._cache[fn]
 
-
-def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR): # GL_LINEAR_MIPMAP_LINEAR
-    if not hasattr(load_texture, 'cache'): load_texture.cache = {}
-    if fn_image not in load_texture.cache:
+@add_cache({})
+def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR):
+    if fn_image not in load_texture._cache:
         image = load_image_png(fn_image)
+        dprint('Buffering texture "%s"' % fn_image)
         height,width,depth = len(image),len(image[0]),len(image[0][0])
-        assert depth == 4
-        texbuffer = bgl.Buffer(bgl.GL_INT, [1])
-        bgl.glGenTextures(1, texbuffer)
-        texid = texbuffer[0]
+        assert depth == 4, 'Expected texture %s to have 4 channels per pixel (RGBA), not %d' % (fn_image, depth)
+        image_flat = [d for r in image for c in r for d in c]
+        with temp_bglbuffer(bgl.GL_INT, [1]) as buf:
+            bgl.glGenTextures(1, buf)
+            texid = buf[0]
         bgl.glBindTexture(bgl.GL_TEXTURE_2D, texid)
-        # bgl.glTexEnv(bgl.GL_TEXTURE_ENV, bgl.GL_TEXTURE_ENV_MODE, bgl.GL_MODULATE)
         bgl.glTexParameterf(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MAG_FILTER, mag_filter)
         bgl.glTexParameterf(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MIN_FILTER, min_filter)
-        # texbuffer = bgl.Buffer(bgl.GL_BYTE, [self.width,self.height,self.depth], image_data)
-        image_size = width * height * depth
-        texbuffer = bgl.Buffer(bgl.GL_BYTE, [image_size], [d for r in image for c in r for d in c])
-        bgl.glTexImage2D(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, width, height, 0, bgl.GL_RGBA, bgl.GL_UNSIGNED_BYTE, texbuffer)
-        del texbuffer
+        with temp_bglbuffer(bgl.GL_BYTE, [len(image_flat)], image_flat) as texbuffer:
+            bgl.glTexImage2D(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, width, height, 0, bgl.GL_RGBA, bgl.GL_UNSIGNED_BYTE, texbuffer)
         bgl.glBindTexture(bgl.GL_TEXTURE_2D, 0)
-        load_texture.cache[fn_image] = {
+        load_texture._cache[fn_image] = {
             'width': width,
             'height': height,
             'depth': depth,
             'texid': texid,
         }
-    return load_texture.cache[fn_image]
+    return load_texture._cache[fn_image]
 
 class UI_Draw:
     _initialized = False
