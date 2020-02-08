@@ -812,6 +812,7 @@ class UI_Element_Properties:
     def del_pseudoclass(self, pseudo): self._del_pseudoclass(pseudo)
 
     def _has_pseudoclass(self, pseudo):
+        if pseudo == 'disabled' and self._disabled: return True
         return pseudo in self._pseudoclasses
     def has_pseudoclass(self, psuedo): return self._has_pseudoclass(pseudo)
 
@@ -828,6 +829,15 @@ class UI_Element_Properties:
         if self._checked_bound: return self._checked.disabled
         return False
         #return 'disabled' in self._pseudoclasses
+
+    @property
+    def disabled(self): return self.is_disabled
+    @disabled.setter
+    def disabled(self, v):
+        c = self.is_disabled
+        if c == v: return
+        if v: self._add_pseudoclass('disabled')
+        else: self._del_pseudoclass('disabled')
 
     def _blur(self):
         if 'focus' not in self._pseudoclasses: return
