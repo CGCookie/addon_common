@@ -551,8 +551,9 @@ class UI_Element_Properties:
     def innerText(self, nText):
         if self._innerText == nText: return
         self._innerText = nText
-        self._dirty('changing innerText changes content', 'content')
-        self._dirty('changing innerText changes size', 'size')
+        self._dirty('changing innerText makes dirty', children=True)
+        #self._dirty('changing innerText changes content', 'content', children=True)
+        #self._dirty('changing innerText changes size', 'size', children=True)
         self._new_content = True
         self._dirty_flow()
 
@@ -589,7 +590,7 @@ class UI_Element_Properties:
     def getElementById(self, element_id):
         if element_id is None: return None
         if self._id == element_id: return self
-        for child in self._children_all:
+        for child in self.children: # self._children_all:
             e = child.getElementById(element_id)
             if e is not None: return e
         return None
@@ -597,19 +598,19 @@ class UI_Element_Properties:
     def getElementsByName(self, element_name):
         if element_name is None: return None
         ret = [self] if self._name == element_name else []
-        ret.extend(e for child in self._children for e in child.getElementsByName(element_name))
+        ret.extend(e for child in self.children for e in child.getElementsByName(element_name))
         return ret
 
     def getElementsByClassName(self, class_name):
         if class_name is None: return None
         ret = [self] if class_name in self._classes else []
-        ret.extend(e for child in self._children for e in child.getElementsByClassName(class_name))
+        ret.extend(e for child in self.children for e in child.getElementsByClassName(class_name))
         return ret
 
     def getElementsByTagName(self, tag_name):
         if tag_name is None: return None
         ret = [self] if tag_name == self._tagName else []
-        ret.extend(e for child in self._children for e in child.getElementsByTagName(tag_name))
+        ret.extend(e for child in self.children for e in child.getElementsByTagName(tag_name))
         return ret
 
 
@@ -1039,7 +1040,7 @@ class UI_Element_Properties:
             dpi_mult = Globals.drawing.get_dpi_mult()
             b = self.style_bottom
             h = self.height_pixels*dpi_mult if self.height_pixels != 'auto' else 0
-            if type(b) is NumberUnit: t = h + b.val(base=reh)
+            if type(b) is NumberUnit: t = h + b.val(base=reh) - reh
             elif b != 'auto':         t = h + b
         return t
     @property
@@ -1050,6 +1051,7 @@ class UI_Element_Properties:
             if   self._relative_element == self: rew = self._parent_size.width if self._parent_size else 0
             elif self._relative_element is None: rew = 0
             else:                                rew = self._relative_element.width_pixels
+            if rew == 'auto': rew = 0
             w = w.val(base=rew)
         return w
     @property
@@ -1060,6 +1062,7 @@ class UI_Element_Properties:
             if   self._relative_element == self: reh = self._parent_size.height if self._parent_size else 0
             elif self._relative_element is None: reh = 0
             else:                                reh = self._relative_element.height_pixels
+            if reh == 'auto': reh = 0
             h = h.val(base=reh)
         return h
 

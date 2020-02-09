@@ -580,6 +580,7 @@ def markdown(mdown=None, mdown_path=None, **kwargs):
 
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, closeable=True, moveable=True, hide_on_close=False, close_callback=None, **kwargs):
     # TODO: always add header, and use UI_Proxy translate+map "label" to change header
+    kw_inside = helper_argsplitter({'children'}, kwargs)
     ui_document = Globals.ui_document
     kwargs['classes'] = 'framed %s %s' % (kwargs.get('classes', ''), 'moveable' if moveable else '')
     ui_dialog = UI_Element(tagName='dialog', **kwargs)
@@ -684,14 +685,14 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
         ui_dialog.add_eventListener('on_mousedown', mousedown)
         ui_dialog.add_eventListener('on_mouseup', mouseup)
         ui_dialog.add_eventListener('on_mousemove', mousemove)
-    ui_inside = UI_Element(tagName='div', classes='inside', style='overflow-y:scroll', parent=ui_dialog)
+    ui_inside = UI_Element(tagName='div', classes='inside', style='overflow-y:scroll', parent=ui_dialog, **kw_inside)
 
     # ui_footer = UI_Element(tagName='div', classes='dialog-footer', parent=ui_dialog)
     # ui_footer_label = UI_Element(tagName='span', innerText='footer', parent=ui_footer)
 
     ui_proxy = UI_Proxy(ui_dialog)
     ui_proxy.translate_map('label', 'innerText', ui_label)
-    ui_proxy.map(['children','append_child','delete_child','clear_children','builder'], ui_inside)
+    ui_proxy.map(['children','append_child','delete_child','clear_children','builder', 'getElementById'], ui_inside)
     return ui_proxy
 
 

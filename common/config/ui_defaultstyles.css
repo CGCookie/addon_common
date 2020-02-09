@@ -373,7 +373,7 @@ div.mdown span {
     border: 0;
 }
 
-div.mdown table {
+table {
     width: 100%;
     display: table;
     background: rgba(0,0,0,0.2);
@@ -381,20 +381,20 @@ div.mdown table {
     margin: 0px 10px;
     padding: 4px;
 }
-div.mdown tr {
+tr {
     width: 100%;
     display: table-row;
     margin: 0px 0px;
     border: 0px;
     padding: 0px 2px;
 }
-div.mdown th {
+th {
     display: table-cell;
     margin: 0px;
     border: 0px;
     padding: 2px;
 }
-div.mdown td {
+td {
     display: table-cell;
     margin: 0px;
     border: 0px;
