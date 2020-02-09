@@ -2768,8 +2768,8 @@ class UI_Document(UI_Document_FSM):
     doubleclick_time = bpy.context.preferences.inputs.mouse_double_click_time / 1000 # 0.25
     wheel_scroll_lines = bpy.context.preferences.inputs.wheel_scroll_lines
     allow_disabled_to_blur = False
-    key_repeat_delay = 0.1500 * 0.8
-    key_repeat_pause = 0.0700 * 0.2
+    key_repeat_delay = 0.25
+    key_repeat_pause = 0.10
     show_tooltips = True
     tooltip_delay = 0.50
 
