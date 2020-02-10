@@ -25,8 +25,9 @@ import math
 import time
 import random
 import contextlib
-from inspect import signature
 import traceback
+from math import floor, ceil
+from inspect import signature
 
 import bpy
 import bgl
@@ -1087,6 +1088,7 @@ class UI_Element_Properties:
     @scrollTop.setter
     def scrollTop(self, v):
         if not self._is_scrollable_y: v = 0
+        v = floor(v)
         v = min(v, self._dynamic_content_size.height - self._absolute_size.height + self._mbp_height)
         v = max(v, 0)
         if self._scroll_offset.y != v:
@@ -1106,6 +1108,7 @@ class UI_Element_Properties:
     def scrollLeft(self, v):
         # TODO: clamp value?
         if not self._is_scrollable_x: v = 0
+        v = floor(v)
         v = min(v, self._dynamic_content_size.width - self._absolute_size.width + self._mbp_width)
         v = max(v, 0)
         v = -v
@@ -2078,8 +2081,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 if ts is None: tsx,tsy = 0,0
                 else: tsx,tsy,tsc = ts
                 self._static_content_size = Size2D()
-                self._static_content_size.set_all_widths(Globals.drawing.get_text_width(self._innerTextAsIs))
-                self._static_content_size.set_all_heights(Globals.drawing.get_line_height(self._innerTextAsIs))
+                self._static_content_size.set_all_widths(ceil(Globals.drawing.get_text_width(self._innerTextAsIs)))
+                self._static_content_size.set_all_heights(ceil(Globals.drawing.get_line_height(self._innerTextAsIs)))
                 Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid) #, force=True)
             pr.done()
 
@@ -2512,10 +2515,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             abs_pos = parent_pos + rel_pos + rel_offset
             abs_size = self._absolute_size
         self._absolute_pos = abs_pos + self._scroll_offset
-        self._l = int(abs_pos.x)
-        self._t = int(abs_pos.y)
-        self._w = int(abs_size.width)
-        self._h = int(abs_size.height)
+        self._l = floor(abs_pos.x)
+        self._t = ceil(abs_pos.y)
+        self._w = ceil(abs_size.width)
+        self._h = ceil(abs_size.height)
         self._r = self._l + (self._w - 1)
         self._b = self._t - (self._h - 1)
 
