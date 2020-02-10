@@ -129,6 +129,7 @@ vec4 coloring(vec4 orig) {
     vec4 mixer = vec4(0.6, 0.6, 0.6, 0.0);
     if(mirror_view == 0) {
         // NO SYMMETRY VIEW
+        // do nothing
     } else if(mirror_view == 1) {
         // EDGE VIEW
         float edge_width = 5.0 / screen_size.y;
@@ -149,21 +150,20 @@ vec4 coloring(vec4 orig) {
         vec3 diffp_z = xyz(vPTPosition_z) - xyz(vPPosition);
         vec3 aspect = vec3(1.0, screen_size.y / screen_size.x, 0.0);
 
+        float s = 0.0;
         if(mirroring.x && length(diffp_x * aspect) < edge_width * (1.0 - pow(abs(dot(viewdir,dirc_x)), 10.0))) {
-            float s = (vTPosition.x < 0.0) ? 1.0 : 0.1;
             mixer.r = 1.0;
-            mixer.a = mirror_effect * s + mixer.a * (1.0 - s);
+            s = max(s, (vTPosition.x < 0.0) ? 1.0 : 0.1);
         }
         if(mirroring.y && length(diffp_y * aspect) < edge_width * (1.0 - pow(abs(dot(viewdir,dirc_y)), 10.0))) {
-            float s = (vTPosition.y > 0.0) ? 1.0 : 0.1;
             mixer.g = 1.0;
-            mixer.a = mirror_effect * s + mixer.a * (1.0 - s);
+            s = max(s, (vTPosition.y > 0.0) ? 1.0 : 0.1);
         }
         if(mirroring.z && length(diffp_z * aspect) < edge_width * (1.0 - pow(abs(dot(viewdir,dirc_z)), 10.0))) {
-            float s = (vTPosition.z < 0.0) ? 1.0 : 0.1;
             mixer.b = 1.0;
-            mixer.a = mirror_effect * s + mixer.a * (1.0 - s);
+            s = max(s, (vTPosition.z < 0.0) ? 1.0 : 0.1);
         }
+        mixer.a = mirror_effect * s + mixer.a * (1.0 - s);
     } else if(mirror_view == 2) {
         // FACE VIEW
         if(mirroring.x && vTPosition.x < 0.0) {
@@ -179,8 +179,12 @@ vec4 coloring(vec4 orig) {
             mixer.a = mirror_effect;
         }
     }
+    vec3 n = normalize(vCNormal);
+    if(n.z < 0) discard;
+    float m = sign(n.z) * pow(abs(n.z), 0.25) / 2.0 + 0.5;
+    //mixer.a *= clamp(m, 0.0, 1.0);
     float m0 = mixer.a, m1 = 1.0 - mixer.a;
-    return vec4(mixer.rgb * m0 + orig.rgb * m1, m0 + orig.a * m1);
+    return vec4(mixer.rgb * m0 + orig.rgb * orig.a * m1, m0 + orig.a * m1);
 }
 
 void main() {
