@@ -2784,6 +2784,9 @@ class UI_Document(UI_Document_FSM):
         self._area = None
         self._exception_callbacks = []
         self._ui_scale = Globals.drawing.get_dpi_mult()
+        self._draw_count = 0
+        self._draw_time = 0
+        self._draw_fps = 0
 
     def add_exception_callback(self, fn):
         self._exception_callbacks += [fn]
@@ -3175,6 +3178,8 @@ class UI_Document(UI_Document_FSM):
     def draw(self, context):
         if self._area != context.area: return
 
+        time_start = time.time()
+
         # print('UI_Document.draw', random.random())
 
         w,h = context.region.width, context.region.height
@@ -3205,6 +3210,14 @@ class UI_Document(UI_Document_FSM):
             self._reposition_tooltip()
         self._body._draw()
         ScissorStack.end()
+
+        self._draw_count += 1
+        self._draw_time += time.time() - time_start
+        if self._draw_count % 100 == 0:
+            self._draw_fps = self._draw_count / self._draw_time
+            print('~%f fps  (%f / %d = %f)' % (self._draw_fps, self._draw_time, self._draw_count, self._draw_time / self._draw_count))
+            self._draw_count = 0
+            self._draw_time = 0
 
 ui_document = Globals.set(UI_Document())
 
