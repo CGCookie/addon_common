@@ -112,6 +112,8 @@ class ModifierWrapper_Mirror:
         self.mod.show_expanded = False
         self.mod.show_on_cage = True
         self.mod.use_mirror_merge = True
+        self.mod.show_viewport = True
+        self.disable_all()
 
     @blender_version_wrapper('<', '2.80')
     def read(self):
@@ -189,6 +191,10 @@ def set_active_object(o): bpy.context.scene.objects.active = o
 @blender_version_wrapper('>=','2.80')
 def set_active_object(o): bpy.context.window.view_layer.objects.active = o
 
+# use this, because bpy.context might not Screen context!
+# see https://docs.blender.org/api/current/bpy.context.html
+def get_active_object(): return bpy.context.view_layer.objects.active
+
 @blender_version_wrapper('<=', '2.79')
 def toggle_screen_header(ctx): bpy.ops.screen.header(ctx)
 @blender_version_wrapper('>=', '2.80')
@@ -240,9 +246,6 @@ def perform_redraw_all():
             for ar in win.screen.areas:
                 ar.tag_redraw()
 
-
-def get_active_object():
-    return bpy.context.active_object
 
 
 

@@ -19,6 +19,7 @@ Created by Jonathan Denning, Jonathan Williamson
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+import time
 from copy import deepcopy
 
 import bpy
@@ -287,9 +288,10 @@ class Actions:
         self.alt_right = False
 
         self.timer = False
+        self.time_last = time.time()
         self.time_delta = 0
 
-    def update(self, context, event, timer, print_actions=False):
+    def update(self, context, event, print_actions=False):
         self.just_pressed = None
 
         self.context = context
@@ -326,7 +328,9 @@ class Actions:
                 print((event.type, event.value))
 
         if self.timer:
-            self.time_delta = timer.time_delta
+            time_cur = time.time()
+            self.time_delta = self.time_last - time_cur
+            self.time_last = time_cur
             self.trackpad = False
             return
 

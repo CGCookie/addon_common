@@ -2810,7 +2810,6 @@ class UI_Document(UI_Document_FSM):
         self._tooltip_wait = None
         self._tooltip_mouse = None
         self._reposition_tooltip_before_draw = False
-        self._timer = context.window_manager.event_timer_add(1.0 / 120, window=context.window)
         self.fsm.init(self, start='main')
 
         self.ignore_hover_change = False
@@ -2866,7 +2865,7 @@ class UI_Document(UI_Document_FSM):
 
         if DEBUG_COLOR_CLEAN: tag_redraw_all("UI_Element DEBUG_COLOR_CLEAN")
 
-        self.actions.update(context, event, self._timer, print_actions=False)
+        self.actions.update(context, event, print_actions=False)
 
         self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
         self._mouse = Point2D((self._mx, self._my))

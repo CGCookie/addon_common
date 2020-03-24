@@ -154,14 +154,15 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
     def _cc_actions_init(self):
         self.actions = Actions(self.context, self.default_keymap)
-        self._timer = self.context.window_manager.event_timer_add(1.0 / 120, window=self.context.window)
+        self._timer = self.context.window_manager.event_timer_add(0.1, window=self.context.window)  # 1.0 / 120
 
     def _cc_actions_update(self):
-        self.actions.update(self.context, self.event, self._timer, print_actions=False)
+        self.actions.update(self.context, self.event, print_actions=False)
 
     def _cc_actions_end(self):
         self.context.window_manager.event_timer_remove(self._timer)
         del self._timer
+        pass
 
 
 
