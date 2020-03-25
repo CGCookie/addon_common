@@ -24,8 +24,8 @@ import re
 import math
 import time
 import random
-import contextlib
 import traceback
+import contextlib
 from math import floor, ceil
 from inspect import signature
 
@@ -47,7 +47,7 @@ from .fontmanager import FontManager
 from .globals import Globals
 from .hasher import Hasher
 from .maths import Vec2D, Color, mid, Box2D, Size1D, Size2D, Point2D, RelPoint2D, Index2D, clamp, NumberUnit
-from .profiler import profiler
+from .profiler import profiler, time_it
 from .shaders import Shader
 from .utils import iter_head
 
@@ -142,13 +142,15 @@ def temp_bglbuffer(*args):
 
 @add_cache({})
 def load_image_png(fn):
+    # important: assuming all images have distinct names!
     if fn not in load_image_png._cache:
         # have not seen this image before
         # note: assuming 4 channels (rgba) per pixel!
         path = get_image_path(fn)
         dprint('Loading image "%s" (path=%s)' % (str(fn), str(path)))
         w,h,d,m = png.Reader(path).asRGBA()
-        load_image_png._cache[fn] = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
+        img = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
+        load_image_png._cache[fn] = img
     return load_image_png._cache[fn]
 
 @add_cache({})
@@ -2528,91 +2530,84 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._setup_ltwh()
             if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h): return
 
-            pr1 = profiler.start('drawing innerTextAsIs')
-            ox,oy = textshadowoffset if textshadowoffset is not None else (0,0)
-            Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+ox, self._t-oy))
-            pr1.done()
+            with profiler.code('drawing innerTextAsIs'):
+                ox,oy = textshadowoffset if textshadowoffset is not None else (0,0)
+                Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+ox, self._t-oy))
             return
 
         if not self.is_visible: return
 
-        pr1 = profiler.start('_draw initialization')
-        self._setup_ltwh()
-        if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
-            pr1.done()
-            return
+        with profiler.code('_draw initialization'):
+            self._setup_ltwh()
+            if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
+                return
 
-        if DEBUG_COLOR_CLEAN:
-            # style, content, size, layout, blocks
-            t_max = 2
-            t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
-            background_override = Color((t, t/2, 0, 0.5))
-        else:
-            background_override = None
+            if DEBUG_COLOR_CLEAN:
+                # style, content, size, layout, blocks
+                t_max = 2
+                t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
+                background_override = Color((t, t/2, 0, 0.5))
+            else:
+                background_override = None
 
-        bgl.glEnable(bgl.GL_BLEND)
+            bgl.glEnable(bgl.GL_BLEND)
 
-        dpi_mult = Globals.drawing.get_dpi_mult()
-        sc = self._style_cache
-        margin_top,  margin_right,  margin_bottom,  margin_left  = sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']
-        padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
-        border_width = sc['border-width']
-        pr1.done()
+            dpi_mult = Globals.drawing.get_dpi_mult()
+            sc = self._style_cache
+            margin_top,  margin_right,  margin_bottom,  margin_left  = sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']
+            padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
+            border_width = sc['border-width']
 
         with ScissorStack.wrap(self._l, self._t, self._w, self._h, msg=str(self)):
-            pr = profiler.start('drawing mbp')
-            texture_id = self._image_data['texid'] if self._src == 'image' else -1
-            texture_fit = self._computed_styles.get('object-fit', 'fill')
-            ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, texture_id, texture_fit, background_override=background_override)
-            pr.done()
+            with profiler.code('drawing mbp'):
+                texture_id = self._image_data['texid'] if self._src == 'image' else -1
+                texture_fit = self._computed_styles.get('object-fit', 'fill')
+                ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, texture_id, texture_fit, background_override=background_override)
 
-            pr1 = profiler.start('drawing children')
-            # compute inner scissor area
-            include_margin = True
-            include_padding = False
-            mt,mr,mb,ml = (margin_top, margin_right, margin_bottom, margin_left)  if include_margin  else (0,0,0,0)
-            pt,pr,pb,pl = (padding_top,padding_right,padding_bottom,padding_left) if include_padding else (0,0,0,0)
-            bw = border_width
-            il = round(self._l + (ml + bw + pl))
-            it = round(self._t - (mt + bw + pt))
-            iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
-            ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
+            with profiler.code('drawing children'):
+                # compute inner scissor area
+                include_margin = True
+                include_padding = False
+                mt,mr,mb,ml = (margin_top, margin_right, margin_bottom, margin_left)  if include_margin  else (0,0,0,0)
+                pt,pr,pb,pl = (padding_top,padding_right,padding_bottom,padding_left) if include_padding else (0,0,0,0)
+                bw = border_width
+                il = round(self._l + (ml + bw + pl))
+                it = round(self._t - (mt + bw + pt))
+                iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
+                ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
 
-            with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=False):
-                if self._innerText is not None:
-                    pr2 = profiler.start('drawing innerText')
-                    size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)
-                    bgl.glEnable(bgl.GL_BLEND)
-                    if self._textshadow is not None:
-                        tsx,tsy,tsc = self._textshadow
-                        Globals.drawing.set_font_color(self._fontid, tsc)
-                        for child in self._children_all_sorted:
-                            child._draw(depth + 1, textshadowoffset=(tsx,tsy))
-                    Globals.drawing.set_font_color(self._fontid, self._fontcolor)
-                    for child in self._children_all_sorted:
-                        child._draw(depth + 1)
-                    Globals.drawing.set_font_size(size_prev, fontid=self._fontid)
-                    pr2.done()
-                else:
-                    for child in self._children_all_sorted: child._draw(depth+1)
-            pr1.done()
+                with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=False):
+                    if self._innerText is not None:
+                        with profiler.code('drawing innerText'):
+                            size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)
+                            bgl.glEnable(bgl.GL_BLEND)
+                            if self._textshadow is not None:
+                                tsx,tsy,tsc = self._textshadow
+                                Globals.drawing.set_font_color(self._fontid, tsc)
+                                for child in self._children_all_sorted:
+                                    child._draw(depth + 1, textshadowoffset=(tsx,tsy))
+                            Globals.drawing.set_font_color(self._fontid, self._fontcolor)
+                            for child in self._children_all_sorted:
+                                child._draw(depth + 1)
+                            Globals.drawing.set_font_size(size_prev, fontid=self._fontid)
+                    else:
+                        for child in self._children_all_sorted: child._draw(depth+1)
 
             vscroll = max(0, self._dynamic_full_size.height - self._h)
             if vscroll >= 1:
-                pr1 = profiler.start('drawing scrollbar')
-                bgl.glEnable(bgl.GL_BLEND)
-                w = 3
-                h = self._h - (mt+bw+pt) - (mb+bw+pb) - 6
-                px = self._l + self._w - (mr+bw+pr) - w/2 - 5
-                py0 = self._t - (mt+bw+pt) - 3
-                py1 = py0 - (h-1)
-                sh = h * self._h / self._dynamic_full_size.height
-                sy0 = py0 - (h-sh) * (self._scroll_offset.y / vscroll)
-                sy1 = sy0 - sh
-                if py0>sy0: Globals.drawing.draw2D_line(Point2D((px,py0)), Point2D((px,sy0+1)), Color((0,0,0,0.2)), width=w)
-                if sy1>py1: Globals.drawing.draw2D_line(Point2D((px,sy1-1)), Point2D((px,py1)), Color((0,0,0,0.2)), width=w)
-                Globals.drawing.draw2D_line(Point2D((px,sy0)), Point2D((px,sy1)), Color((1,1,1,0.2)), width=w)
-                pr1.done()
+                with profiler.code('drawing scrollbar'):
+                    bgl.glEnable(bgl.GL_BLEND)
+                    w = 3
+                    h = self._h - (mt+bw+pt) - (mb+bw+pb) - 6
+                    px = self._l + self._w - (mr+bw+pr) - w/2 - 5
+                    py0 = self._t - (mt+bw+pt) - 3
+                    py1 = py0 - (h-1)
+                    sh = h * self._h / self._dynamic_full_size.height
+                    sy0 = py0 - (h-sh) * (self._scroll_offset.y / vscroll)
+                    sy1 = sy0 - sh
+                    if py0>sy0: Globals.drawing.draw2D_line(Point2D((px,py0)), Point2D((px,sy0+1)), Color((0,0,0,0.2)), width=w)
+                    if sy1>py1: Globals.drawing.draw2D_line(Point2D((px,sy1-1)), Point2D((px,py1)), Color((0,0,0,0.2)), width=w)
+                    Globals.drawing.draw2D_line(Point2D((px,sy0)), Point2D((px,sy1)), Color((1,1,1,0.2)), width=w)
 
     def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
 
