@@ -31,6 +31,12 @@ from inspect import signature
 
 import bpy
 import bgl
+import blf
+import gpu
+
+from gpu.types import GPUOffScreen
+from gpu_extras.presets import draw_texture_2d
+from mathutils import Vector, Matrix
 
 from .blender import tag_redraw_all
 from .ui_styling import UI_Styling, ui_defaultstylings
@@ -160,6 +166,7 @@ def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR):
         dprint('Buffering texture "%s"' % fn_image)
         height,width,depth = len(image),len(image[0]),len(image[0][0])
         assert depth == 4, 'Expected texture %s to have 4 channels per pixel (RGBA), not %d' % (fn_image, depth)
+        image = reversed(image) # flip image
         image_flat = [d for r in image for c in r for d in c]
         with temp_bglbuffer(bgl.GL_INT, [1]) as buf:
             bgl.glGenTextures(1, buf)
@@ -236,16 +243,18 @@ class UI_Draw:
         shader = gpu.types.GPUShader(vertex_shader, fragment_shader)
         batch = batch_for_shader(shader, 'TRIS', {"pos": vertex_positions})
         get_pixel_matrix = Globals.drawing.get_pixel_matrix
+        def_color = (0,0,0,0)
 
         def update():
             nonlocal shader, get_pixel_matrix
             shader.bind()
             shader.uniform_float("uMVPMatrix", get_pixel_matrix())
+            # shader.uniform_float("uMVPMatrix", gpu.matrix.get_model_view_matrix())
 
         def draw(left, top, width, height, dpi_mult, style, texture_id, texture_fit, background_override):
             nonlocal shader, batch
-            def get_v(style_key):
-                v = style[style_key]
+            def get_v(style_key, def_val):
+                v = style.get(style_key, def_val)
                 if type(v) is NumberUnit: v = v.val()
                 return v
             shader.bind()
@@ -255,32 +264,33 @@ class UI_Draw:
             shader.uniform_float('bottom',              top - (height - 1))
             shader.uniform_float('width',               width)
             shader.uniform_float('height',              height)
-            shader.uniform_float('margin_left',         get_v('margin-left'))
-            shader.uniform_float('margin_right',        get_v('margin-right'))
-            shader.uniform_float('margin_top',          get_v('margin-top'))
-            shader.uniform_float('margin_bottom',       get_v('margin-bottom'))
-            shader.uniform_float('padding_left',        get_v('padding-left'))
-            shader.uniform_float('padding_right',       get_v('padding-right'))
-            shader.uniform_float('padding_top',         get_v('padding-top'))
-            shader.uniform_float('padding_bottom',      get_v('padding-bottom'))
-            shader.uniform_float('border_width',        get_v('border-width'))
-            shader.uniform_float('border_radius',       get_v('border-radius'))
-            shader.uniform_float('border_left_color',   get_v('border-left-color'))
-            shader.uniform_float('border_right_color',  get_v('border-right-color'))
-            shader.uniform_float('border_top_color',    get_v('border-top-color'))
-            shader.uniform_float('border_bottom_color', get_v('border-bottom-color'))
+            shader.uniform_float('margin_left',         get_v('margin-left', 0))
+            shader.uniform_float('margin_right',        get_v('margin-right', 0))
+            shader.uniform_float('margin_top',          get_v('margin-top', 0))
+            shader.uniform_float('margin_bottom',       get_v('margin-bottom', 0))
+            shader.uniform_float('padding_left',        get_v('padding-left', 0))
+            shader.uniform_float('padding_right',       get_v('padding-right', 0))
+            shader.uniform_float('padding_top',         get_v('padding-top', 0))
+            shader.uniform_float('padding_bottom',      get_v('padding-bottom', 0))
+            shader.uniform_float('border_width',        get_v('border-width', 0))
+            shader.uniform_float('border_radius',       get_v('border-radius', 0))
+            shader.uniform_float('border_left_color',   get_v('border-left-color', def_color))
+            shader.uniform_float('border_right_color',  get_v('border-right-color', def_color))
+            shader.uniform_float('border_top_color',    get_v('border-top-color', def_color))
+            shader.uniform_float('border_bottom_color', get_v('border-bottom-color', def_color))
             if background_override:
                 shader.uniform_float('background_color',    background_override)
             else:
-                shader.uniform_float('background_color',    get_v('background-color'))
+                shader.uniform_float('background_color',    get_v('background-color', def_color))
             shader.uniform_int('image_fit', texture_fit)
             if texture_id == -1:
                 shader.uniform_int('using_image', 0)
             else:
-                bgl.glActiveTexture(bgl.GL_TEXTURE0)
+                atex = bgl.GL_TEXTURE16
+                bgl.glActiveTexture(atex)
                 bgl.glBindTexture(bgl.GL_TEXTURE_2D, texture_id)
                 shader.uniform_int('using_image', 1)
-                shader.uniform_int('image', 0)
+                shader.uniform_int('image', atex - bgl.GL_TEXTURE0)
             batch.draw(shader)
 
         UI_Draw._update = update
@@ -900,6 +910,7 @@ class UI_Element_Properties:
             self._absolute_pos = None
             self._update_position()
             tag_redraw_all("UI_Element reposition")
+            self._dirty('repositioning', 'renderbuf')
 
     @property
     def left(self):
@@ -1096,11 +1107,13 @@ class UI_Element_Properties:
         if self._scroll_offset.y != v:
             self._scroll_offset.y = v
             tag_redraw_all("UI_Element scrollTop")
+            self._dirty('scrollTop', 'renderbuf')
 
     def scrollToTop(self):
         if self._scroll_offset.y != 0:
             self._scroll_offset.y = 0
             tag_redraw_all("UI_Element scrollToTop")
+            self._dirty('scrollToTop', 'renderbuf')
 
     @property
     def scrollLeft(self):
@@ -1117,6 +1130,7 @@ class UI_Element_Properties:
         if self._scroll_offset.x != v:
             self._scroll_offset.x = v
             tag_redraw_all("UI_Element scrollLeft")
+            self._dirty('strollLeft', 'renderbuf')
 
     @property
     def is_visible(self):
@@ -1297,6 +1311,7 @@ class UI_Element_Dirtiness:
         for child in self._children_all: child.dirty_styling()
         if self._parent is None:
             self._dirty('Dirtying style cache', children=True)
+        self._dirty('Dirtying Styling', 'renderbuf')
         tag_redraw_all("UI_Element dirty_styling")
     def dirty_styling(self): self._dirty_styling()
 
@@ -1416,7 +1431,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._name          = None
         self._href          = None
 
-        self._was_dirty = False
+        self._was_dirty     = False
         self._preclean      = None      # fn that's called back right before clean is started
         self._postclean     = None      # fn that's called back right after clean is done
         self._postflow      = None      # fn that's called back right after layout is done
@@ -1519,6 +1534,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._textwrap_opts    = {}
         self._l, self._t, self._w, self._h = 0,0,0,0    # scissor position
 
+        self._cacheRenderBuf   = None   # GPUOffScreen buffer
+        self._dirty_renderbuf  = True
+
         ####################################################
         # dirty properties
         # used to inform parent and children to recompute
@@ -1527,6 +1545,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             'content',                          # content of self has changed
             'blocks',                           # children are grouped into blocks
             'size',                             # force recalculations of size
+            'renderbuf',                        # force re-rendering buffer (if applicable)
         }
         self._new_content = True
         self._dirtying_flow = True
@@ -1591,6 +1610,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._defer_clean = False
         self._dirty('initially dirty')
 
+    def __del__(self):
+        if self._cacheRenderBuf:
+            self._cacheRenderBuf.free()
+            self._cacheRenderBuf = None
+
     def __repr__(self):
         return self.__str__()
 
@@ -1601,7 +1625,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if self.is_dirty: info += ['dirty']
         return '<%s>' % ' '.join(['UI_Element'] + info)
 
-    @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content'})
+    @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content', 'renderbuf'})
     @profiler.function
     def _compute_style(self):
         '''
@@ -1618,8 +1642,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         # self.defer_dirty_propagation = True
 
-        pr = profiler.start('rebuild full selector')
-        if True:
+        with profiler.code('rebuild full selector'):
             sel_parent = [] if not self._parent else self._parent._selector
             if self._pseudoelement:
                 # this is either a ::before or ::after pseudoelement
@@ -1647,10 +1670,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
                 self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
                 self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
-        pr.done()
 
-        pr = profiler.start('initialize styles in order: default, focus, active, hover, hover+active')
-        if True:
+        with profiler.code('initialize styles in order: default, focus, active, hover, hover+active'):
             # TODO: inherit parent styles with other elements (not just *text*)
             if self._styling_parent is None:
                 if self._parent:
@@ -1680,10 +1701,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
             styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
             self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
-        pr.done()
 
-        pr = profiler.start('filling style cache')
-        if True:
+        with profiler.code('filling style cache'):
             if self._is_visible and not self._pseudoelement:
                 # need to compute ::before and ::after styles to know whether there is content to compute and render
                 self._computed_styles_before = None # UI_Styling.compute_style(self._selector_before, *styling_list)
@@ -1741,20 +1760,16 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             else: self._textshadow = (ts[0].val(), ts[1].val(), ts[-1])
 
             self._whitespace = self._computed_styles.get('white-space', 'normal')
-        pr.done()
 
-        pr = profiler.start('recursing to children')
-        if True:
+        with profiler.code('recursing to children'):
             # tell children to recompute selector
             # NOTE: self._children_all has not been constructed, yet!
             for child in self._children: child._compute_style()
             for child in self._children_text: child._compute_style()
             if self._child_before: self._child_before._compute_styles()
             if self._child_after: self._child_after._compute_styles()
-        pr.done()
 
-        pr = profiler.start('hashing for cache')
-        if True:
+        with profiler.code('hashing for cache'):
             style_content_hash = Hasher(
                 self.is_visible,
                 self.innerText,
@@ -1762,11 +1777,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._fontid, self._fontsize,
                 self._whitespace,
                 self._computed_styles.get('background-image', None),
+                self._computed_styles.get('background-color', None),
                 self._computed_styles_before.get('content', None) if self._computed_styles_before else None,
                 self._computed_styles_after.get('content',  None) if self._computed_styles_after  else None,
             )
             if style_content_hash != getattr(self, '_style_content_hash', None):
                 self._dirty('style change might have changed content (::before / ::after)', 'content')
+                self._dirty('style change might have changed content (::before / ::after)', 'renderbuf')
                 self._dirty_flow()
                 self._innerTextWrapped = None
                 self._style_content_hash = style_content_hash
@@ -1783,17 +1800,17 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             )
             if style_size_hash != getattr(self, '_style_size_hash', None):
                 self._dirty('style change might have changed size', 'size')
+                self._dirty('style change might have changed size', 'renderbuf')
                 self._dirty_flow()
                 self._innerTextWrapped = None
                 self._style_size_hash = style_size_hash
-        pr.done()
 
         self._dirty_properties.discard('style')
         self._dirty_callbacks['style'] = set()
 
         # self.defer_dirty_propagation = False
 
-    @UI_Element_Utils.add_cleaning_callback('content', {'blocks'})
+    @UI_Element_Utils.add_cleaning_callback('content', {'blocks', 'renderbuf'})
     @profiler.function
     def _compute_content(self):
         if self._defer_clean:
@@ -1896,8 +1913,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     'pre': '',
                 })
                 self._children_text_min_size = Size2D(width=0, height=0)
-                pr = profiler.start('cleaning text children')
-                if True:
+                with profiler.code('cleaning text children'):
                     for child in self._children_text: child._clean()
                     if any(child._static_content_size is None for child in self._children_text):
                         # temporarily set
@@ -1906,7 +1922,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     else:
                         self._children_text_min_size.width  = max(child._static_content_size.width  for child in self._children_text)
                         self._children_text_min_size.height = max(child._static_content_size.height for child in self._children_text)
-                pr.done()
                 self._new_content = True
 
         elif self.src: # and not self._src:
@@ -1942,6 +1957,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         # content changes might have changed size
         if self._new_content:
             self._dirty('content changes might have affected blocks', 'blocks')
+            self._dirty('content changes might have affected blocks', 'renderbuf')
             self._dirty_flow()
             self._new_content = False
         self._dirty_properties.discard('content')
@@ -1995,7 +2011,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         Globals.drawing.set_font_size(size_prev, fontid=self._fontid)
         return min(best_index, len(self._text_map)-1)
 
-    @UI_Element_Utils.add_cleaning_callback('blocks', {'size'})
+    @UI_Element_Utils.add_cleaning_callback('blocks', {'size', 'renderbuf'})
     @profiler.function
     def _compute_blocks(self):
         # split up all children into layout blocks
@@ -2038,6 +2054,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         # content changes might have changed size
         self._dirty('block changes might have changed size', 'size')
+        self._dirty('block changes might have changed size', 'renderbuf')
         self._dirty_flow()
         self._dirty_properties.discard('blocks')
         self._dirty_callbacks['blocks'] = set()
@@ -2047,7 +2064,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     ################################################################################################
     # NOTE: COMPUTE STATIC CONTENT SIZE (TEXT, IMAGE, ETC.), NOT INCLUDING MARGIN, BORDER, PADDING
     #       WE MIGHT NOT NEED TO COMPUTE MIN AND MAX??
-    @UI_Element_Utils.add_cleaning_callback('size')
+    @UI_Element_Utils.add_cleaning_callback('size', {'renderbuf'})
     @profiler.function
     def _compute_static_content_size(self):
         if self._defer_clean:
@@ -2064,18 +2081,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         # self.defer_dirty_propagation = True
 
-        pr = profiler.start('recursing to children')
-        if True:
+        with profiler.code('recursing to children'):
             for child in self._children_all:
                 child._compute_static_content_size()
-        pr.done()
 
         self._static_content_size = None
 
         # set size based on content (computed size)
         if self._innerTextAsIs is not None:
-            pr = profiler.start('computing text sizes')
-            if True:
+            with profiler.code('computing text sizes'):
                 # TODO: allow word breaking?
                 # size_prev = Globals.drawing.set_font_size(self._textwrap_opts['fontsize'], fontid=self._textwrap_opts['fontid'], force=True)
                 size_prev = Globals.drawing.set_font_size(self._parent._fontsize, fontid=self._parent._fontid) #, force=True)
@@ -2086,25 +2100,30 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._static_content_size.set_all_widths(ceil(Globals.drawing.get_text_width(self._innerTextAsIs)))
                 self._static_content_size.set_all_heights(ceil(Globals.drawing.get_line_height(self._innerTextAsIs)))
                 Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid) #, force=True)
-            pr.done()
 
         elif self._src == 'image':
-            pr = profiler.start('computing image sizes')
-            if True:
+            with profiler.code('computing image sizes'):
                 # TODO: set to image size?
                 dpi_mult = Globals.drawing.get_dpi_mult()
                 self._static_content_size = Size2D()
                 self._static_content_size.set_all_widths(self._image_data['width'] * dpi_mult)
                 self._static_content_size.set_all_heights(self._image_data['height'] * dpi_mult)
-            pr.done()
 
         else:
             pass
 
+        self._dirty('static content changes might change render', 'renderbuf')
         self._dirty_properties.discard('size')
         self._dirty_flow()
         self._dirty_callbacks['size'] = set()
         # self.defer_dirty_propagation = False
+
+    @UI_Element_Utils.add_cleaning_callback('renderbuf')
+    def _renderbuf(self):
+        self._dirty_renderbuf = True
+        self._dirty_properties.discard('renderbuf')
+
+
 
     @profiler.function
     def _layout(self, **kwargs):
@@ -2524,92 +2543,218 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._r = self._l + (self._w - 1)
         self._b = self._t - (self._h - 1)
 
+    def _draw_real(self, depth):
+        dpi_mult = Globals.drawing.get_dpi_mult()
+
+        if DEBUG_COLOR_CLEAN:
+            # style, content, size, layout, blocks
+            t_max = 2
+            t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
+            background_override = Color((t, t/2, 0, 0.5))
+        else:
+            background_override = None
+
+        bgl.glEnable(bgl.GL_BLEND)
+        bgl.glEnable(bgl.GL_SCISSOR_TEST)
+
+        sc = self._style_cache
+        margin_top,  margin_right,  margin_bottom,  margin_left  = sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']
+        padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
+        border_width = sc['border-width']
+
+        with profiler.code('drawing mbp'):
+            texture_id = self._image_data['texid'] if self._src == 'image' else -1
+            texture_fit = self._computed_styles.get('object-fit', 'fill')
+            ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, texture_id, texture_fit, background_override=background_override)
+
+        with profiler.code('drawing children'):
+            # compute inner scissor area
+            include_margin = True
+            include_padding = False
+            mt,mr,mb,ml = (margin_top, margin_right, margin_bottom, margin_left)  if include_margin  else (0,0,0,0)
+            pt,pr,pb,pl = (padding_top,padding_right,padding_bottom,padding_left) if include_padding else (0,0,0,0)
+            bw = border_width
+            il = round(self._l + (ml + bw + pl))
+            it = round(self._t - (mt + bw + pt))
+            iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
+            ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
+
+            with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self))):
+                if self._innerText is not None:
+                    self._draw_real_innerText(il, it, depth)
+                elif self._innerTextAsIs is not None:
+                    Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (il, it))
+                else:
+                    for child in self._children_all_sorted:
+                        child._draw(False, depth + 1)
+
     @profiler.function
-    def _draw(self, depth=0, textshadowoffset=None):
-        if self._innerTextAsIs is not None:
-            self._setup_ltwh()
-            if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h): return
+    def _draw_real_innerText(self, l, t, depth):
+        size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)
+        if self._textshadow is not None:
+            tsx,tsy,tsc = self._textshadow
+            Globals.drawing.set_font_color(self._fontid, tsc)
+            for child in self._children_all_sorted:
+                child._draw(False, depth + 1)
+        Globals.drawing.set_font_color(self._fontid, self._fontcolor)
+        for child in self._children_all_sorted:
+            child._draw(False, depth + 1)
+        Globals.drawing.set_font_size(size_prev, fontid=self._fontid)
 
-            with profiler.code('drawing innerTextAsIs'):
-                ox,oy = textshadowoffset if textshadowoffset is not None else (0,0)
-                Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (self._l+ox, self._t-oy))
-            return
-
+    @profiler.function
+    def _draw_hierarchical(self, cache, depth):
         if not self.is_visible: return
+        self._setup_ltwh()
+        if self._w <= 0 or self._h <= 0: return
+        if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h): return
 
-        with profiler.code('_draw initialization'):
-            self._setup_ltwh()
-            if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h):
-                return
+        if cache:
+            if not self._dirty_renderbuf: return   # no need to re-render
+            if self._innerTextAsIs is not None: return   # do not cache this low level!
 
-            if DEBUG_COLOR_CLEAN:
-                # style, content, size, layout, blocks
-                t_max = 2
-                t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
-                background_override = Color((t, t/2, 0, 0.5))
-            else:
-                background_override = None
+            # make sure children are all cached (if applicable)
+            for child in self._children_all_sorted:
+                child._draw(True, depth + 1)
 
+            # (re-)create off-screen buffer
+            if self._cacheRenderBuf and (self._w != self._cacheRenderBuf.width or self._h != self._cacheRenderBuf.height):
+                # size changed!  reallocate off-screen buffer
+                print('GPUOffScreen needs resized from %dx%d to %dx%d' % (self._cacheRenderBuf.width, self._cacheRenderBuf.height, self._w, self._h))
+                self._cacheRenderBuf.free()
+                self._cacheRenderBuf = None
+            if not self._cacheRenderBuf:
+                self._cacheRenderBuf = GPUOffScreen(self._w, self._h, 0)
+                print('Created new GPUOffScreen %s %d %dx%d for %s' % (str(self._cacheRenderBuf), self._cacheRenderBuf.color_texture, self._cacheRenderBuf.width, self._cacheRenderBuf.height, str(self)))
+
+            # now, draw self into off-screen buffer
+            with self._cacheRenderBuf.bind():
+                bgl.glEnable(bgl.GL_BLEND)
+                bgl.glEnable(bgl.GL_SCISSOR_TEST)
+                bgl.glClearColor(0, 0, 0, 0)
+                bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT | bgl.GL_COLOR_BUFFER_BIT)
+                #bgl.glDisable(bgl.GL_SCISSOR_TEST)  # temporarily disable scissor tests, self._cacheRenderBuf.bind() _should_ restore this
+                mx, my = -self._l, -self._b
+                model_matrix = Matrix([
+                    [ 1,  0,  0, mx],
+                    [ 0,  1,  0, my],
+                    [ 0,  0,  1,  0],
+                    [ 0,  0,  0,  1],
+                    ])
+                vx, vy, vw, vh = -1, -1, 2 / self._w, 2 / self._h
+                view_matrix = Matrix([
+                    [vw,  0,  0, vx],
+                    [ 0, vh,  0, vy],
+                    [ 0,  0,  1,  0],
+                    [ 0,  0,  0,  1],
+                    ])
+                with gpu.matrix.push_pop():
+                    with gpu.matrix.push_pop_projection():
+                        Globals.drawing.load_pixel_matrix(view_matrix @ model_matrix)
+                        gpu.matrix.load_matrix(view_matrix @ model_matrix)
+                        #gpu.matrix.load_projection_matrix(Matrix.Identity(4))
+                        with ScissorStack.wrap(self._l, self._t, self._w, self._h, clamp=False, disabled=False):
+                             self._draw_real(depth)
+                        Globals.drawing.load_pixel_matrix(None)
+
+            self._dirty_renderbuf = False
+        else:
             bgl.glEnable(bgl.GL_BLEND)
-
-            dpi_mult = Globals.drawing.get_dpi_mult()
-            sc = self._style_cache
-            margin_top,  margin_right,  margin_bottom,  margin_left  = sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']
-            padding_top, padding_right, padding_bottom, padding_left = sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left']
-            border_width = sc['border-width']
-
-        with ScissorStack.wrap(self._l, self._t, self._w, self._h, msg=str(self)):
-            with profiler.code('drawing mbp'):
-                texture_id = self._image_data['texid'] if self._src == 'image' else -1
-                texture_fit = self._computed_styles.get('object-fit', 'fill')
-                ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, texture_id, texture_fit, background_override=background_override)
-
-            with profiler.code('drawing children'):
-                # compute inner scissor area
-                include_margin = True
-                include_padding = False
-                mt,mr,mb,ml = (margin_top, margin_right, margin_bottom, margin_left)  if include_margin  else (0,0,0,0)
-                pt,pr,pb,pl = (padding_top,padding_right,padding_bottom,padding_left) if include_padding else (0,0,0,0)
-                bw = border_width
-                il = round(self._l + (ml + bw + pl))
-                it = round(self._t - (mt + bw + pt))
-                iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
-                ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
-
-                with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self)), disabled=False):
-                    if self._innerText is not None:
-                        with profiler.code('drawing innerText'):
-                            size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)
-                            bgl.glEnable(bgl.GL_BLEND)
-                            if self._textshadow is not None:
-                                tsx,tsy,tsc = self._textshadow
-                                Globals.drawing.set_font_color(self._fontid, tsc)
-                                for child in self._children_all_sorted:
-                                    child._draw(depth + 1, textshadowoffset=(tsx,tsy))
-                            Globals.drawing.set_font_color(self._fontid, self._fontcolor)
-                            for child in self._children_all_sorted:
-                                child._draw(depth + 1)
-                            Globals.drawing.set_font_size(size_prev, fontid=self._fontid)
+            bgl.glEnable(bgl.GL_SCISSOR_TEST)
+            if not self._cacheRenderBuf:
+                with ScissorStack.wrap(self._l, self._t, self._w, self._h):
+                    self._draw_real(depth)
+            else:
+                with ScissorStack.wrap(self._l, self._t, self._w, self._h):
+                    texture_id = self._cacheRenderBuf.color_texture
+                    if False:
+                        dpi_mult = Globals.drawing.get_dpi_mult()
+                        texture_fit = 0
+                        background_override = None
+                        ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, {'background-color': (0,0,0,0)}, texture_id, texture_fit, background_override=background_override)
                     else:
-                        for child in self._children_all_sorted: child._draw(depth+1)
+                        draw_texture_2d(texture_id, (self._l, self._b), self._w, self._h)
 
-            vscroll = max(0, self._dynamic_full_size.height - self._h)
-            if vscroll >= 1:
-                with profiler.code('drawing scrollbar'):
-                    bgl.glEnable(bgl.GL_BLEND)
-                    w = 3
-                    h = self._h - (mt+bw+pt) - (mb+bw+pb) - 6
-                    px = self._l + self._w - (mr+bw+pr) - w/2 - 5
-                    py0 = self._t - (mt+bw+pt) - 3
-                    py1 = py0 - (h-1)
-                    sh = h * self._h / self._dynamic_full_size.height
-                    sy0 = py0 - (h-sh) * (self._scroll_offset.y / vscroll)
-                    sy1 = sy0 - sh
-                    if py0>sy0: Globals.drawing.draw2D_line(Point2D((px,py0)), Point2D((px,sy0+1)), Color((0,0,0,0.2)), width=w)
-                    if sy1>py1: Globals.drawing.draw2D_line(Point2D((px,sy1-1)), Point2D((px,py1)), Color((0,0,0,0.2)), width=w)
-                    Globals.drawing.draw2D_line(Point2D((px,sy0)), Point2D((px,sy1)), Color((1,1,1,0.2)), width=w)
+    @profiler.function
+    def _draw_onlyroot(self, cache, depth):
+        if not self.is_visible: return
+        self._setup_ltwh()
+        if self._w <= 0 or self._h <= 0: return
+        if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h): return
 
-    def draw(self, *args, **kwargs): return self._draw(*args, **kwargs)
+        if cache:
+            if not self._dirty_renderbuf: return   # no need to re-render
+            #return
+
+            # (re-)create off-screen buffer
+            if self._cacheRenderBuf and (self._w != self._cacheRenderBuf.width or self._h != self._cacheRenderBuf.height):
+                # size changed!  reallocate off-screen buffer
+                print('GPUOffScreen needs resized from %dx%d to %dx%d' % (self._cacheRenderBuf.width, self._cacheRenderBuf.height, self._w, self._h))
+                self._cacheRenderBuf.free()
+                self._cacheRenderBuf = None
+            if not self._cacheRenderBuf:
+                self._cacheRenderBuf = GPUOffScreen(self._w, self._h, 0)
+                print('Created new GPUOffScreen %s %d %dx%d for %s' % (str(self._cacheRenderBuf), self._cacheRenderBuf.color_texture, self._cacheRenderBuf.width, self._cacheRenderBuf.height, str(self)))
+
+            # now, draw self into off-screen buffer
+            with self._cacheRenderBuf.bind():
+                bgl.glClearColor(0, 0, 0, 0)
+                bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT | bgl.GL_COLOR_BUFFER_BIT)
+                self._draw_real(depth)
+
+            self._dirty_renderbuf = False
+        else:
+            bgl.glEnable(bgl.GL_BLEND)
+            bgl.glEnable(bgl.GL_SCISSOR_TEST)
+            if not self._cacheRenderBuf:
+                with ScissorStack.wrap(self._l, self._t, self._w, self._h):
+                    self._draw_real(depth)
+            else:
+                with ScissorStack.wrap(self._l, self._t, self._w, self._h):
+                    texture_id = self._cacheRenderBuf.color_texture
+                    if False:
+                        dpi_mult = Globals.drawing.get_dpi_mult()
+                        texture_fit = 0
+                        background_override = None
+                        ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, {'background-color': (0,0,0,0)}, texture_id, texture_fit, background_override=background_override)
+                    else:
+                        draw_texture_2d(texture_id, (self._l, self._b), self._w, self._h)
+
+    def _draw(self, cache, depth):
+        if True:
+            self._draw_onlyroot(cache, depth)
+        else:
+            self._draw_hierarchical(cache, depth)
+
+
+    def draw(self):
+        self._draw(True, 0)
+        self._draw(False, 0)
+
+    def _draw_vscroll(self, depth=0):
+        if not self.is_visible: return
+        if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h): return
+        if self._w <= 0 or self._h <= 0: return
+        vscroll = max(0, self._dynamic_full_size.height - self._h)
+        if vscroll < 1: return
+        with ScissorStack.wrap(self._l, self._t, self._w, self._h, msg=str(self)):
+            with profiler.code('drawing scrollbar'):
+                bgl.glEnable(bgl.GL_BLEND)
+                w = 3
+                h = self._h - (mt+bw+pt) - (mb+bw+pb) - 6
+                px = self._l + self._w - (mr+bw+pr) - w/2 - 5
+                py0 = self._t - (mt+bw+pt) - 3
+                py1 = py0 - (h-1)
+                sh = h * self._h / self._dynamic_full_size.height
+                sy0 = py0 - (h-sh) * (self._scroll_offset.y / vscroll)
+                sy1 = sy0 - sh
+                if py0>sy0: Globals.drawing.draw2D_line(Point2D((px,py0)), Point2D((px,sy0+1)), Color((0,0,0,0.2)), width=w)
+                if sy1>py1: Globals.drawing.draw2D_line(Point2D((px,sy1-1)), Point2D((px,py1)), Color((0,0,0,0.2)), width=w)
+                Globals.drawing.draw2D_line(Point2D((px,sy0)), Point2D((px,sy1)), Color((1,1,1,0.2)), width=w)
+        if self._innerText is None:
+            for child in self._children_all_sorted:
+                child._draw_vscroll(depth+1)
+    def draw_vscroll(self, *args, **kwargs): return self._draw_vscroll(*args, **kwargs)
+
 
     @profiler.function
     def get_under_mouse(self, p:Point2D):
@@ -3203,7 +3348,7 @@ class UI_Document(UI_Document_FSM):
         if self._reposition_tooltip_before_draw:
             self._reposition_tooltip_before_draw = False
             self._reposition_tooltip()
-        self._body._draw()
+        self._body.draw()
         ScissorStack.end()
 
         self._draw_count += 1

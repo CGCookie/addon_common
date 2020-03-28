@@ -242,7 +242,7 @@ vec4 mix_image(vec4 bg) {
             ty = th / 2.0;
             break;
     }
-    vec2 texcoord = vec2(tx / tw, ty / th);
+    vec2 texcoord = vec2(tx / tw, 1 - ty / th);
     if(0 <= texcoord.x && texcoord.x < 1 && 0 <= texcoord.y && texcoord.y < 1) {
         vec4 t = texture(image, texcoord) + debug_color;
         float a = t.a + c.a * (1.0 - t.a);

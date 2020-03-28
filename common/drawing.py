@@ -243,6 +243,7 @@ class Drawing:
         self.line_cache = {}
         self.size_cache = {}
         self.set_font_size(12)
+        self._pixel_matrix = None
 
     def set_region(self, area, space, rgn, r3d, window):
         self.area = area
@@ -415,19 +416,29 @@ class Drawing:
         ww,wh = self.window.width,self.window.height
         return [[2/w,0,0,-1],  [0,2/h,0,-1],  [0,0,1,0],  [0,0,0,1]]
 
+    def load_pixel_matrix(self, m):
+        self._pixel_matrix = m
+
     def get_pixel_matrix(self):
         '''
         returns MVP for pixel view
         TODO: compute separate M,V,P matrices
         '''
         if not self.r3d: return None
+        if self._pixel_matrix: return self._pixel_matrix
         w,h = self.rgn.width,self.rgn.height
         if not hasattr(self, '_get_pixel_matrix_cache'):
             self._get_pixel_matrix_cache = {'w':-1, 'h':-1, 'm':None}
         cache = self._get_pixel_matrix_cache
         if cache['w'] != w or cache['h'] != h:
+            mx, my, mw, mh = -1, -1, 2 / w, 2 / h
             cache['w'],cache['h'] = w,h
-            cache['m'] = Matrix([[2/w,0,0,-1], [0,2/h,0,-1], [0,0,1,0], [0,0,0,1]])
+            cache['m'] = Matrix([
+                [ mw,  0,  0, mx],
+                [  0, mh,  0, my],
+                [  0,  0,  1,  0],
+                [  0,  0,  0,  1]
+            ])
         return cache['m']
 
     def get_pixel_matrix_buffer(self):
@@ -1180,6 +1191,7 @@ class ScissorStack:
     @staticmethod
     @profiler.function
     def is_box_visible(l, t, w, h):
+        if w <= 0 or h <= 0: return False
         vl, vt, vw, vh = ScissorStack.get_current_view()
         if vw <= 0 or vh <= 0: return False
         vr, vb = vl + (vw - 1), vt - (vh - 1)
