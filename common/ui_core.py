@@ -2097,8 +2097,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 if ts is None: tsx,tsy = 0,0
                 else: tsx,tsy,tsc = ts
                 self._static_content_size = Size2D()
-                self._static_content_size.set_all_widths(ceil(Globals.drawing.get_text_width(self._innerTextAsIs)))
-                self._static_content_size.set_all_heights(ceil(Globals.drawing.get_line_height(self._innerTextAsIs)))
+                self._static_content_size.set_all_widths(ceil(Globals.drawing.get_text_width(self._innerTextAsIs)) + abs(tsx))
+                self._static_content_size.set_all_heights(ceil(Globals.drawing.get_line_height(self._innerTextAsIs)) + abs(tsy))
                 Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid) #, force=True)
 
         elif self._src == 'image':
@@ -2543,8 +2543,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._r = self._l + (self._w - 1)
         self._b = self._t - (self._h - 1)
 
-    def _draw_real(self, depth):
+    def _draw_real(self, offset, depth):
         dpi_mult = Globals.drawing.get_dpi_mult()
+        ox,oy = offset
 
         if DEBUG_COLOR_CLEAN:
             # style, content, size, layout, blocks
@@ -2565,7 +2566,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         with profiler.code('drawing mbp'):
             texture_id = self._image_data['texid'] if self._src == 'image' else -1
             texture_fit = self._computed_styles.get('object-fit', 'fill')
-            ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, self._style_cache, texture_id, texture_fit, background_override=background_override)
+            ui_draw.draw(self._l+ox, self._t+oy, self._w, self._h, dpi_mult, self._style_cache, texture_id, texture_fit, background_override=background_override)
 
         with profiler.code('drawing children'):
             # compute inner scissor area
@@ -2579,34 +2580,35 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
             ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
 
-            with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self))):
+            with ScissorStack.wrap(il+ox, it+oy, iw, ih, msg=('%s mbp' % str(self))):
                 if self._innerText is not None:
-                    self._draw_real_innerText(il, it, depth)
+                    self._draw_real_innerText(offset, (il+ox, it+oy), depth)
                 elif self._innerTextAsIs is not None:
-                    Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (il, it))
+                    Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (il+ox, it+oy))
                 else:
                     for child in self._children_all_sorted:
-                        child._draw(False, depth + 1)
+                        child._draw(offset, False, depth + 1)
 
-    @profiler.function
-    def _draw_real_innerText(self, l, t, depth):
+    def _draw_real_innerText(self, offset, pos, depth):
+        l,t = pos
+        ox,oy = offset
         size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)
         if self._textshadow is not None:
             tsx,tsy,tsc = self._textshadow
+            offset2 = (ox+tsx, oy-tsy)
             Globals.drawing.set_font_color(self._fontid, tsc)
             for child in self._children_all_sorted:
-                child._draw(False, depth + 1)
+                child._draw(offset2, False, depth + 1)
         Globals.drawing.set_font_color(self._fontid, self._fontcolor)
         for child in self._children_all_sorted:
-            child._draw(False, depth + 1)
+            child._draw(offset, False, depth + 1)
         Globals.drawing.set_font_size(size_prev, fontid=self._fontid)
 
-    @profiler.function
-    def _draw_hierarchical(self, cache, depth):
+    def _draw_hierarchical(self, offset, cache, depth):
+        ox,oy = offset
         if not self.is_visible: return
         self._setup_ltwh()
-        if self._w <= 0 or self._h <= 0: return
-        if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h): return
+        if not ScissorStack.is_box_visible(self._l+ox, self._t+oy, self._w, self._h): return
 
         if cache:
             if not self._dirty_renderbuf: return   # no need to re-render
@@ -2614,7 +2616,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
             # make sure children are all cached (if applicable)
             for child in self._children_all_sorted:
-                child._draw(True, depth + 1)
+                child._draw(offset, True, depth + 1)
 
             # (re-)create off-screen buffer
             if self._cacheRenderBuf and (self._w != self._cacheRenderBuf.width or self._h != self._cacheRenderBuf.height):
@@ -2626,60 +2628,35 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._cacheRenderBuf = GPUOffScreen(self._w, self._h, 0)
                 print('Created new GPUOffScreen %s %d %dx%d for %s' % (str(self._cacheRenderBuf), self._cacheRenderBuf.color_texture, self._cacheRenderBuf.width, self._cacheRenderBuf.height, str(self)))
 
-            # now, draw self into off-screen buffer
+            vx, vy, vw, vh = -1, -1, 2 / self._w, 2 / self._h
+            view_matrix = Matrix([
+                [vw,  0,  0, vx],
+                [ 0, vh,  0, vy],
+                [ 0,  0,  1,  0],
+                [ 0,  0,  0,  1],
+                ])
             with self._cacheRenderBuf.bind():
-                bgl.glEnable(bgl.GL_BLEND)
-                bgl.glEnable(bgl.GL_SCISSOR_TEST)
-                bgl.glClearColor(0, 0, 0, 0)
-                bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT | bgl.GL_COLOR_BUFFER_BIT)
-                #bgl.glDisable(bgl.GL_SCISSOR_TEST)  # temporarily disable scissor tests, self._cacheRenderBuf.bind() _should_ restore this
-                mx, my = -self._l, -self._b
-                model_matrix = Matrix([
-                    [ 1,  0,  0, mx],
-                    [ 0,  1,  0, my],
-                    [ 0,  0,  1,  0],
-                    [ 0,  0,  0,  1],
-                    ])
-                vx, vy, vw, vh = -1, -1, 2 / self._w, 2 / self._h
-                view_matrix = Matrix([
-                    [vw,  0,  0, vx],
-                    [ 0, vh,  0, vy],
-                    [ 0,  0,  1,  0],
-                    [ 0,  0,  0,  1],
-                    ])
                 with gpu.matrix.push_pop():
-                    with gpu.matrix.push_pop_projection():
-                        Globals.drawing.load_pixel_matrix(view_matrix @ model_matrix)
-                        gpu.matrix.load_matrix(view_matrix @ model_matrix)
-                        #gpu.matrix.load_projection_matrix(Matrix.Identity(4))
-                        with ScissorStack.wrap(self._l, self._t, self._w, self._h, clamp=False, disabled=False):
-                             self._draw_real(depth)
-                        Globals.drawing.load_pixel_matrix(None)
+                    Globals.drawing.load_pixel_matrix(view_matrix)
+                    gpu.matrix.load_matrix(view_matrix)
+                    bgl.glClearColor(0.1, 0, 0, 0.1)
+                    bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT | bgl.GL_COLOR_BUFFER_BIT)
+                    #bgl.glDisable(bgl.GL_SCISSOR_TEST)  # temporarily disable scissor tests, self._cacheRenderBuf.bind() _should_ restore this
+                    ox2,oy2 = -self._l, -self._b
+                    offset2 = (ox2, oy2)
+                    with ScissorStack.wrap(0, self._h-1, self._w, self._h, clamp=False):
+                         self._draw_real(offset2, depth)
+                    Globals.drawing.load_pixel_matrix(None)
 
             self._dirty_renderbuf = False
         else:
-            bgl.glEnable(bgl.GL_BLEND)
-            bgl.glEnable(bgl.GL_SCISSOR_TEST)
-            if not self._cacheRenderBuf:
-                with ScissorStack.wrap(self._l, self._t, self._w, self._h):
-                    self._draw_real(depth)
-            else:
-                with ScissorStack.wrap(self._l, self._t, self._w, self._h):
-                    texture_id = self._cacheRenderBuf.color_texture
-                    if False:
-                        dpi_mult = Globals.drawing.get_dpi_mult()
-                        texture_fit = 0
-                        background_override = None
-                        ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, {'background-color': (0,0,0,0)}, texture_id, texture_fit, background_override=background_override)
-                    else:
-                        draw_texture_2d(texture_id, (self._l, self._b), self._w, self._h)
+            self._draw_cached(offset, depth)
 
-    @profiler.function
-    def _draw_onlyroot(self, cache, depth):
+    def _draw_onlyroot(self, offset, cache, depth):
+        ox,oy = offset
         if not self.is_visible: return
         self._setup_ltwh()
-        if self._w <= 0 or self._h <= 0: return
-        if not ScissorStack.is_box_visible(self._l, self._t, self._w, self._h): return
+        if not ScissorStack.is_box_visible(self._l+ox, self._t+oy, self._w, self._h): return
 
         if cache:
             if not self._dirty_renderbuf: return   # no need to re-render
@@ -2699,36 +2676,40 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             with self._cacheRenderBuf.bind():
                 bgl.glClearColor(0, 0, 0, 0)
                 bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT | bgl.GL_COLOR_BUFFER_BIT)
-                self._draw_real(depth)
+                self._draw_real(offset, depth)
 
             self._dirty_renderbuf = False
         else:
-            bgl.glEnable(bgl.GL_BLEND)
-            bgl.glEnable(bgl.GL_SCISSOR_TEST)
-            if not self._cacheRenderBuf:
-                with ScissorStack.wrap(self._l, self._t, self._w, self._h):
-                    self._draw_real(depth)
-            else:
-                with ScissorStack.wrap(self._l, self._t, self._w, self._h):
-                    texture_id = self._cacheRenderBuf.color_texture
-                    if False:
-                        dpi_mult = Globals.drawing.get_dpi_mult()
-                        texture_fit = 0
-                        background_override = None
-                        ui_draw.draw(self._l, self._t, self._w, self._h, dpi_mult, {'background-color': (0,0,0,0)}, texture_id, texture_fit, background_override=background_override)
-                    else:
-                        draw_texture_2d(texture_id, (self._l, self._b), self._w, self._h)
+            self._draw_cached(offset, depth)
 
-    def _draw(self, cache, depth):
+    def _draw_cached(self, offset, depth):
+        ox,oy = offset
+        bgl.glEnable(bgl.GL_BLEND)
+        bgl.glEnable(bgl.GL_SCISSOR_TEST)
+        with ScissorStack.wrap(self._l+ox, self._t+oy, self._w, self._h):
+            if not self._cacheRenderBuf:
+                self._draw_real(offset, depth)
+            else:
+                texture_id = self._cacheRenderBuf.color_texture
+                if False:
+                    dpi_mult = Globals.drawing.get_dpi_mult()
+                    texture_fit = 0
+                    background_override = None
+                    ui_draw.draw(self._l+ox, self._t+oy, self._w, self._h, dpi_mult, {'background-color': (0,0,0,0)}, texture_id, texture_fit, background_override=background_override)
+                else:
+                    draw_texture_2d(texture_id, (self._l+ox, self._b+oy), self._w, self._h)
+
+    @profiler.function
+    def _draw(self, *args, **kwargs):
         if True:
-            self._draw_onlyroot(cache, depth)
+            self._draw_onlyroot(*args, **kwargs)
         else:
-            self._draw_hierarchical(cache, depth)
+            self._draw_hierarchical(*args, **kwargs)
 
 
     def draw(self):
-        self._draw(True, 0)
-        self._draw(False, 0)
+        self._draw((0,0), True, 0)
+        self._draw((0,0), False, 0)
 
     def _draw_vscroll(self, depth=0):
         if not self.is_visible: return

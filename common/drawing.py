@@ -1124,24 +1124,21 @@ class ScissorStack:
 
         assert ScissorStack.is_started, 'Attempting to push to a non-started ScissorStack!'
 
-        # compute right and bottom of new scissor box
-        nr = nl + (nw - 1)
-        nb = nt - (nh - 1) - 1      # sub 1 (not certain why this needs to be)
-
         if clamp:
             # get previous scissor box
             pl, pt, pw, ph = ScissorStack.stack[-1]
             pr = pl + (pw - 1)
             pb = pt - (ph - 1)
-            # clamp new box to previous (extra +1/-1 is to handle 0-sized width/height if boxes do not intersect)
-            #cl, cr, ct, cb = mid(nl,pl,pr), mid(nr+1,pl,pr)-1, mid(nt+1,pt,pb)-1, mid(nb,pt,pb)
+            # compute right and bottom of new scissor box
+            nr = nl + (nw - 1)
+            nb = nt - (nh - 1) - 1      # sub 1 (not certain why this needs to be)
+            # compute clamped l,r,t,b,w,h
             cl, cr, ct, cb = mid(nl,pl,pr), mid(nr,pl,pr), mid(nt,pt,pb), mid(nb,pt,pb)
             cw, ch = max(0, cr - cl + 1), max(0, ct - cb + 1)
             ScissorStack.stack.append((int(cl), int(ct), int(cw), int(ch)))
-            ScissorStack.msg_stack.append(msg)
         else:
             ScissorStack.stack.append((int(nl), int(nt), int(nw), int(nh)))
-            ScissorStack.msg_stack.append(msg)
+        ScissorStack.msg_stack.append(msg)
 
         ScissorStack._set_scissor()
 
