@@ -2521,6 +2521,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
     @profiler.function
     def _setup_ltwh(self):
+        if not self.is_visible: return
+
         # parent_pos = self._parent.absolute_pos if self._parent else Point2D((0, self._parent_size.max_height-1))
         if self._tablecell_table:
             table_pos = self._tablecell_table.absolute_pos
@@ -2543,7 +2545,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._r = self._l + (self._w - 1)
         self._b = self._t - (self._h - 1)
 
-    def _draw_real(self, offset, depth):
+        for child in self._children_all_sorted:
+            child._setup_ltwh()
+
+    def _draw_real(self, offset):
         dpi_mult = Globals.drawing.get_dpi_mult()
         ox,oy = offset
 
@@ -2582,14 +2587,14 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
             with ScissorStack.wrap(il+ox, it+oy, iw, ih, msg=('%s mbp' % str(self))):
                 if self._innerText is not None:
-                    self._draw_real_innerText(offset, (il+ox, it+oy), depth)
+                    self._draw_real_innerText(offset, (il+ox, it+oy))
                 elif self._innerTextAsIs is not None:
                     Globals.drawing.text_draw2D_simple(self._innerTextAsIs, (il+ox, it+oy))
                 else:
                     for child in self._children_all_sorted:
-                        child._draw(offset, False, depth + 1)
+                        child._draw(offset)
 
-    def _draw_real_innerText(self, offset, pos, depth):
+    def _draw_real_innerText(self, offset, pos):
         l,t = pos
         ox,oy = offset
         size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)
@@ -2598,118 +2603,95 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             offset2 = (ox+tsx, oy-tsy)
             Globals.drawing.set_font_color(self._fontid, tsc)
             for child in self._children_all_sorted:
-                child._draw(offset2, False, depth + 1)
+                child._draw(offset2)
         Globals.drawing.set_font_color(self._fontid, self._fontcolor)
         for child in self._children_all_sorted:
-            child._draw(offset, False, depth + 1)
+            child._draw(offset)
         Globals.drawing.set_font_size(size_prev, fontid=self._fontid)
 
-    def _draw_hierarchical(self, offset, cache, depth):
-        ox,oy = offset
-        if not self.is_visible: return
-        self._setup_ltwh()
-        if not ScissorStack.is_box_visible(self._l+ox, self._t+oy, self._w, self._h): return
-
-        if cache:
-            if not self._dirty_renderbuf: return   # no need to re-render
-            if self._innerTextAsIs is not None: return   # do not cache this low level!
-
-            # make sure children are all cached (if applicable)
-            for child in self._children_all_sorted:
-                child._draw(offset, True, depth + 1)
-
-            # (re-)create off-screen buffer
-            if self._cacheRenderBuf and (self._w != self._cacheRenderBuf.width or self._h != self._cacheRenderBuf.height):
-                # size changed!  reallocate off-screen buffer
-                print('GPUOffScreen needs resized from %dx%d to %dx%d' % (self._cacheRenderBuf.width, self._cacheRenderBuf.height, self._w, self._h))
-                self._cacheRenderBuf.free()
-                self._cacheRenderBuf = None
-            if not self._cacheRenderBuf:
-                self._cacheRenderBuf = GPUOffScreen(self._w, self._h, 0)
-                print('Created new GPUOffScreen %s %d %dx%d for %s' % (str(self._cacheRenderBuf), self._cacheRenderBuf.color_texture, self._cacheRenderBuf.width, self._cacheRenderBuf.height, str(self)))
-
-            vx, vy, vw, vh = -1, -1, 2 / self._w, 2 / self._h
-            view_matrix = Matrix([
-                [vw,  0,  0, vx],
-                [ 0, vh,  0, vy],
-                [ 0,  0,  1,  0],
-                [ 0,  0,  0,  1],
-                ])
-            with self._cacheRenderBuf.bind():
-                with gpu.matrix.push_pop():
-                    Globals.drawing.load_pixel_matrix(view_matrix)
-                    gpu.matrix.load_matrix(view_matrix)
-                    bgl.glClearColor(0.1, 0, 0, 0.1)
-                    bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT | bgl.GL_COLOR_BUFFER_BIT)
-                    #bgl.glDisable(bgl.GL_SCISSOR_TEST)  # temporarily disable scissor tests, self._cacheRenderBuf.bind() _should_ restore this
-                    ox2,oy2 = -self._l, -self._b
-                    offset2 = (ox2, oy2)
-                    with ScissorStack.wrap(0, self._h-1, self._w, self._h, clamp=False):
-                         self._draw_real(offset2, depth)
-                    Globals.drawing.load_pixel_matrix(None)
-
-            self._dirty_renderbuf = False
-        else:
-            self._draw_cached(offset, depth)
-
-    def _draw_onlyroot(self, offset, cache, depth):
-        ox,oy = offset
-        if not self.is_visible: return
-        self._setup_ltwh()
-        if not ScissorStack.is_box_visible(self._l+ox, self._t+oy, self._w, self._h): return
-
-        if cache:
-            if not self._dirty_renderbuf: return   # no need to re-render
-            #return
-
-            # (re-)create off-screen buffer
-            if self._cacheRenderBuf and (self._w != self._cacheRenderBuf.width or self._h != self._cacheRenderBuf.height):
-                # size changed!  reallocate off-screen buffer
-                print('GPUOffScreen needs resized from %dx%d to %dx%d' % (self._cacheRenderBuf.width, self._cacheRenderBuf.height, self._w, self._h))
-                self._cacheRenderBuf.free()
-                self._cacheRenderBuf = None
-            if not self._cacheRenderBuf:
-                self._cacheRenderBuf = GPUOffScreen(self._w, self._h, 0)
-                print('Created new GPUOffScreen %s %d %dx%d for %s' % (str(self._cacheRenderBuf), self._cacheRenderBuf.color_texture, self._cacheRenderBuf.width, self._cacheRenderBuf.height, str(self)))
-
-            # now, draw self into off-screen buffer
-            with self._cacheRenderBuf.bind():
-                bgl.glClearColor(0, 0, 0, 0)
-                bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT | bgl.GL_COLOR_BUFFER_BIT)
-                self._draw_real(offset, depth)
-
-            self._dirty_renderbuf = False
-        else:
-            self._draw_cached(offset, depth)
-
-    def _draw_cached(self, offset, depth):
+    def _draw_cache(self, offset):
         ox,oy = offset
         bgl.glEnable(bgl.GL_BLEND)
         bgl.glEnable(bgl.GL_SCISSOR_TEST)
         with ScissorStack.wrap(self._l+ox, self._t+oy, self._w, self._h):
-            if not self._cacheRenderBuf:
-                self._draw_real(offset, depth)
-            else:
+            if self._cacheRenderBuf:
                 texture_id = self._cacheRenderBuf.color_texture
-                if False:
-                    dpi_mult = Globals.drawing.get_dpi_mult()
-                    texture_fit = 0
-                    background_override = None
-                    ui_draw.draw(self._l+ox, self._t+oy, self._w, self._h, dpi_mult, {'background-color': (0,0,0,0)}, texture_id, texture_fit, background_override=background_override)
-                else:
-                    draw_texture_2d(texture_id, (self._l+ox, self._b+oy), self._w, self._h)
+                draw_texture_2d(texture_id, (self._l+ox, self._b+oy), self._w, self._h)
+                # dpi_mult = Globals.drawing.get_dpi_mult()
+                # texture_fit = 0
+                # background_override = None
+                # ui_draw.draw(self._l+ox, self._t+oy, self._w, self._h, dpi_mult, {'background-color': (0,0,0,0)}, texture_id, texture_fit, background_override=background_override)
+            else:
+                self._draw_real(offset)
+
+    def _cache_hierarchical(self):
+        if self._innerTextAsIs is not None: return   # do not cache this low level!
+
+        # make sure children are all cached (if applicable)
+        for child in self._children_all_sorted:
+            child._cache()
+
+        vx, vy, vw, vh = -1, -1, 2 / self._w, 2 / self._h
+        view_matrix = Matrix([
+            [vw,  0,  0, vx],
+            [ 0, vh,  0, vy],
+            [ 0,  0,  1,  0],
+            [ 0,  0,  0,  1],
+            ])
+        with self._cacheRenderBuf.bind():
+            with gpu.matrix.push_pop():
+                Globals.drawing.load_pixel_matrix(view_matrix)
+                gpu.matrix.load_matrix(view_matrix)
+                bgl.glClearColor(0.1, 0, 0, 0.1)
+                bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT | bgl.GL_COLOR_BUFFER_BIT)
+                #bgl.glDisable(bgl.GL_SCISSOR_TEST)  # temporarily disable scissor tests, self._cacheRenderBuf.bind() _should_ restore this
+                with ScissorStack.wrap(0, self._h-1, self._w, self._h, clamp=False):
+                     self._draw_real((-self._l, -self._b))
+                Globals.drawing.load_pixel_matrix(None)
+
+    def _cache_onlyroot(self):
+        # now, draw self into off-screen buffer
+        with self._cacheRenderBuf.bind():
+            bgl.glClearColor(0, 0, 0, 0)
+            bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT | bgl.GL_COLOR_BUFFER_BIT)
+            self._draw_real((0,0))
 
     @profiler.function
-    def _draw(self, *args, **kwargs):
-        if True:
-            self._draw_onlyroot(*args, **kwargs)
-        else:
-            self._draw_hierarchical(*args, **kwargs)
+    def _cache(self):
+        if not self.is_visible: return
+        if self._w <= 0 or self._h <= 0: return
+        #if not ScissorStack.is_box_visible(self._l+ox, self._t+oy, self._w, self._h): return
 
+        if not self._dirty_renderbuf: return   # no need to cache
+        print('caching %s' % str(self))
+
+        # (re-)create off-screen buffer
+        if self._cacheRenderBuf and (self._w != self._cacheRenderBuf.width or self._h != self._cacheRenderBuf.height):
+            # size changed!  reallocate off-screen buffer
+            # print('GPUOffScreen needs resized from %dx%d to %dx%d' % (self._cacheRenderBuf.width, self._cacheRenderBuf.height, self._w, self._h))
+            self._cacheRenderBuf.free()
+            self._cacheRenderBuf = None
+        if not self._cacheRenderBuf:
+            self._cacheRenderBuf = GPUOffScreen(self._w, self._h, 0)
+            # print('Created new GPUOffScreen %s %d %dx%d for %s' % (str(self._cacheRenderBuf), self._cacheRenderBuf.color_texture, self._cacheRenderBuf.width, self._cacheRenderBuf.height, str(self)))
+
+        self._cache_onlyroot()
+        # self._cache_hierarchical()
+
+        self._dirty_renderbuf = False
+
+    @profiler.function
+    def _draw(self, offset):
+        if not self.is_visible: return
+        if self._w <= 0 or self._h <= 0: return
+        ox,oy = offset
+        if not ScissorStack.is_box_visible(self._l+ox, self._t+oy, self._w, self._h): return
+        self._draw_cache(offset)
 
     def draw(self):
-        self._draw((0,0), True, 0)
-        self._draw((0,0), False, 0)
+        self._setup_ltwh()
+        self._cache()
+        self._draw((0,0))
 
     def _draw_vscroll(self, depth=0):
         if not self.is_visible: return
