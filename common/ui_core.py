@@ -2547,7 +2547,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             for child in self._children_all:
                 child._setup_ltwh()
 
-    def _draw_real(self, offset, scissor_include_margin=True, scissor_include_padding=False):
+    def _draw_real(self, offset, scissor_include_margin=True, scissor_include_padding=True):
         dpi_mult = Globals.drawing.get_dpi_mult()
         ox,oy = offset
 
