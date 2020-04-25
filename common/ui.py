@@ -36,11 +36,8 @@ import bpy
 import bgl
 
 from .ui_core import UI_Element, UI_Proxy
-from .ui_utilities import (
-    UIRender_Block, UIRender_Inline,
-    helper_argtranslate, helper_argsplitter,
-)
-from .utils import kwargopts, iter_head
+from .ui_utilities import UIRender_Block, UIRender_Inline
+from .utils import kwargopts, kwargs_translate, kwargs_splitter, iter_head
 from .ui_styling import UI_Styling
 
 from .boundvar import BoundVar
@@ -87,7 +84,7 @@ See top comment in `ui_utilities.py` for links to useful resources.
 
 
 def button(**kwargs):
-    helper_argtranslate('label', 'innerText', kwargs)
+    kwargs_translate('label', 'innerText', kwargs)
     return UI_Element(tagName='button', **kwargs)
 
 def p(**kwargs):
@@ -155,9 +152,9 @@ def label(**kwargs):
     return UI_Element(tagName='label', **kwargs)
 
 def input_radio(**kwargs):
-    helper_argtranslate('label', 'innerText', kwargs)
-    kw_label = helper_argsplitter({'innerText'}, kwargs)
-    kw_all = helper_argsplitter({'title'}, kwargs)
+    kwargs_translate('label', 'innerText', kwargs)
+    kw_label = kwargs_splitter({'innerText'}, kwargs)
+    kw_all = kwargs_splitter({'title'}, kwargs)
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
     ui_input = UI_Element(tagName='input', type='radio', can_focus=True, **kwargs, **kw_all)
@@ -181,9 +178,9 @@ def input_radio(**kwargs):
     return ui_proxy
 
 def input_checkbox(**kwargs):
-    helper_argtranslate('label', 'innerText', kwargs)
-    kw_label = helper_argsplitter({'innerText'}, kwargs)
-    kw_all = helper_argsplitter({'title'}, kwargs)
+    kwargs_translate('label', 'innerText', kwargs)
+    kw_label = kwargs_splitter({'innerText'}, kwargs)
+    kw_all = kwargs_splitter({'title'}, kwargs)
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
     ui_input = UI_Element(tagName='input', type='checkbox', can_focus=False, **kwargs, **kw_all)
@@ -200,8 +197,8 @@ def input_checkbox(**kwargs):
     return ui_proxy
 
 def labeled_input_text(label, **kwargs):
-    kw_container = helper_argsplitter({'parent', 'id'}, kwargs)
-    kw_all = helper_argsplitter({'title'}, kwargs)
+    kw_container = kwargs_splitter({'parent', 'id'}, kwargs)
+    kw_all = kwargs_splitter({'title'}, kwargs)
     ui_container = UI_Element(tagName='div', classes='labeledinputtext-container', **kw_container, **kw_all)
     ui_left  = UI_Element(tagName='div',   classes='labeledinputtext-label-container', parent=ui_container, **kw_all)
     ui_label = UI_Element(tagName='label', classes='labeledinputtext-label', innerText=label, parent=ui_left, **kw_all)
@@ -218,7 +215,7 @@ def input_text(**kwargs):
     # TODO: find a better structure for input text boxes!
     #       can we get by with just input and inner span (cursor)?
     kwargs.setdefault('value', '')
-    kw_container = helper_argsplitter({'parent'}, kwargs)
+    kw_container = kwargs_splitter({'parent'}, kwargs)
     ui_container = UI_Element(tagName='span', classes='inputtext-container', **kw_container)
     ui_input  = UI_Element(tagName='input', classes='inputtext-input', type='text', can_focus=True, parent=ui_container, **kwargs)
     ui_cursor = UI_Element(tagName='span', classes='inputtext-cursor', parent=ui_input, innerText='|')
@@ -332,7 +329,7 @@ def input_text(**kwargs):
     return ui_proxy
 
 def collection(label, **kwargs):
-    kw_inside = helper_argsplitter({'children'}, kwargs)
+    kw_inside = kwargs_splitter({'children'}, kwargs)
     ui_container = UI_Element(tagName='div', classes='collection', **kwargs)
     ui_label = div(innerText=label, classes='header', parent=ui_container)
     ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside)
@@ -342,11 +339,11 @@ def collection(label, **kwargs):
 
 
 def collapsible(label, **kwargs):
-    helper_argtranslate('collapsed', 'checked', kwargs)
+    kwargs_translate('collapsed', 'checked', kwargs)
     kwargs.setdefault('checked', True)
-    kw_input = helper_argsplitter({'checked'}, kwargs)
-    kw_inside = helper_argsplitter({'children'}, kwargs)
-    kw_all = helper_argsplitter({'title'}, kwargs)
+    kw_input = kwargs_splitter({'checked'}, kwargs)
+    kw_inside = kwargs_splitter({'children'}, kwargs)
+    kw_all = kwargs_splitter({'title'}, kwargs)
 
     kwargs['classes'] = 'collapsible %s' % kwargs.get('classes', '')
     ui_container = UI_Element(tagName='div', **kwargs, **kw_all)
@@ -580,7 +577,7 @@ def markdown(mdown=None, mdown_path=None, **kwargs):
 
 def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, closeable=True, moveable=True, hide_on_close=False, close_callback=None, **kwargs):
     # TODO: always add header, and use UI_Proxy translate+map "label" to change header
-    kw_inside = helper_argsplitter({'children'}, kwargs)
+    kw_inside = kwargs_splitter({'children'}, kwargs)
     ui_document = Globals.ui_document
     kwargs['classes'] = 'framed %s %s' % (kwargs.get('classes', ''), 'moveable' if moveable else '')
     ui_dialog = UI_Element(tagName='dialog', **kwargs)

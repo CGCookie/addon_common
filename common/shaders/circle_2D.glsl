@@ -74,5 +74,7 @@ void main() {
     if(cdist > width) {
         outColor.a *= clamp(1.0 - (cdist - width), 0.0, 1.0);
     }
+    // https://wiki.blender.org/wiki/Reference/Release_Notes/2.83/Python_API
+    outColor = blender_srgb_to_framebuffer_space(outColor);
 }
 

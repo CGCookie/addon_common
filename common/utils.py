@@ -259,6 +259,22 @@ def kwargopts(kwargs, defvals=None, **mykwargs):
 
 
 
+def kwargs_translate(key_from, key_to, kwargs):
+    if key_from in kwargs:
+        kwargs[key_to] = kwargs[key_from]
+        del kwargs[key_from]
+
+def kwargs_splitter(keys, kwargs):
+    if type(keys) is str: keys = [keys]
+    kw = {k:v for (k,v) in kwargs.items() if k in keys}
+    for k in keys:
+        if k in kwargs: del kwargs[k]
+    return kw
+
+
+
+
+
 #################################################
 
 

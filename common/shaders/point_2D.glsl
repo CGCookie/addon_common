@@ -40,5 +40,7 @@ void main() {
         float d2 = d - radius;
         outColor = mix(colorb, vec4(colorb.rgb,0), clamp(d2 - border/2, 0.0, 1.0));
     }
+    // https://wiki.blender.org/wiki/Reference/Release_Notes/2.83/Python_API
+    outColor = blender_srgb_to_framebuffer_space(outColor);
 }
 

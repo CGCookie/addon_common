@@ -168,8 +168,8 @@ vec4 mix_image(vec4 bg) {
     float dh = height - (margin_top  + border_width + padding_top  + padding_bottom + border_width + margin_bottom);
     float dx = screen_pos.x - (left + (margin_left + border_width + padding_left));
     float dy = -(screen_pos.y - (top  - (margin_top  + border_width + padding_top)));
-    float dsx = dx / dw;
-    float dsy = dy / dh;
+    float dsx = (dx+0.5) / dw;
+    float dsy = (dy+0.5) / dh;
     // texture
     vec2 tsz = textureSize(image, 0);
     float tw = tsz.x, th = tsz.y;
@@ -297,5 +297,10 @@ void main() {
     else if(region == REGION_ERROR)            c = vec4(1,0,0,1);  // should never hit here
     else                                       c = vec4(1,0,1,1);  // should really never hit here
     if(using_image > 0) c = mix_image(c);
-    outColor = c;
+    // outColor = c;
+    // outColor = vec4(c.rgb / max(0.001,c.a), c.a);
+    outColor = vec4(c.rgb * c.a, c.a);
+
+    // https://wiki.blender.org/wiki/Reference/Release_Notes/2.83/Python_API
+    outColor = blender_srgb_to_framebuffer_space(outColor);
 }

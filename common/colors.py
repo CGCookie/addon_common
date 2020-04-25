@@ -27,7 +27,7 @@ Created by Jonathan Denning, Jonathan Williamson
 # https://www.quackit.com/css/css_color_codes.cfm
 
 colorname_to_color = {
-    'transparent': (255, 0, 255, 0),
+    'transparent': (0, 0, 0, 0),
 
     # https://www.quackit.com/css/css_color_codes.cfm
     'indianred': (205,92,92),

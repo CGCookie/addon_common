@@ -26,6 +26,8 @@ import ctypes
 
 from .debug import dprint
 from .globals import Globals
+from .decorators import blender_version_wrapper
+from .utils import kwargs_splitter
 
 from ..ext.bgl_ext import VoidBufValue
 
@@ -82,8 +84,20 @@ class Shader():
 
         return log
 
+    # https://developer.blender.org/rB21c658b718b9
+    # https://developer.blender.org/T74139
     @staticmethod
-    def parse_string(string, includeVersion=True, constant_overrides=None, define_overrides=None):
+    @blender_version_wrapper('<', '2.83')
+    def get_srgb_shim(force=False):
+        return 'vec4 blender_srgb_to_framebuffer_space(vec4 c) { return c; }'
+    @staticmethod
+    @blender_version_wrapper('>=', '2.83')
+    def get_srgb_shim(force=False):
+        if not force: return ''
+        return 'vec4 blender_srgb_to_framebuffer_space(vec4 c) { return pow(c, vec4(1.0/2.2, 1.0/2.2, 1.0/2.2, 1.0)); }'
+
+    @staticmethod
+    def parse_string(string, includeVersion=True, constant_overrides=None, define_overrides=None, force_shim=False):
         # NOTE: GEOMETRY SHADER NOT FULLY SUPPORTED, YET
         #       need to find a way to handle in/out
         constant_overrides = constant_overrides or {}
@@ -152,12 +166,15 @@ class Shader():
         )
         srcFragment = '\n'.join(
             ([fragVersion] if includeVersion else []) +
-            uniforms + f_varyings + consts + commonSource + fragSource
+            uniforms + f_varyings + consts +
+            [Shader.get_srgb_shim(force=force_shim)] +
+            ['/////////////////////'] +
+            commonSource + fragSource
         )
         return (srcVertex, srcFragment)
 
     @staticmethod
-    def parse_file(filename, includeVersion=True, constant_overrides=None, define_overrides=None):
+    def parse_file(filename, includeVersion=True, constant_overrides=None, define_overrides=None, force_shim=False):
         filename_guess = os.path.join(os.path.dirname(__file__), 'shaders', filename)
         if os.path.exists(filename):
             pass
@@ -167,7 +184,7 @@ class Shader():
             assert False, "Shader file could not be found: %s" % filename
 
         string = open(filename, 'rt').read()
-        return Shader.parse_string(string, includeVersion=includeVersion, constant_overrides=constant_overrides, define_overrides=define_overrides)
+        return Shader.parse_string(string, includeVersion=includeVersion, constant_overrides=constant_overrides, define_overrides=define_overrides, force_shim=force_shim)
 
     @staticmethod
     def load_from_string(name, string, *args, **kwargs):
@@ -180,7 +197,8 @@ class Shader():
         # https://en.wikibooks.org/wiki/GLSL_Programming/Blender/Shading_in_View_Space
         # https://www.khronos.org/opengl/wiki/Built-in_Variable_(GLSL)
 
-        srcVertex, srcFragment = Shader.parse_file(filename)
+        kwargs_parse_file = kwargs_splitter({'force_shim'}, kwargs)
+        srcVertex, srcFragment = Shader.parse_file(filename, **kwargs_parse_file)
         return Shader(name, srcVertex, srcFragment, *args, **kwargs)
 
     def __init__(self, name, srcVertex, srcFragment, funcStart=None, funcEnd=None, checkErrors=True, bindTo0=None):
@@ -401,15 +419,15 @@ class Shader():
 
 
 
-brushStrokeShader = Shader.load_from_file('brushStrokeShader', 'brushstroke.glsl', checkErrors=False, bindTo0='vPos')
-edgeShortenShader = Shader.load_from_file('edgeShortenShader', 'edgeshorten.glsl', checkErrors=False, bindTo0='vPos')
-arrowShader = Shader.load_from_file('arrowShader', 'arrow.glsl', checkErrors=False)
+brushStrokeShader = Shader.load_from_file('brushStrokeShader', 'brushstroke.glsl', checkErrors=False, bindTo0='vPos', force_shim=True)
+edgeShortenShader = Shader.load_from_file('edgeShortenShader', 'edgeshorten.glsl', checkErrors=False, bindTo0='vPos', force_shim=True)
+arrowShader = Shader.load_from_file('arrowShader', 'arrow.glsl', checkErrors=False, force_shim=True)
 
 def circleShaderStart(shader):
     bgl.glDisable(bgl.GL_POINT_SMOOTH)
     bgl.glEnable(bgl.GL_POINT_SPRITE)
 def circleShaderEnd(shader):
     bgl.glDisable(bgl.GL_POINT_SPRITE)
-circleShader = Shader.load_from_file('circleShader', 'circle.glsl', checkErrors=False, funcStart=circleShaderStart, funcEnd=circleShaderEnd)
+circleShader = Shader.load_from_file('circleShader', 'circle.glsl', checkErrors=False, funcStart=circleShaderStart, funcEnd=circleShaderEnd, force_shim=True)
 
 

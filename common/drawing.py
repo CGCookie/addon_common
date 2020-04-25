@@ -23,6 +23,7 @@ import os
 import re
 import math
 import time
+import ctypes
 import random
 from typing import List
 import traceback
@@ -34,6 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import bpy
 import bgl
+import gpu
 from bpy.types import BoolProperty
 from mathutils import Matrix, Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d
@@ -43,7 +45,7 @@ from .hasher import Hasher
 from .globals import Globals
 from .shaders import Shader
 from .blender import get_preferences, bversion
-from .decorators import blender_version_wrapper
+from .decorators import blender_version_wrapper, add_cache
 from .fontmanager import FontManager as fm
 from .maths import Point2D, Vec2D, Point, Ray, Direction, mid, Color, Normal, Frame
 from .profiler import profiler
@@ -126,15 +128,16 @@ if bversion() >= "2.80":
         path_shaders = os.path.join(path_here, 'shaders')
         path_glsl = os.path.join(path_shaders, fn_glsl)
         txt = open(path_glsl, 'rt').read()
-        lines = txt.splitlines()
-        mode = 'common'
-        source = {'common':[], 'vertex':[], 'fragment':[]}
-        for line in lines:
-            if   line == '// vertex shader':   mode = 'vertex'
-            elif line == '// fragment shader': mode = 'fragment'
-            else: source[mode].append(line)
-        vert_source = '\n'.join(source['common'] + source['vertex'])
-        frag_source = '\n'.join(source['common'] + source['fragment'])
+        vert_source,frag_source = Shader.parse_string(txt)
+        # lines = txt.splitlines()
+        # mode = 'common'
+        # source = {'common':[], 'vertex':[], 'fragment':[]}
+        # for line in lines:
+        #     if   line == '// vertex shader':   mode = 'vertex'
+        #     elif line == '// fragment shader': mode = 'fragment'
+        #     else: source[mode].append(line)
+        # vert_source = '\n'.join(source['common'] + source['vertex'])
+        # frag_source = '\n'.join(source['common'] + source['fragment'])
         try:
             return GPUShader(vert_source, frag_source)
         except Exception as e:
@@ -419,6 +422,7 @@ class Drawing:
     def load_pixel_matrix(self, m):
         self._pixel_matrix = m
 
+    @add_cache('_cache', {'w':-1, 'h':-1, 'm':None})
     def get_pixel_matrix(self):
         '''
         returns MVP for pixel view
@@ -427,9 +431,7 @@ class Drawing:
         if not self.r3d: return None
         if self._pixel_matrix: return self._pixel_matrix
         w,h = self.rgn.width,self.rgn.height
-        if not hasattr(self, '_get_pixel_matrix_cache'):
-            self._get_pixel_matrix_cache = {'w':-1, 'h':-1, 'm':None}
-        cache = self._get_pixel_matrix_cache
+        cache = self.get_pixel_matrix._cache
         if cache['w'] != w or cache['h'] != h:
             mx, my, mw, mh = -1, -1, 2 / w, 2 / h
             cache['w'],cache['h'] = w,h
@@ -513,8 +515,9 @@ class Drawing:
             # blf.position(self.font_id, l, y, 0)
             # blf.draw(self.font_id, line)
 
+    @staticmethod
     @blender_version_wrapper('<', '2.80')
-    def glCheckError(self, title):
+    def glCheckError(title):
         err = bgl.glGetError()
         if err == bgl.GL_NO_ERROR: return
 
@@ -532,8 +535,9 @@ class Drawing:
         else:
             print('ERROR (%s): code %d' % (title, err))
         traceback.print_stack()
+    @staticmethod
     @blender_version_wrapper('>=', '2.80')
-    def glCheckError(self, title):
+    def glCheckError(title):
         err = bgl.glGetError()
         if err == bgl.GL_NO_ERROR: return
 
@@ -1067,6 +1071,200 @@ class CC_3D_TRIANGLES(CC_DRAW):
 ######################################################################################################
 
 
+
+# Ideally, would use GPUOffScreen, however it keeps flickering (creating new? deleting?)
+# modified from addons/mesh_snap_utitities_line/snap_context_l/__init__.py
+
+class FrameBuffer:
+    # _null_buffer = (ctypes.c_int32 * 1).from_address(0)
+    _creating = False
+    _fbs = []
+    _all_fbs = []
+
+    @staticmethod
+    def new(width, height):
+        if FrameBuffer._fbs:
+            fb = FrameBuffer._fbs.pop()
+            fb.resize(width, height)
+        else:
+            FrameBuffer._creating = True
+            fb = FrameBuffer()
+            FrameBuffer._creating = False
+            FrameBuffer._all_fbs.append(fb)  # add to list so that __del__ isn't called too soon!
+            fb._create(width, height)
+        return FrameBufferWrapper(fb)
+
+    def free(self):
+        FrameBuffer._fbs.append(self)
+
+    def __init__(self):
+        assert FrameBuffer._creating == True, 'do not create FrameBuffer objects directly, use FrameBuffer.new()'
+        self._is_freed = False
+        self._is_error = False
+        self._is_bound = False
+
+    def _copy(self, other):
+        self._width = other._width
+        self._height = other._height
+        self._fbo = other._fbo
+        self._buf_color = other._buf_color
+        self._buf_depth = other._buf_depth
+        self._cur_fbo = other._cur_fbo
+        self._cur_viewport = other._cur_viewport
+        self._cur_projection = other.get_projection_matrix()
+        other._is_freed = True
+
+    def _create(self, width, height):
+        self._width = max(1, int(width))
+        self._height = max(1, int(height))
+        # print('Creating FrameBuffer of size %dx%d (%d)' % (self._width, self._height, len(FrameBuffer._all_fbs)))
+
+        self._fbo = bgl.Buffer(bgl.GL_INT, 1)
+        self._buf_color = bgl.Buffer(bgl.GL_INT, 1)
+        self._buf_depth = bgl.Buffer(bgl.GL_INT, 1)
+
+        self._cur_fbo = bgl.Buffer(bgl.GL_INT, 1)
+        self._cur_viewport = bgl.Buffer(bgl.GL_INT, 4)
+        self._cur_projection = gpu.matrix.get_projection_matrix()
+
+        bgl.glGenRenderbuffers(1, self._buf_depth)
+        bgl.glGenTextures(1, self._buf_color)
+        self._config_textures()
+
+        bgl.glGenFramebuffers(1, self._fbo)
+        # IMPORTANT: do NOT clear color/depth yet, because color and depth buffers are not attached!
+        self.bind(set_viewport=False, set_projection=False, clear_color=False, clear_depth=False)
+        bgl.glFramebufferRenderbuffer(bgl.GL_FRAMEBUFFER, bgl.GL_DEPTH_ATTACHMENT,bgl.GL_RENDERBUFFER, self._buf_depth[0])
+        bgl.glFramebufferTexture(bgl.GL_FRAMEBUFFER, bgl.GL_COLOR_ATTACHMENT0, self._buf_color[0], 0)
+        bgl.glDrawBuffers(1, bgl.Buffer(bgl.GL_INT, 1, [bgl.GL_COLOR_ATTACHMENT0]))
+        status = bgl.glCheckFramebufferStatus(bgl.GL_FRAMEBUFFER)
+        if status != bgl.GL_FRAMEBUFFER_COMPLETE:
+            print("Framebuffer Invalid", status)
+            self._is_error = True
+        bgl.glClear(bgl.GL_COLOR_BUFFER_BIT | bgl.GL_DEPTH_BUFFER_BIT)
+        self.unbind(unset_viewport=False, unset_projection=False)
+        Drawing.glCheckError('Done creating FrameBuffer')
+
+    def __del__(self):
+        if self not in FrameBuffer._all_fbs: return
+        assert not self._is_freed
+        FrameBuffer._all_fbs.remove(self)
+        # print('----> DELETING FRAMEBUFFER')
+        assert not self._is_bound, 'Cannot free a bounded FrameBuffer'
+        # print(self._fbo, self._buf_depth, self._buf_color)
+        bgl.glDeleteFramebuffers(1, self._fbo)
+        bgl.glDeleteRenderbuffers(1, self._buf_depth)
+        bgl.glDeleteTextures(1, self._buf_color)
+        del self._fbo
+        del self._buf_color
+        del self._buf_depth
+        del self._cur_fbo
+        del self._cur_viewport
+        self._is_freed = True
+
+    @property
+    def color_texture(self):
+        return self._buf_color[0]
+    @property
+    def width(self):
+        return self._width
+    @property
+    def height(self):
+        return self._height
+
+    def _config_textures(self):
+        bgl.glBindRenderbuffer(bgl.GL_RENDERBUFFER, self._buf_depth[0])
+        bgl.glRenderbufferStorage(bgl.GL_RENDERBUFFER, bgl.GL_DEPTH_COMPONENT, self._width, self._height)
+        bgl.glBindRenderbuffer(bgl.GL_RENDERBUFFER, 0)
+
+        # NULL = bgl.Buffer(bgl.GL_INT, 1, self._null_buffer)
+        bgl.glBindTexture(bgl.GL_TEXTURE_2D, self._buf_color[0])
+        bgl.glTexImage2D(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, self._width, self._height, 0, bgl.GL_RGBA, bgl.GL_UNSIGNED_BYTE, None)
+        bgl.glTexParameteri(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MIN_FILTER, bgl.GL_NEAREST)
+        bgl.glTexParameteri(bgl.GL_TEXTURE_2D, bgl.GL_TEXTURE_MAG_FILTER, bgl.GL_NEAREST)
+        bgl.glBindTexture(bgl.GL_TEXTURE_2D, 0)
+        # del NULL
+
+    def bind(self, set_viewport=True, set_projection=True, clear_color=True, clear_depth=True):
+        assert not self._is_bound, 'Cannot bind a bounded FrameBuffer'
+        assert not self._is_error, 'Cannot bind a FrameBuffer with error'
+        assert not self._is_freed, 'Cannot bind a freed FrameBuffer'
+        self._is_bound = True
+        bgl.glGetIntegerv(bgl.GL_FRAMEBUFFER_BINDING, self._cur_fbo)
+        bgl.glGetIntegerv(bgl.GL_VIEWPORT, self._cur_viewport)
+        bgl.glBindFramebuffer(bgl.GL_FRAMEBUFFER, self._fbo[0])
+        self._cur_projection = gpu.matrix.get_projection_matrix()
+        if set_viewport:
+            bgl.glViewport(0, 0, self._width, self._height)
+        if set_projection:
+            vx, vy, vw, vh = -1, -1, 2 / self._width, 2 / self._height
+            M = Matrix([
+                [vw,  0,  0, vx],
+                [ 0, vh,  0, vy],
+                [ 0,  0,  1,  0],
+                [ 0,  0,  0,  1],
+                ])
+            gpu.matrix.load_projection_matrix(M)
+        ScissorStack.push(0, self._height - 1, self._width, self._height, clamp=False)
+        if clear_color: bgl.glClear(bgl.GL_COLOR_BUFFER_BIT)
+        if clear_depth: bgl.glClear(bgl.GL_DEPTH_BUFFER_BIT)
+
+    def unbind(self, unset_viewport=True, unset_projection=True):
+        assert self._is_bound, 'Cannot unbind a unbounded FrameBuffer'
+        assert not self._is_error, 'Cannot unbind a FrameBuffer with error'
+        assert not self._is_freed, 'Cannot unbind a freed FrameBuffer'
+        if unset_projection: gpu.matrix.load_projection_matrix(self._cur_projection)
+        if unset_viewport: bgl.glViewport(*self._cur_viewport)
+        bgl.glBindFramebuffer(bgl.GL_FRAMEBUFFER, self._cur_fbo[0])
+        ScissorStack.pop()
+        self._is_bound = False
+
+    @contextlib.contextmanager
+    def bind_unbind(self, set_viewport=True, set_projection=True, clear_color=True, clear_depth=True):
+        try:
+            self.bind(set_viewport=set_viewport, set_projection=set_projection, clear_color=clear_color, clear_depth=clear_depth)
+            yield None
+            self.unbind(unset_viewport=set_viewport, unset_projection=set_projection)
+        except Exception as e:
+            self.unbind(unset_viewport=set_viewport, unset_projection=set_projection)
+            print('Caught exception while FrameBuffer was bound:', {'set_viewport':set_viewport, 'clear_color':clear_color, 'clear_depth':clear_depth})
+            Globals.debugger.print_exception()
+            raise e
+
+    def resize(self, width, height, clear_color=True, clear_depth=True):
+        assert not self._is_bound, 'Cannot resize a bounded FrameBuffer'
+        assert not self._is_error, 'Cannot resize a FrameBuffer with error'
+        assert not self._is_freed, 'Cannot resize a freed FrameBuffer'
+
+        width, height = int(width), int(height)
+        if self._width == width and self._height == height: return
+        # with self.bind_unbind(set_viewport=False, clear_color=clear_color, clear_depth=clear_depth):
+        # print('Resizing FrameBuffer from %dx%d to %dx%d' % (self._width, self._height, width, height))
+        self._width, self._height = width, height
+        self._config_textures()
+
+
+class FrameBufferWrapper:
+    def __init__(self, fb):
+        self.__dict__['_fb'] = fb
+    def __del__(self):
+        self.free()
+    def __getattr__(self, attr):
+        return getattr(self.__dict__['_fb'], attr)
+    # def __setattr__(self, attr, val):
+    #     setattr(self.__dict__['_fb'], attr, val)
+    def free(self):
+        if '_fb' not in self.__dict__: return
+        # print('FrameBuffer freed (%d)' % len(FrameBuffer._fbs))
+        self.__dict__['_fb'].free()
+        del self.__dict__['_fb']
+
+
+
+
+######################################################################################################
+
+
 class ScissorStack:
     buf = bgl.Buffer(bgl.GL_INT, 4)
     is_started = False
@@ -1100,6 +1298,7 @@ class ScissorStack:
 
         # we're ready to go!
         ScissorStack.is_started = True
+        ScissorStack._set_scissor()
 
     @staticmethod
     def end(force=False):

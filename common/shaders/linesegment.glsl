@@ -50,4 +50,6 @@ void main() {
         outColor = uColor1;
         if(uColor1.a <= 0) discard;
     }
+    // https://wiki.blender.org/wiki/Reference/Release_Notes/2.83/Python_API
+    outColor = blender_srgb_to_framebuffer_space(outColor);
 }

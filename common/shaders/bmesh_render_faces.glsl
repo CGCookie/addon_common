@@ -245,4 +245,6 @@ void main() {
 
     alpha *= pow(max(vCNormal.z, 0.01), 0.25);
     outColor = coloring(vec4(rgb, alpha));
+    // https://wiki.blender.org/wiki/Reference/Release_Notes/2.83/Python_API
+    outColor = blender_srgb_to_framebuffer_space(outColor);
 }

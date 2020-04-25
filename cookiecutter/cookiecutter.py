@@ -17,6 +17,7 @@ https://github.com/CGCookie/retopoflow
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+import math
 import time
 
 import bpy
@@ -82,6 +83,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self._done = False
         self.context = context
         self.event = None
+        self._start_time = time.time()
+        self._tmp_time = self._start_time
 
         try:
             self._cc_exception_init()
@@ -107,6 +110,10 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self.drawcallbacks.reset_pre()
 
         profiler.printfile()
+
+        if time.time() - self._tmp_time >= 1:
+            self._tmp_time = time.time()
+            # print('--- %d ---' % int(self._tmp_time - self._start_time))
 
         if self._done:
             self._cc_actions_end()

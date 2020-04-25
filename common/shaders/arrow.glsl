@@ -60,4 +60,6 @@ void main() {
     float a = alpha(dr);
     if(a < 0.0) discard;
     outColor = mix(aOutColor, aInColor, a);
+    // https://wiki.blender.org/wiki/Reference/Release_Notes/2.83/Python_API
+    outColor = blender_srgb_to_framebuffer_space(outColor);
 }
