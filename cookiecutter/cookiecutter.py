@@ -105,6 +105,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self._done = 'commit' if not cancel else 'cancel'
 
     def modal(self, context, event):
+        # print('CookieCutter.modal', event.type, time.time())
         self.context = context
         self.event = event
         self.drawcallbacks.reset_pre()

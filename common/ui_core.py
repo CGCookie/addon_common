@@ -1101,6 +1101,7 @@ class UI_Element_Properties:
         v = min(v, self._dynamic_content_size.height - self._absolute_size.height + self._mbp_height)
         v = max(v, 0)
         if self._scroll_offset.y != v:
+            # print('scrollTop:', v)
             self._scroll_offset.y = v
             tag_redraw_all("UI_Element scrollTop")
             self._dirty('scrollTop', 'renderbuf')
@@ -3091,6 +3092,8 @@ class UI_Document(UI_Document_FSM):
 
     @UI_Document_FSM.FSM_State('main')
     def modal_main(self):
+        # print('UI_Document.main', self.actions.event_type, time.time())
+
         if self._mmb and not self._last_mmb:
             return 'scroll'
 
@@ -3106,7 +3109,7 @@ class UI_Document(UI_Document_FSM):
             self.actions.unpress()
             if self._get_scrollable():
                 self._scroll_element.scrollTop = self._scroll_last.y + move
-                self._scroll_element._setup_ltwh()
+                self._scroll_element._setup_ltwh(recurse_children=False)
 
         if self.actions.pressed({'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'PAGE_UP', 'PAGE_DOWN', 'TRACKPADPAN', 'UP_ARROW', 'DOWN_ARROW'}, unpress=False):
             if self.actions.event_type == 'TRACKPADPAN':
@@ -3114,10 +3117,11 @@ class UI_Document(UI_Document_FSM):
             else:
                 d = self.wheel_scroll_lines * 8
                 move = Globals.drawing.scale(d) * (-1 if 'UP' in self.actions.event_type else 1)
+            # print('SCROLLING', move)
             self.actions.unpress()
             if self._get_scrollable():
                 self._scroll_element.scrollTop = self._scroll_last.y + move
-                self._scroll_element._setup_ltwh()
+                self._scroll_element._setup_ltwh(recurse_children=False)
 
         if self._under_mouse and self.actions.just_pressed:
             pressed = self.actions.just_pressed
@@ -3139,10 +3143,9 @@ class UI_Document(UI_Document_FSM):
     def _get_scrollable(self):
         # find first along root to path that can scroll
         if not self._under_mouse: return None
-        self._scrollable = [e for e in self._under_mouse.get_pathToRoot() if e.is_scrollable]
-        if not self._scrollable: return None
-        self._scroll_element = self._scrollable[0]
-        self._scroll_last = RelPoint2D((self._scroll_element.scrollLeft, self._scroll_element.scrollTop))
+        self._scroll_element = next((e for e in self._under_mouse.get_pathToRoot() if e.is_scrollable), None)
+        if self._scroll_element:
+            self._scroll_last = RelPoint2D((self._scroll_element.scrollLeft, self._scroll_element.scrollTop))
         return self._scroll_element
 
     @UI_Document_FSM.FSM_State('scroll', 'can enter')
@@ -3165,7 +3168,7 @@ class UI_Document(UI_Document_FSM):
         self._scroll_element.scrollLeft = nx
         self._scroll_element.scrollTop = ny
         self._scroll_point = self._mouse
-        self._scroll_element._setup_ltwh()
+        self._scroll_element._setup_ltwh(recurse_children=False)
 
     @UI_Document_FSM.FSM_State('scroll', 'exit')
     def modal_scroll_exit(self):
