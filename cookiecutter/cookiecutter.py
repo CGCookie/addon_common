@@ -25,7 +25,7 @@ from bpy.types import Operator
 from ..common.blender import perform_redraw_all
 from ..common.debug import debugger
 from ..common.profiler import profiler
-from ..common.useractions import Actions
+from ..common.useractions import ActionHandler
 
 from .cookiecutter_fsm import CookieCutter_FSM
 from .cookiecutter_ui import CookieCutter_UI
@@ -153,7 +153,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         return {'RUNNING_MODAL'}
 
     def _cc_actions_init(self):
-        self.actions = Actions(self.context, self.default_keymap)
+        self.actions = ActionHandler(self.context, self.default_keymap)
         self._timer = self.context.window_manager.event_timer_add(1.0 / 120, window=self.context.window)
 
     def _cc_actions_update(self):

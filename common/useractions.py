@@ -19,6 +19,9 @@ Created by Jonathan Denning, Jonathan Williamson
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+import re
+import time
+import inspect
 from copy import deepcopy
 
 import bpy
@@ -26,6 +29,7 @@ import bpy
 from .maths import Point2D, Vec2D
 from .debug import dprint
 from .decorators import blender_version_wrapper
+from . import blender_preferences as bprefs
 
 kmi_to_keycode = {
     'BACK_SPACE':    8,
@@ -97,29 +101,59 @@ kmi_to_char = {
 }
 
 
-def kmi_details(kmi):
+def kmi_details(kmi, event_type=None, double_click=False, drag_click=False):
     kmi_ctrl  = 'CTRL+'  if kmi.ctrl  else ''
     kmi_shift = 'SHIFT+' if kmi.shift else ''
     kmi_alt   = 'ALT+'   if kmi.alt   else ''
     kmi_os    = 'OSKEY+' if kmi.oskey else ''
+    kmi_double = '+DOUBLE' if kmi.value=='DOUBLE_CLICK' or double_click else ''
+    kmi_drag   = '+DRAG'   if kmi.value=='CLICK_DRAG'   or drag_click   else ''
 
-    kmi_ftype = kmi_ctrl + kmi_shift + kmi_alt + kmi_os
-    if kmi.type == 'WHEELINMOUSE':
-        kmi_ftype += 'WHEELUPMOUSE'
-    elif kmi.type == 'WHEELOUTMOUSE':
-        kmi_ftype += 'WHEELDOWNMOUSE'
+    kmi_type = event_type or kmi.type
+    if kmi_type == 'WHEELINMOUSE':  kmi_type = 'WHEELUPMOUSE'
+    if kmi_type == 'WHEELOUTMOUSE': kmi_type = 'WHEELDOWNMOUSE'
+
+    return kmi_ctrl + kmi_shift + kmi_alt + kmi_os + kmi_type + kmi_double + kmi_drag
+
+
+re_blenderop = re.compile(r'(?P<keymap>.+?) *\| *(?P<operator>.+)')
+def translate_blenderop(action, keyconfig=None):
+    m_blenderop = re_blenderop.match(action)
+    if not m_blenderop: return { action }
+    keymap, op = i18n_translate(m_blenderop.group('keymap')), m_blenderop.group('operator')
+    if keyconfig:
+        keyconfigs = [keyconfig]
     else:
-        kmi_ftype += kmi.type
+        window_manager = bpy.context.window_manager
+        keyconfigs = window_manager.keyconfigs
+        keyconfigs = [keyconfigs.user]  #[keyconfigs.active, keyconfigs.addon, keyconfigs.user]:
+    ret = set()
+    for keyconfig in keyconfigs:
+        if keymap not in keyconfig.keymaps: continue
+        for kmi in keyconfig.keymaps[keymap].keymap_items:
+            if not kmi.active: continue
+            if kmi.idname != op: continue
+            ret.add(kmi_details(kmi))
+    if not ret:
+        print('Warning: could not translate blender op "%s" to actions' % action)
+    return ret
 
-    return kmi_ftype
 
-def strip_mods(action, ctrl=True, shift=True, alt=True, oskey=True):
+
+def strip_mods(action, ctrl=True, shift=True, alt=True, oskey=True, double_click=True, drag_click=True):
     if action is None: return None
     if ctrl:  action = action.replace('CTRL+',  '')
     if shift: action = action.replace('SHIFT+', '')
     if alt:   action = action.replace('ALT+',   '')
     if oskey: action = action.replace('OSKEY+', '')
+    if double_click: action = action.replace('+DOUBLE', '')
+    if drag_click:   action = action.replace('+DRAG',   '')
     return action
+
+def i18n_translate(text):
+    ''' bpy.app.translations.pgettext tries to translate the given parameter '''
+    return bpy.app.translations.pgettext(text)
+
 
 class Actions:
     # https://docs.blender.org/api/2.79/bpy.types.KeyMapItems.html
@@ -140,18 +174,28 @@ class Actions:
         'NDOF_BUTTON_A', 'NDOF_BUTTON_B', 'NDOF_BUTTON_C',
     }
 
+    mousebutton_actions = {
+        'LEFTMOUSE', 'MIDDLEMOUSE', 'RIGHTMOUSE',
+        'BUTTON4MOUSE', 'BUTTON5MOUSE', 'BUTTON6MOUSE', 'BUTTON7MOUSE',
+    }
+
     ignore_actions = {}
+
+    nonprintable_actions = {
+        'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE',
+        'TIMER', 'TIMER_REPORT', 'TIMERREGION',
+    }
 
     timer_actions = {
         'TIMER'
     }
 
     mousemove_actions = {
-        'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'
+        'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE',
     }
 
     trackpad_actions = {
-        'TRACKPADPAN','TRACKPADZOOM'
+        'TRACKPADPAN','TRACKPADZOOM',
     }
 
     modifier_actions = {
@@ -160,90 +204,68 @@ class Actions:
         'RIGHT_CTRL', 'RIGHT_SHIFT', 'RIGHT_ALT',
     }
 
-    navigation_events = {
-        'Rotate View': 'view3d.rotate',
-        'Move View': 'view3d.move',
-        'Zoom View': 'view3d.zoom',
-        'Dolly View': 'view3d.dolly',
-        'View Pan': 'view3d.view_pan',
-        'View Orbit': 'view3d.view_orbit',
-        'View Persp/Ortho': 'view3d.view_persportho',
-        'View Numpad': 'view3d.viewnumpad',
-        'View Axis': 'view3d.view_axis',
-        'NDOF Pan Zoom': 'view2d.ndof',
-        'NDOF Orbit View with Zoom': 'view3d.ndof_orbit_zoom',
-        'NDOF Orbit View': 'view3d.ndof_orbit',
-        'NDOF Pan View': 'view3d.ndof_pan',
-        'NDOF Move View': 'view3d.ndof_all',
-        'View Selected': 'view3d.view_selected',
-        'Center View to Cursor': 'view3d.view_center_cursor',
-        #'View Navigation': 'view3d.navigate',
-    }
+    special_events = [
+        {
+            'name': 'navigate',
+            'operators': [
+                '3D View | view3d.rotate',
+                '3D View | view3d.rotate',                # Rotate View
+                '3D View | view3d.move',                  # Move View
+                '3D View | view3d.zoom',                  # Zoom View
+                '3D View | view3d.dolly',                 # Dolly View
+                '3D View | view3d.view_pan',              # View Pan
+                '3D View | view3d.view_orbit',            # View Orbit
+                '3D View | view3d.view_persportho',       # View Persp/Ortho
+                '3D View | view3d.viewnumpad',            # View Numpad
+                '3D View | view3d.view_axis',             # View Axis
+                '3D View | view2d.ndof',                  # NDOF Pan Zoom
+                '3D View | view3d.ndof_orbit_zoom',       # NDOF Orbit View with Zoom
+                '3D View | view3d.ndof_orbit',            # NDOF Orbit View
+                '3D View | view3d.ndof_pan',              # NDOF Pan View
+                '3D View | view3d.ndof_all',              # NDOF Move View
+                '3D View | view3d.view_selected',         # View Selected
+                '3D View | view3d.view_center_cursor',    # Center View to Cursor
+                # '3D View | view3d.navigate',              # View Navigation
+            ],
+        }, {
+            'name': 'window actions',
+            'operators': [
+                'Screen | screen.screen_full_area',
+                'Window | wm.window_fullscreen_toggle',
+            ],
+        }, {
+            'name': 'save actions',
+            'operators': [
+                'Window | wm.save_mainfile',
+            ],
+        },
+    ]
 
-    window_actions = {
-        'wm.window_fullscreen_toggle',
-        'screen.screen_full_area',
-    }
+    @staticmethod
+    def get_instance(context):
+        if not hasattr(Actions, '_instance'):
+            Actions._create = True
+            Actions._instance = Actions(context)
+            del Actions._create
+        return Actions._instance
 
-    save_actions = {
-        'wm.save_mainfile',
-    }
+    def __init__(self, context):
+        assert hasattr(Actions, '_create'), 'Do not create new instance of Actions.  Instead, use Actions.get_instance()'
+        assert not hasattr(Actions, '_instance'), 'Only create one instance of Actions!  Then use Actions.get_instance()'
 
-    def translate(self, text):
-        return bpy.app.translations.pgettext(text)
-
-    def load_keymap(self, keyconfig_name):
-        if keyconfig_name not in bpy.context.window_manager.keyconfigs:
-            dprint('No keyconfig named "%s"' % keyconfig_name)
-            return
-        keyconfig = bpy.context.window_manager.keyconfigs[keyconfig_name]
-        def get_keymap_items(key):
-            nonlocal keyconfig
-            if key in keyconfig.keymaps:
-                keymap = keyconfig.keymaps[key]
-            else:
-                keymap = keyconfig.keymaps[translate(key)]
-            return keymap.keymap_items
-        navigation_events = self.navigation_events
-        #navigation_events = { self.translate(key): val for key,val in self.navigation_events.items() }
-        navigation_idnames = navigation_events.values()
-        for kmi in get_keymap_items('3D View'):
-            if kmi.name not in navigation_events and kmi.idname not in navigation_idnames: continue
-            if kmi.active: self.keymap['navigate'].add(kmi_details(kmi))
-            else: self.keymap['navigate'].discard(kmi_details(kmi))
-        for map_name in ['Screen', 'Window']:
-            for kmi in get_keymap_items(map_name):
-                if kmi.idname in self.window_actions:
-                    if kmi.active: self.keymap['window actions'].add(kmi_details(kmi))
-                    else: self.keymap['window actions'].discard(kmi_details(kmi))
-                if kmi.idname in self.save_actions:
-                    if kmi.active: self.keymap['save action'].add(kmi_details(kmi))
-                    else: self.keymap['save action'].discard(kmi_details(kmi))
-
-    def __init__(self, context, keymap):
-        self.keymap = deepcopy(keymap)
-        for k, v in self.keymap.items():
-            t = type(v)
-            if t is set: continue
-            if t is list: self.keymap[k] = set(v)
-            else: self.keymap[k] = {self.keymap[k]}
+        # set up universal keymaps
+        self.keymap = {}  # universal keymap
+        self.keymap2 = {} # context keymap
         self.keymap['navigate'] = set()         # filled in below
-        self.keymap['window actions'] = set()   # filled in by load_keymap
-        self.keymap['save action'] = set()      # filled in by load_keymap
-
+        self.keymap['window actions'] = set()   # filled in below
+        self.keymap['save action'] = set()      # filled in below
         self.keymap['navigate'] |= Actions.trackpad_actions
         self.keymap['navigate'] |= Actions.ndof_actions
-
-        # wat? https://twitter.com/gfxcoder/status/1097241832461946880
-        @blender_version_wrapper('<=', '2.79')
-        def load_keymaps():
-            self.load_keymap('Blender')
-            self.load_keymap('Blender User')
-        @blender_version_wrapper('>=', '2.80')
-        def load_keymaps():
-            self.load_keymap('blender')
-            self.load_keymap('blender user')
-        load_keymaps()
+        for action in Actions.special_events:
+            name, ops = action['name'], action['operators']
+            self.keymap.setdefault(name, set())
+            for op in ops:
+                self.keymap[name] |= translate_blenderop(op)
 
         self.context = context
         self.area = context.area
@@ -256,38 +278,45 @@ class Actions:
 
         self.actions_using = set()
         self.actions_pressed = set()
-        self.now_pressed = {}
+        self.now_pressed = {}           # currently pressed keys. key=stripped event type, value=full event type (includes modifiers)
         self.just_pressed = None
         self.last_pressed = None
         self.event_type = None
 
-        self.mouse = None
-        self.mouse_prev = None
-        self.mousemove = False
-        self.mousemove_prev = False
-        self.mousedown = None
-        self.mousedown_left = None
-        self.mousedown_middle = None
-        self.mousedown_right = None
+        self.trackpad = False   # is current action from trackpad?
+        self.ndof     = False   # is current action from NDOF?
 
-        self.trackpad = False
-        self.ndof = False
-
-        self.hit_pos = None
-        self.hit_norm = None
-
-        self.ctrl = False
-        self.ctrl_left = False
-        self.ctrl_right = False
-        self.shift = False
-        self.shift_left = False
+        # are any of the following modifier keys currently pressed?
+        # note: ctrl will be true if either ctrl_left or ctrl_right are true
+        self.ctrl        = False
+        self.ctrl_left   = False
+        self.ctrl_right  = False
+        self.shift       = False
+        self.shift_left  = False
         self.shift_right = False
-        self.alt = False
-        self.alt_left = False
-        self.alt_right = False
+        self.alt         = False
+        self.alt_left    = False
+        self.alt_right   = False
 
-        self.timer = False
-        self.time_delta = 0
+        self.mouse_select     = bprefs.mouse_select()
+        self.mouse            = None    # current mouse position
+        self.mouse_prev       = None    # previous mouse position
+        self.mousemove        = False   # is the current action a mouse move?
+        self.mousemove_prev   = False   # was the previous action a mouse move?
+        self.mousedown        = None    # mouse position when a mouse button was pressed
+        self.mousedown_left   = None    # mouse position when LMB was pressed
+        self.mousedown_middle = None    # mouse position when MMB was pressed
+        self.mousedown_right  = None    # mouse position when RMB was pressed
+        self.mousedown_drag   = False   # is user dragging?
+        self.mousedown_dblclick = False # is user double clicking?
+        self.mousedown_prevtime = 0     # previous time when mouse button was pressed
+
+        self.timer      = False     # is action from timer?
+        self.time_delta = 0         # elapsed time since last "step" (units=seconds)
+
+        # IMPORTANT: the following properties are updated external to Actions
+        self.hit_pos  = None    # position of raytraced mouse to scene (updated externally!)
+        self.hit_norm = None    # normal of raytraced mouse to scene (updated externally!)
 
     def update(self, context, event, timer, print_actions=False):
         self.just_pressed = None
@@ -310,20 +339,21 @@ class Actions:
         #     #dprint(context.space_data)
         #     return {'RUNNING_MODAL'}
 
-        t, pressed = event.type, event.value=='PRESS'
+        event_type, pressed = event.type, event.value=='PRESS'
 
-        self.event_type = t
+        self.event_type = event_type
         self.mousemove_prev = self.mousemove
-        self.timer = (t in Actions.timer_actions)
-        self.mousemove = (t in Actions.mousemove_actions)
-        self.trackpad = (t in Actions.trackpad_actions)
-        self.ndof = (t in Actions.ndof_actions)
+        self.timer = (event_type in Actions.timer_actions)
+        self.mousemove = (event_type in Actions.mousemove_actions)
+        self.trackpad = (event_type in Actions.trackpad_actions)
+        self.ndof = (event_type in Actions.ndof_actions)
+        self.navevent = (event_type in self.keymap['navigate'])
+        self.mousedown_dblclick = False
 
-        if t in self.ignore_actions: return
+        if event_type in self.ignore_actions: return
 
-        if print_actions:
-            if t not in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE', 'TIMER', 'TIMER_REPORT', 'TIMERREGION'}:
-                print((event.type, event.value))
+        if print_actions and event_type not in self.nonprintable_actions:
+            print('Actions.update: (event_type, event.value) =', (event_type, event.value))
 
         if self.timer:
             self.time_delta = timer.time_delta
@@ -333,69 +363,97 @@ class Actions:
         if self.mousemove:
             self.mouse_prev = self.mouse
             self.mouse = Point2D((float(event.mouse_region_x), float(event.mouse_region_y)))
-            return
+            if self.mousedown is not None:
+                if not self.mousedown_drag and (self.mouse - self.mousedown).length > bprefs.mouse_drag():
+                    self.mousedown_drag = True
+                    if   self.mousedown_left:   event_type = 'LEFTMOUSE'
+                    elif self.mousedown_middle: event_type = 'MIDDLEMOUSE'
+                    elif self.mousedown_right:  event_type = 'RIGHTMOUSE'
+                    self.event_type = event_type
+                    pressed = True
+                    # print('Actions.update: dragging!')
+                else:
+                    return
+            else:
+                self.mousedown_drag = False
+                return
 
-        if t in self.modifier_actions:
-            if t == 'OSKEY':
+        if event_type in self.modifier_actions:
+            if event_type == 'OSKEY':
                 self.oskey = pressed
             else:
-                l = t.startswith('LEFT_')
-                if t in {'LEFT_CTRL', 'RIGHT_CTRL'}:
+                l = event_type.startswith('LEFT_')
+                if event_type.endswith('_CTRL'):
                     self.ctrl = pressed
                     if l: self.ctrl_left = pressed
                     else: self.ctrl_right = pressed
-                if t in {'LEFT_SHIFT', 'RIGHT_SHIFT'}:
+                if event_type.endswith('_SHIFT'):
                     self.shift = pressed
                     if l: self.shift_left = pressed
                     else: self.shift_right = pressed
-                if t in {'LEFT_ALT', 'RIGHT_ALT'}:
+                if event_type.endswith('_ALT'):
                     self.alt = pressed
                     if l: self.alt_left = pressed
                     else: self.alt_right = pressed
             return
 
-        if pressed and t in {'LEFTMOUSE','MIDDLEMOUSE','RIGHTMOUSE'}:
-            self.mousedown = Point2D((float(event.mouse_region_x), float(event.mouse_region_y)))
-            if event.type == 'LEFTMOUSE':
-                self.mousedown_left = self.mousedown
-            elif event.type == 'MIDDLEMOUSE':
-                self.mousedown_middle = self.mousedown
-            elif event.type == 'RIGHTMOUSE':
-                self.mousedown_right = self.mousedown
+        if event_type in self.mousebutton_actions and not self.navevent:
+            if pressed:
+                curtime = time.time()
+                dbltime = self.mousedown_prevtime + bprefs.mouse_doubleclick() # latest time to consider double click
+                self.mousedown_dblclick = curtime < dbltime and not self.mousedown_drag
+                self.mousedown_prevtime = curtime
+                self.mousedown = Point2D((float(event.mouse_region_x), float(event.mouse_region_y)))
+                if   event_type == 'LEFTMOUSE':   self.mousedown_left   = self.mousedown
+                elif event_type == 'MIDDLEMOUSE': self.mousedown_middle = self.mousedown
+                elif event_type == 'RIGHTMOUSE':  self.mousedown_right  = self.mousedown
+            else:
+                self.mousedown = None
+                self.mousedown_left = None
+                self.mousedown_middle = None
+                self.mousedown_right = None
+                self.mousedown_drag = False
 
-        ftype = kmi_details(event)
+        ftype = kmi_details(event, event_type=event_type, double_click=self.mousedown_dblclick, drag_click=self.mousedown_drag)
+        # print('Actions.update: (ftype, pressed) =', (ftype, pressed))
         if pressed:
-            if event.type not in self.now_pressed:
+            if event_type not in self.now_pressed:
                 self.just_pressed = ftype
             if 'WHEELUPMOUSE' in ftype or 'WHEELDOWNMOUSE' in ftype:
                 # mouse wheel actions have no release, so handle specially
                 self.just_pressed = ftype
-            self.now_pressed[event.type] = ftype
+            self.now_pressed[event_type] = ftype
             self.last_pressed = ftype
         else:
-            if event.type in self.now_pressed:
-                del self.now_pressed[event.type]
+            if event_type in self.now_pressed:
+                del self.now_pressed[event_type]
+        # print('Actions.update: state =', (self.just_pressed, self.now_pressed, self.last_pressed))
 
     def convert(self, actions):
         t = type(actions)
-        if t is list: actions = set(actions)
-        elif t is not set: actions = {actions}
+        if   t is set:  pass                    # already a set; no need to do anything
+        elif t is str:  actions = { actions }   # passed only a string
+        elif t is list: actions = set(actions)  # prevent duplicate actions by converting to set
+        else:           actions = { actions }   # catch all (should not happen)
         ret = set()
         for action in actions:
-            if action in self.keymap:
-                ret |= self.keymap[action]
-            else:
-                ret.add(action)
+            ret |= (self.keymap.get(action, set()) | self.keymap2.get(action, set())) or { action }
         return ret
 
 
     def unuse(self, actions):
         actions = self.convert(actions)
         keys = [k for k,v in self.now_pressed.items() if v in actions]
+        # print('Actions.unuse', actions, self.now_pressed, keys)
         for k in keys: del self.now_pressed[k]
+        # print('unuse', self.just_pressed)
         self.just_pressed = None
 
-    def unpress(self): self.just_pressed = None
+    def unpress(self):
+        # print('unpress', self.just_pressed)
+        # for entry in enumerate(inspect.stack()):
+        #     print('  %s' % str(entry))
+        self.just_pressed = None
 
     def using(self, actions, using_all=False, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False):
         if actions is None: return False
@@ -413,11 +471,14 @@ class Actions:
         if any(p in actions for p in self.now_pressed.values()): return True
         return False
 
-    def pressed(self, actions, unpress=True, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False):
+    def pressed(self, actions, unpress=True, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, debug=False):
         if actions is None: return False
         if ignoremods: ignorectrl = ignoreshift = ignorealt = ignoreoskey = True
+        if debug: print('Actions.pressed 0', actions)
         actions = self.convert(actions)
+        if debug: print('Actions.pressed 1', actions)
         just_pressed = strip_mods(self.just_pressed, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey)
+        if debug: print('Actions.pressed 2', just_pressed, actions)
         ret = just_pressed in actions
         if ret and unpress: self.just_pressed = None
         return ret
@@ -441,3 +502,24 @@ class Actions:
         if ftype is None: return ''
         #assert ftype in kmi_to_char, 'Trying to convert unhandled key "%s"' % str(self.just_pressed)
         return kmi_to_char.get(ftype, None)
+
+
+class ActionHandler:
+    def __init__(self, context, keymap):
+        self.__dict__['_action'] = Actions.get_instance(context)
+        _keymap = {}
+        for (k,v) in keymap.items():
+            if type(v) is not set and type(v) is not list: v = { v }
+            _keymap[k] = { op for action in v for op in translate_blenderop(action) }
+        self.__dict__['_keymap'] = _keymap
+    def __getattr__(self, key):
+        self._action.keymap2 = self._keymap
+        return getattr(self._action, key)
+    def __setattr__(self, key, value):
+        self._action.keymap2 = self._keymap
+        return setattr(self._action, key, value)
+
+
+
+
+

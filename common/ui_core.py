@@ -38,7 +38,7 @@ from .ui_utilities import helper_wraptext, convert_token_to_cursor
 from .drawing import ScissorStack
 from .fsm import FSM
 
-from .useractions import Actions, kmi_to_keycode
+from .useractions import ActionHandler, kmi_to_keycode
 
 from .boundvar import BoundVar
 from .debug import debugger, dprint
@@ -2672,11 +2672,17 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if stop_at is not None and stop_at in path:
             path = path[:path.index(stop_at)]
         ui_event.event_phase = 'capturing'
-        for cur in path[::-1]: cur._fire_event(event, ui_event)
+        for cur in path[::-1]:
+            cur._fire_event(event, ui_event)
+            if not ui_event.capturing: return ui_event.default_prevented
         ui_event.event_phase = 'at target'
         self._fire_event(event, ui_event)
         ui_event.event_phase = 'bubbling'
-        for cur in path: cur._fire_event(event, ui_event)
+        if not ui_event.bubbling: return ui_event.default_prevented
+        for cur in path:
+            cur._fire_event(event, ui_event)
+            if not ui_event.bubbling: return ui_event.default_prevented
+        return ui_event.default_prevented
     def dispatch_event(self, *args, **kwargs): return self._dispatch_event(*args, **kwargs)
 
     ################################################################################
@@ -2802,7 +2808,7 @@ class UI_Document(UI_Document_FSM):
     def init(self, context, **kwargs):
         self._context = context
         self._area = context.area
-        self.actions = Actions(bpy.context, UI_Document.default_keymap)
+        self.actions = ActionHandler(bpy.context, UI_Document.default_keymap)
         self._body = UI_Element(tagName='body')
         self._tooltip = UI_Element(tagName='dialog', classes='tooltip', parent=self._body)
         self._tooltip.is_visible = False
@@ -2866,7 +2872,7 @@ class UI_Document(UI_Document_FSM):
 
         if DEBUG_COLOR_CLEAN: tag_redraw_all("UI_Element DEBUG_COLOR_CLEAN")
 
-        self.actions.update(context, event, self._timer, print_actions=False)
+        #self.actions.update(context, event, self._timer, print_actions=False)
 
         self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
         self._mouse = Point2D((self._mx, self._my))
@@ -2982,7 +2988,7 @@ class UI_Document(UI_Document_FSM):
 
         if self._under_mouse and self.actions.just_pressed:
             pressed = self.actions.just_pressed
-            self.actions.unpress()
+            # self.actions.unpress()
             self._under_mouse._dispatch_event('on_keypress', key=pressed)
 
         self.handle_hover()
