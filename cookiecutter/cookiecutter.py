@@ -17,6 +17,7 @@ https://github.com/CGCookie/retopoflow
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+import math
 import time
 
 import bpy
@@ -82,6 +83,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self._done = False
         self.context = context
         self.event = None
+        self._start_time = time.time()
+        self._tmp_time = self._start_time
 
         try:
             self._cc_exception_init()
@@ -102,11 +105,16 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self._done = 'commit' if not cancel else 'cancel'
 
     def modal(self, context, event):
+        # print('CookieCutter.modal', event.type, time.time())
         self.context = context
         self.event = event
         self.drawcallbacks.reset_pre()
 
         profiler.printfile()
+
+        if time.time() - self._tmp_time >= 1:
+            self._tmp_time = time.time()
+            # print('--- %d ---' % int(self._tmp_time - self._start_time))
 
         if self._done:
             self._cc_actions_end()
@@ -154,14 +162,15 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
     def _cc_actions_init(self):
         self.actions = ActionHandler(self.context, self.default_keymap)
-        self._timer = self.context.window_manager.event_timer_add(1.0 / 120, window=self.context.window)
+        self._timer = self.context.window_manager.event_timer_add(0.1, window=self.context.window)  # 1.0 / 120
 
     def _cc_actions_update(self):
-        self.actions.update(self.context, self.event, self._timer, print_actions=False)
+        self.actions.update(self.context, self.event, print_actions=False)
 
     def _cc_actions_end(self):
         self.context.window_manager.event_timer_remove(self._timer)
         del self._timer
+        pass
 
 
 

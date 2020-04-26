@@ -23,6 +23,7 @@ import random
 import bpy
 import bgl
 from bpy.types import SpaceView3D
+from mathutils import Matrix
 
 from ..common.globals import Globals
 from ..common.blender import bversion, tag_redraw_all
@@ -58,7 +59,7 @@ if bversion() >= "2.80":
     shader = gpu.types.GPUShader(cover_vshader, cover_fshader)
 
     # create batch to draw large triangle that covers entire clip space (-1,-1)--(+1,+1)
-    batch_full = batch_for_shader(shader, 'TRIS', {"position": [(-1, -1), (3, -1), (-1, 3)]})
+    batch_full = batch_for_shader(shader, 'TRIS', {"position": [(-100, -100), (300, -100), (-100, 300)]})
 
 
 
@@ -141,7 +142,7 @@ class CookieCutter_UI:
     # Region Darkening
 
     @blender_version_wrapper("<=", "2.79")
-    def _cc_region_draw_cover(self):
+    def _cc_region_draw_cover(self, a):
         bgl.glPushAttrib(bgl.GL_ALL_ATTRIB_BITS)
         bgl.glMatrixMode(bgl.GL_PROJECTION)
         bgl.glPushMatrix()
@@ -158,7 +159,7 @@ class CookieCutter_UI:
         bgl.glPopMatrix()
         bgl.glPopAttrib()
     @blender_version_wrapper(">=", "2.80")
-    def _cc_region_draw_cover(self):
+    def _cc_region_draw_cover(self, a):
         bgl.glEnable(bgl.GL_BLEND)
         bgl.glDisable(bgl.GL_DEPTH_TEST)
         shader.bind()
@@ -186,7 +187,7 @@ class CookieCutter_UI:
             areas = SpaceView3D_areas if n == 'SpaceView3D' else general_areas
             for a in areas:
                 try:
-                    cb = s.draw_handler_add(self._cc_region_draw_cover, tuple(), a, 'POST_PIXEL')
+                    cb = s.draw_handler_add(self._cc_region_draw_cover, (a,), a, 'POST_PIXEL')
                     self._postpixel_callbacks += [(s, a, cb)]
                 except:
                     pass

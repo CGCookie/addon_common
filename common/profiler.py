@@ -292,3 +292,23 @@ Globals.set(profiler)
 #     def __exit__(self, exc_type, exc_val, exc_tb):
 #         self.pr.done()
 # profiler.code = CodeProfiler
+
+
+
+@contextlib.contextmanager
+def time_it(*args, **kwargs):
+    start = time.time()
+
+    frame = inspect.currentframe()
+    n_backs = 2
+    for _ in range(n_backs): frame = frame.f_back
+    filename = os.path.basename(frame.f_code.co_filename)
+    linenum = frame.f_lineno
+    fnname = frame.f_code.co_name
+
+    try:
+        yield None
+    finally:
+        print('time_it %s:%d fn:%s = %f' % (filename, linenum, fnname, time.time() - start))
+
+

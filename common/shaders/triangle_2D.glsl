@@ -37,5 +37,7 @@ out vec4 outColor;
 
 void main() {
     outColor = color;
+    // https://wiki.blender.org/wiki/Reference/Release_Notes/2.83/Python_API
+    outColor = blender_srgb_to_framebuffer_space(outColor);
 }
 

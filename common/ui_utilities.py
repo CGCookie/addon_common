@@ -179,18 +179,6 @@ def get_converter_to_string(group):
 #####################################################################################
 # below are various helper functions for ui functions
 
-def helper_argtranslate(key_from, key_to, kwargs):
-    if key_from in kwargs:
-        kwargs[key_to] = kwargs[key_from]
-        del kwargs[key_from]
-
-def helper_argsplitter(keys, kwargs):
-    if type(keys) is str: keys = [keys]
-    kw = {k:v for (k,v) in kwargs.items() if k in keys}
-    for k in keys:
-        if k in kwargs: del kwargs[k]
-    return kw
-
 @lru_cache(maxsize=1024)
 def helper_wraptext(text='', width=None, fontid=0, fontsize=12, preserve_newlines=False, collapse_spaces=True, wrap_text=True):
     if type(text) is not str:

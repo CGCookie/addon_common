@@ -30,4 +30,6 @@ out vec4 outColor;
 void main() {
     if(mod(int(aDistAccum / 2), 4) >= 2) discard;
     outColor = aColor;
+    // https://wiki.blender.org/wiki/Reference/Release_Notes/2.83/Python_API
+    outColor = blender_srgb_to_framebuffer_space(outColor);
 }

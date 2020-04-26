@@ -123,6 +123,14 @@ def stats_report():
         printrow(i)
 
 
+
+def add_cache(attr, default):
+    def wrapper(fn):
+        setattr(fn, attr, default)
+        return fn
+    return wrapper
+
+
 class LimitRecursion:
     def __init__(self, count, def_ret):
         self.count = count

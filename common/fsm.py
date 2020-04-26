@@ -175,6 +175,7 @@ class FSM:
     def force_set_state(self, state, call_exit=False, call_enter=True):
         if call_exit: self._call(self._state, substate='exit')
         self._state = state
+        self._state_next = state
         if call_enter: self._call(self._state, substate='enter')
 
 

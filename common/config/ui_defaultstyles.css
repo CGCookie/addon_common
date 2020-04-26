@@ -429,7 +429,7 @@ div.mdown h2 > span {
 
 div.mdown h3 {
     width: 100%;
-    margin: 8px 4px 4px 4px;
+    margin: 8px 16px 4px 16px;
     padding: 4px 4px 4px 12px;
     border: 1px transparent;
     border-bottom-color: rgba(255, 255, 255, 0.125);
@@ -676,7 +676,7 @@ body > dialog.tooltip {
     position: fixed;
     /*display: block;*/
     border: 1px black;
-    background: rgba(64,64,64, 0.95);
+    background: rgba(32,32,32,0.8);
     color: white;
     margin: 2px;
     padding: 4px;

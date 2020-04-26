@@ -313,12 +313,13 @@ class Actions:
 
         self.timer      = False     # is action from timer?
         self.time_delta = 0         # elapsed time since last "step" (units=seconds)
+        self.time_last = time.time()
 
         # IMPORTANT: the following properties are updated external to Actions
         self.hit_pos  = None    # position of raytraced mouse to scene (updated externally!)
         self.hit_norm = None    # normal of raytraced mouse to scene (updated externally!)
 
-    def update(self, context, event, timer, print_actions=False):
+    def update(self, context, event, print_actions=False):
         self.just_pressed = None
 
         self.context = context
@@ -356,7 +357,9 @@ class Actions:
             print('Actions.update: (event_type, event.value) =', (event_type, event.value))
 
         if self.timer:
-            self.time_delta = timer.time_delta
+            time_cur = time.time()
+            self.time_delta = self.time_last - time_cur
+            self.time_last = time_cur
             self.trackpad = False
             return
 
