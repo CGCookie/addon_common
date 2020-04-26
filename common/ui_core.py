@@ -2386,21 +2386,25 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         style_pos = styles.get('position', 'static')
         pl,pt     = self.left_pixels,self.top_pixels
 
+        relative_element = self._relative_element
+        relative_pos     = self._relative_pos
+        relative_offset  = self._relative_offset
+
         # position element
         if self._tablecell_table:
-            self._relative_element = self._tablecell_table
-            self._relative_pos = RelPoint2D(self._tablecell_pos)
-            self._relative_offset = RelPoint2D((0, 0))
+            relative_element = self._tablecell_table
+            relative_pos = RelPoint2D(self._tablecell_pos)
+            relative_offset = RelPoint2D((0, 0))
 
         elif style_pos in {'fixed', 'absolute'}:
             # pt,pr,pb,pl = self.top,self.right,self.bottom,self.left
             # # TODO: ignoring units, which could be %!!
-            self._relative_element = self._document_elem if style_pos == 'fixed' else self._nonstatic_elem
-            if self._relative_element is None or self._relative_element == self:
+            relative_element = self._document_elem if style_pos == 'fixed' else self._nonstatic_elem
+            if relative_element is None or relative_element == self:
                 mbp_left = mbp_top = 0
             else:
-                mbp_left = self._relative_element._mbp_left
-                mbp_top = self._relative_element._mbp_top
+                mbp_left = relative_element._mbp_left
+                mbp_top = relative_element._mbp_top
             # if self._dirtying_flow: print(self,pt,pr,pb,pl)
             if pl == 'auto':
                 # if pr != 'auto': print(self, self._relative_element._fitting_size, pr)
@@ -2415,22 +2419,32 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 #     pt = -self._relative_element._fitting_size.max_height + pb
                 # else: pt = 0
                 pt = 0
-            self._relative_pos = RelPoint2D((pl, pt)) # ((pl + mbp_left, pt - mbp_top))
-            self._relative_offset = RelPoint2D((mbp_left, -mbp_top))
+            relative_pos = RelPoint2D((pl, pt)) # ((pl + mbp_left, pt - mbp_top))
+            relative_offset = RelPoint2D((mbp_left, -mbp_top))
 
         elif style_pos == 'relative':
             if pl == 'auto':
                 pl = 0
             if pt == 'auto':
                 pt = 0
-            self._relative_element = self._parent
-            self._relative_pos = RelPoint2D(self._fitting_pos)
-            self._relative_offset = RelPoint2D((pl, pt))
+            relative_element = self._parent
+            relative_pos = RelPoint2D(self._fitting_pos)
+            relative_offset = RelPoint2D((pl, pt))
 
         else:
-            self._relative_element = self._parent
-            self._relative_pos = RelPoint2D(self._fitting_pos)
-            self._relative_offset = RelPoint2D((0, 0))
+            relative_element = self._parent
+            relative_pos = RelPoint2D(self._fitting_pos)
+            relative_offset = RelPoint2D((0, 0))
+
+        changed = False
+        changed |= relative_element != self._relative_element
+        changed |= relative_pos != self._relative_pos
+        changed |= relative_offset != self._relative_offset
+        self._relative_element = relative_element
+        self._relative_pos = relative_pos
+        self._relative_offset = relative_offset
+        if changed: self.dirty('position changed', 'renderbuf')
+
     def update_position(self): return self._update_position()
 
     @profiler.function
