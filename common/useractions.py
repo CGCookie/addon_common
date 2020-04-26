@@ -31,6 +31,9 @@ from .debug import dprint
 from .decorators import blender_version_wrapper
 from . import blender_preferences as bprefs
 
+
+# https://www.w3schools.com/jsref/tryit.asp?filename=tryjsref_event_key_keycode2
+
 kmi_to_keycode = {
     'BACK_SPACE':    8,
     'RET':          13,
@@ -42,6 +45,20 @@ kmi_to_keycode = {
     'RIGHT_ARROW':  39,
     'DEL':          46,
 }
+
+keycode_to_kmi = {
+     8: {'BACK_SPACE'},
+    13: {'RET', 'NUMPAD_ENTER'},
+    27: {'ESC'},
+    35: {'END'},
+    36: {'HOME'},
+    37: {'LEFT_ARROW'},
+    39: {'RIGHT_ARROW'},
+    46: {'DEL'},
+}
+
+def is_keycode(keycode, kmi):
+    return keycode == kmi_to_keycode[kmi]
 
 kmi_to_char = {
     'ZERO':   '0', 'NUMPAD_0':       '0',

@@ -2927,6 +2927,11 @@ class UI_Document(UI_Document_FSM):
             {'NUMPAD_%d'%i for i in range(10)} | {'NUMPAD_PERIOD','NUMPAD_MINUS','NUMPAD_PLUS','NUMPAD_SLASH','NUMPAD_ASTERIX'} |
             {'ZERO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'} |
             {'PERIOD', 'MINUS', 'SPACE', 'SEMI_COLON', 'COMMA', 'QUOTE', 'ACCENT_GRAVE', 'PLUS', 'SLASH', 'BACK_SLASH', 'EQUAL', 'LEFT_BRACKET', 'RIGHT_BRACKET'},
+        'scroll top': {'HOME'},
+        'scroll bottom': {'END'},
+        'scroll up': {'WHEELUPMOUSE', 'PAGE_UP', 'UP_ARROW', },
+        'scroll down': {'WHEELDOWNMOUSE', 'PAGE_DOWN', 'DOWN_ARROW', },
+        'scroll': {'TRACKPADPAN'},
     }
 
     doubleclick_time = bpy.context.preferences.inputs.mouse_double_click_time / 1000 # 0.25
@@ -3125,20 +3130,20 @@ class UI_Document(UI_Document_FSM):
         #     self._debug_print(self._under_mouse)
         #     #print('focus:', self._focus)
 
-        if self.actions.pressed({'HOME', 'END'}, unpress=False):
-            move = 100000 * (-1 if self.actions.pressed({'HOME'}) else 1)
+        if self.actions.pressed({'scroll top', 'scroll bottom'}, unpress=False):
+            move = 100000 * (-1 if self.actions.pressed({'scroll top'}) else 1)
             self.actions.unpress()
             if self._get_scrollable():
                 self._scroll_element.scrollTop = self._scroll_last.y + move
                 self._scroll_element._setup_ltwh(recurse_children=False)
 
-        if self.actions.pressed({'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'PAGE_UP', 'PAGE_DOWN', 'TRACKPADPAN', 'UP_ARROW', 'DOWN_ARROW'}, unpress=False):
+        if self.actions.pressed({'scroll', 'scroll up', 'scroll down'}, unpress=False):
             if self.actions.event_type == 'TRACKPADPAN':
                 move = self.actions.mouse.y - self.actions.mouse_prev.y
             else:
                 d = self.wheel_scroll_lines * 8
-                move = Globals.drawing.scale(d) * (-1 if 'UP' in self.actions.event_type else 1)
-            # print('SCROLLING', move)
+                move = Globals.drawing.scale(d) * (-1 if self.actions.pressed({'scroll up'}) else 1)
+                self.actions.unpress()
             self.actions.unpress()
             if self._get_scrollable():
                 self._scroll_element.scrollTop = self._scroll_last.y + move
@@ -3319,7 +3324,7 @@ class UI_Document(UI_Document_FSM):
         if self.actions.using('keypress', ignoreshift=True):
             pressed = self.actions.as_char(self.actions.last_pressed)
         for k,v in kmi_to_keycode.items():
-            if self.actions.using(k): pressed = v
+            if self.actions.using(k, ignoreshift=True): pressed = v
         if pressed:
             cur = time.time()
             if self._last_pressed != pressed:

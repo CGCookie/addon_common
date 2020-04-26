@@ -47,6 +47,7 @@ from .fontmanager import FontManager
 from .globals import Globals
 from .maths import Point2D, Vec2D, clamp, mid, Color, Box2D, Size2D
 from .markdown import Markdown
+from .useractions import is_keycode
 
 from ..ext import png
 
@@ -278,34 +279,32 @@ def input_text(**kwargs):
     def keypress(e):
         if data['text'] == None: return
         if type(e.key) is int:
-            # https://www.w3schools.com/jsref/tryit.asp?filename=tryjsref_event_key_keycode2
-            # TODO: use enum rather than magic numbers!
-            if e.key == 8:
+            if is_keycode(e.key, 'BACK_SPACE'):
                 if data['idx'] == 0: return
                 data['text'] = data['text'][0:data['idx']-1] + data['text'][data['idx']:]
                 data['idx'] -= 1
-            elif e.key == 13:
+            elif is_keycode(e.key, 'RET'):
                 ui_input.blur()
-            elif e.key == 27:
+            elif is_keycode(e.key, 'ESC'):
                 data['text'] = data['orig']
                 ui_input.blur()
-            elif e.key == 35:
+            elif is_keycode(e.key, 'END'):
                 data['idx'] = len(data['text'])
                 ui_input.dirty_flow()
-            elif e.key == 36:
+            elif is_keycode(e.key, 'HOME'):
                 data['idx'] = 0
                 ui_input.dirty_flow()
-            elif e.key == 37:
+            elif is_keycode(e.key, 'LEFT_ARROW'):
                 data['idx'] = max(data['idx'] - 1, 0)
                 ui_input.dirty_flow()
-            elif e.key == 39:
+            elif is_keycode(e.key, 'RIGHT_ARROW'):
                 data['idx'] = min(data['idx'] + 1, len(data['text']))
                 ui_input.dirty_flow()
-            elif e.key == 46:
+            elif is_keycode(e.key, 'DEL'):
                 if data['idx'] == len(data['text']): return
                 data['text'] = data['text'][0:data['idx']] + data['text'][data['idx']+1:]
             else:
-                changed = False
+                return
         else:
             data['text'] = data['text'][0:data['idx']] + e.key + data['text'][data['idx']:]
             data['idx'] += 1
