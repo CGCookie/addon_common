@@ -36,7 +36,7 @@ def mouse_move():
     return bpy.context.preferences.inputs.move_threshold
 
 def mouse_select():
-    # returns 0 if LMB is used for selection or 1 if RMB is used for selection
-    return bpy.context.window_manager.keyconfigs.active.preferences['select_mouse']
+    # returns 'LEFT' if LMB is used for selection or 'RIGHT' if RMB is used for selection
+    return bpy.context.window_manager.keyconfigs.active.preferences.select_mouse
 
 
