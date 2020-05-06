@@ -172,6 +172,18 @@ def i18n_translate(text):
     return bpy.app.translations.pgettext(text)
 
 
+class TimerHandler:
+    def __init__(self, wm, win, hz):
+        self._wm = wm
+        self._timer = wm.event_timer_add(1.0 / hz, window=win)
+    def __del__(self):
+        self.done()
+    def done(self):
+        if self._timer:
+            self._wm.event_timer_remove(self._timer)
+            self._timer = None
+
+
 class Actions:
     # https://docs.blender.org/api/2.79/bpy.types.KeyMapItems.html
     # https://docs.blender.org/api/blender2.8/bpy.types.KeyMapItems.html
@@ -359,6 +371,7 @@ class Actions:
         #     return {'RUNNING_MODAL'}
 
         event_type, pressed = event.type, event.value=='PRESS'
+        # print('Actions.update', event_type, event.value)
 
         action_prevtime = self.actions_prevtime.get(event_type, float('-inf'))
         if pressed:
@@ -529,6 +542,9 @@ class Actions:
         if ftype is None: return ''
         #assert ftype in kmi_to_char, 'Trying to convert unhandled key "%s"' % str(self.just_pressed)
         return kmi_to_char.get(ftype, None)
+
+    def start_timer(self, hz):
+        return TimerHandler(self.context.window_manager, self.context.window, hz)
 
 
 class ActionHandler:
