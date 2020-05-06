@@ -279,11 +279,17 @@ class Drawing:
         if cache_key not in self.line_cache:
             # cache away useful details about font (line height, line base)
             dprint('Caching new scaled font size:', cache_key)
-            all_chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()`~[}{]/?=+\\|-_\'",<.>'
+            all_chars = ''.join([
+                'abcdefghijklmnopqrstuvwxyz',
+                'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+                '0123456789',
+                '!@#$%%^&*()`~[}{]/?=+\\|-_\'",<.>',
+                'ΑαΒβΓγΔδΕεΖζΗηΘθΙιΚκΛλΜμΝνΞξΟοΠπΡρΣσςΤτΥυΦφΧχΨψΩω',
+            ])
             all_caps = all_chars.upper()
             self.line_cache[cache_key] = {
-                'line height': round(fm.dimensions(all_chars, fontid=fontid)[1] + self.scale(4)),
-                'line base': round(fm.dimensions(all_caps, fontid=fontid)[1]),
+                'line height': math.ceil(fm.dimensions(all_chars, fontid=fontid)[1] + self.scale(4)),
+                'line base': math.ceil(fm.dimensions(all_caps, fontid=fontid)[1]),
             }
         info = self.line_cache[cache_key]
         self.line_height = info['line height']
