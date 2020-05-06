@@ -24,6 +24,7 @@ import re
 import math
 import time
 import types
+import codecs
 import struct
 import random
 import traceback
@@ -381,9 +382,19 @@ def get_mdown_path(fn, ext=None, subfolders=None):
     paths = [p for p in paths if os.path.exists(p)]
     return iter_head(paths, None)
 
+def load_text_file(path):
+    try: return open(path, 'rt').read()
+    except: pass
+    try: return codecs.open(path, encoding='utf-8').read()
+    except: pass
+    try: return codecs.open(path, encoding='utf-16').read()
+    except Exception as e:
+        print('Could not load text file:', path)
+        print('Exception:', e)
+        assert False
 
 def set_markdown(ui_mdown, mdown=None, mdown_path=None):
-    if mdown_path: mdown = open(get_mdown_path(mdown_path), 'rt').read()
+    if mdown_path: mdown = load_text_file(get_mdown_path(mdown_path))
     mdown = Markdown.preprocess(mdown or '')                # preprocess mdown
     if getattr(ui_mdown, '__mdown', None) == mdown: return  # ignore updating if it's exactly the same as previous
     ui_mdown.__mdown = mdown                                # record the mdown to prevent reprocessing same
