@@ -159,7 +159,7 @@ def input_radio(**kwargs):
     kw_all = kwargs_splitter({'title'}, kwargs)
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
-    ui_input = UI_Element(tagName='input', type='radio', can_focus=True, **kwargs, **kw_all)
+    ui_input = UI_Element(tagName='input', type='radio', can_focus=True, atomic=True, **kwargs, **kw_all)
     ui_radio = UI_Element(tagName='img', classes='radio',  parent=ui_input, **kw_all)
     ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label, **kw_all)
     def mouseclick(e):
@@ -185,7 +185,7 @@ def input_checkbox(**kwargs):
     kw_all = kwargs_splitter({'title'}, kwargs)
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
-    ui_input = UI_Element(tagName='input', type='checkbox', can_focus=False, **kwargs, **kw_all)
+    ui_input = UI_Element(tagName='input', type='checkbox', can_focus=False, atomic=True, **kwargs, **kw_all)
     ui_checkmark = UI_Element(tagName='img', classes='checkbox',  parent=ui_input, **kw_all)
     ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label, **kw_all)
     def mouseclick(e):
@@ -219,7 +219,7 @@ def input_text(**kwargs):
     kwargs.setdefault('value', '')
     kw_container = kwargs_splitter({'parent'}, kwargs)
     ui_container = UI_Element(tagName='span', classes='inputtext-container', **kw_container)
-    ui_input  = UI_Element(tagName='input', classes='inputtext-input', type='text', can_focus=True, parent=ui_container, **kwargs)
+    ui_input  = UI_Element(tagName='input', classes='inputtext-input', type='text', can_focus=True, atomic=True, parent=ui_container, **kwargs)
     ui_cursor = UI_Element(tagName='span', classes='inputtext-cursor', parent=ui_input, innerText='|')
 
     data = {'orig': None, 'text': None, 'idx': 0, 'pos': None}

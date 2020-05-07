@@ -1435,6 +1435,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         #################################################################
         # read-only attributes of UI_Element
+        self._atomic        = False     # True:all children under self should be considered as part of self (ex: don't pass on events)
         self._parent        = None      # read-only property; set in parent.append_child(child)
         self._parent_size   = None
         self._children      = []        # read-only list of all children; append_child, delete_child, clear_children
@@ -1577,6 +1578,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if k in self._events:
                 # key is an event; set callback
                 self.add_eventListener(k, v)
+            elif k == 'atomic':
+                self._atomic = v
             elif k == 'parent':
                 # note: parent.append_child(self) will set self._parent
                 v.append_child(self)
@@ -1620,6 +1623,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         info = [(k, getattr(self, k)) for k in info if hasattr(self, k)]
         info = ['%s="%s"' % (k, str(v)) for k,v in info if v]
         if self.is_dirty: info += ['dirty']
+        if self._atomic: info += ['atomic']
         return '<%s>' % ' '.join(['UI_Element'] + info)
 
     @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content', 'renderbuf'})
@@ -2774,9 +2778,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if not self.is_visible: return None
         if self._w < 1 or self._h < 1: return None
         if not (self._l <= p.x <= self._r and self._b <= p.y <= self._t): return None
-        for child in reversed(self._children):
-            r = child.get_under_mouse(p)
-            if r: return r
+        if not self._atomic:
+            for child in reversed(self._children):
+                r = child.get_under_mouse(p)
+                if r: return r
         return self
 
     def get_mouse_distance(self, p:Point2D):
@@ -3237,6 +3242,7 @@ class UI_Document(UI_Document_FSM):
         self._addrem_pseudoclass('active', add_to=self._under_mousedown)
         # self._under_mousedown.add_pseudoclass('active')
         self._under_mousedown._dispatch_event('on_mousedown')
+        # print(self._under_mouse.get_pathToRoot())
 
     @UI_Document_FSM.FSM_State('mousedown')
     def modal_mousedown(self):
@@ -3253,6 +3259,7 @@ class UI_Document(UI_Document_FSM):
         click = False
         click |= time.time() - self._mousedown_time < self.allow_click_time
         click |= self._under_mousedown.get_mouse_distance(self._mouse) <= self._ui_scale * self.max_click_dist
+        # print('mousedown_exit', self._under_mouse, self._under_mousedown, click)
         if click:
             # old/simple: self._under_mouse == self._under_mousedown:
             dblclick = True
