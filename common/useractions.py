@@ -371,7 +371,9 @@ class Actions:
         #     return {'RUNNING_MODAL'}
 
         event_type, pressed = event.type, event.value=='PRESS'
-        # print('Actions.update', event_type, event.value)
+
+        # if event_type not in {'TIMER', 'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
+        #     print('Actions.update', event_type, event.value)
 
         action_prevtime = self.actions_prevtime.get(event_type, float('-inf'))
         if pressed:

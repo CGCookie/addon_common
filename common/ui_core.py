@@ -2779,6 +2779,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             if r: return r
         return self
 
+    def get_mouse_distance(self, p:Point2D):
+        dx = p.x - clamp(p.x, self._l, self._r)
+        dy = p.y - clamp(p.y, self._b, self._t)
+        return math.sqrt(dx*dx + dy*dy)
+
 
     def structure(self, depth=0, all_children=False):
         l = self._children if not all_children else self._children_all
@@ -2941,6 +2946,8 @@ class UI_Document(UI_Document_FSM):
     key_repeat_pause = 0.10
     show_tooltips = True
     tooltip_delay = 0.50
+    max_click_dist = 10         # allows mouse to travel off element and still register a click event
+    allow_click_time = 0.20     # allows for very fast clicking. ignore max_click_dist if time(mouseup-mousedown) is at most allow_click_time
 
     def __init__(self):
         self._context = None
@@ -3037,9 +3044,9 @@ class UI_Document(UI_Document_FSM):
         self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
         self._mouse = Point2D((self._mx, self._my))
         if not self.ignore_hover_change: self._under_mouse = self._body.get_under_mouse(self._mouse)
-        self._lmb = self.actions.using('LEFTMOUSE')
-        self._mmb = self.actions.using('MIDDLEMOUSE')
-        self._rmb = self.actions.using('RIGHTMOUSE')
+        self._lmb = self.actions.using({'LEFTMOUSE', 'LEFTMOUSE+DRAG'})
+        self._mmb = self.actions.using({'MIDDLEMOUSE','MIDDLEMOUSE+DRAG'})
+        self._rmb = self.actions.using({'RIGHTMOUSE','RIGHTMOUSE+DRAG'})
 
         next_message = None
         if self._under_mouse and self._under_mouse.title:
@@ -3225,6 +3232,7 @@ class UI_Document(UI_Document_FSM):
             else:
                 self.blur()
 
+        self._mousedown_time = time.time()
         self._under_mousedown = self._under_mouse
         self._addrem_pseudoclass('active', add_to=self._under_mousedown)
         # self._under_mousedown.add_pseudoclass('active')
@@ -3232,6 +3240,7 @@ class UI_Document(UI_Document_FSM):
 
     @UI_Document_FSM.FSM_State('mousedown')
     def modal_mousedown(self):
+        # print('mousedown', self._lmb, self._mmb, self._rmb)
         if not self._lmb:
             # done with mousedown
             return 'focus' if self._under_mousedown.can_focus else 'main'
@@ -3241,8 +3250,11 @@ class UI_Document(UI_Document_FSM):
     @UI_Document_FSM.FSM_State('mousedown', 'exit')
     def modal_mousedown_exit(self):
         self._under_mousedown._dispatch_event('on_mouseup')
-        if self._under_mouse == self._under_mousedown:
-            # CLICK!
+        click = False
+        click |= time.time() - self._mousedown_time < self.allow_click_time
+        click |= self._under_mousedown.get_mouse_distance(self._mouse) <= self._ui_scale * self.max_click_dist
+        if click:
+            # old/simple: self._under_mouse == self._under_mousedown:
             dblclick = True
             dblclick &= self._under_mousedown == self._last_under_click
             dblclick &= time.time() < self._last_click_time + self.doubleclick_time
