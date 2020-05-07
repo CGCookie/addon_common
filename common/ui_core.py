@@ -1400,7 +1400,10 @@ class UI_Element_Dirtiness:
         self.call_cleaning_callbacks()
         for child in self._children_all: child.clean(depth=depth+1)
         self._call_postclean()
-        assert not self.is_dirty, '%s is still dirty after cleaning: %s' % (str(self), str(self._dirty_properties))
+        if self.is_dirty:
+            print('WARNING: UI element is still dirty after cleaning!')
+            print('  UI:', self)
+            print('  Properties:', self._dirty_properties)
     def clean(self, *args, **kwargs): self._clean(*args, **kwargs)
 
 
@@ -2828,7 +2831,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     @profiler.function
     def _dispatch_event(self, event, mouse=None, button=None, key=None, ui_event=None, stop_at=None):
         if mouse is None: mouse = ui_document.actions.mouse
-        if button is None: button = (ui_document._lmb, ui_document._mmb, ui_document._rmb)
+        if button is None: button = (ui_document.actions.using('LEFTMOUSE'),ui_document.actions.using('MIDDLEMOUSE'),ui_document.actions.using('RIGHTMOUSE'))
         if ui_event is None: ui_event = UI_Event(target=self, mouse=mouse, button=button, key=key)
         path = self.get_pathToRoot()[1:] # skipping first item, which is self
         if stop_at is not None and stop_at in path:
@@ -2996,17 +2999,9 @@ class UI_Document(UI_Document_FSM):
         self._under_down = None
         self._focus = None
 
-        self._mouse = Point2D((-1, -1))
-        self._lmb = False
-        self._mmb = False
-        self._rmb = False
-
         self._last_mx = -1
         self._last_my = -1
-        self._last_mouse = Point2D((-1, -1))
-        self._last_lmb = False
-        self._last_mmb = False
-        self._last_rmb = False
+        self._last_mouse = None
         self._last_under_mouse = None
         self._last_under_click = None
         self._last_click_time = 0
@@ -3019,13 +3014,13 @@ class UI_Document(UI_Document_FSM):
         return self._body
 
     def _reposition_tooltip(self, force=False):
-        if self._tooltip_mouse == self._mouse and not force: return
-        self._tooltip_mouse = self._mouse
+        if self._tooltip_mouse == self.actions.mouse and not force: return
+        self._tooltip_mouse = self.actions.mouse
         if self._tooltip.width_pixels is None or type(self._tooltip.width_pixels) is str or self._tooltip._mbp_width is None or self._tooltip.height_pixels is None or type(self._tooltip.height_pixels) is str or self._tooltip._mbp_height is None:
-            ttl,ttt = self._mouse
+            ttl,ttt = self.actions.mouse
         else:
-            ttl = self._mouse.x if self._mouse.x < self._body.width_pixels/2  else self._mouse.x - (self._tooltip.width_pixels + (self._tooltip._mbp_width or 0))
-            ttt = self._mouse.y if self._mouse.y > self._body.height_pixels/2 else self._mouse.y + (self._tooltip.height_pixels + (self._tooltip._mbp_height or 0))
+            ttl = self.actions.mouse.x if self.actions.mouse.x < self._body.width_pixels/2  else self.actions.mouse.x - (self._tooltip.width_pixels + (self._tooltip._mbp_width or 0))
+            ttt = self.actions.mouse.y if self.actions.mouse.y > self._body.height_pixels/2 else self.actions.mouse.y + (self._tooltip.height_pixels + (self._tooltip._mbp_height or 0))
         hp = self._body.height_pixels if type(self._body.height_pixels) is not str else 0.0
         self._tooltip.reposition(left=ttl, top=ttt - hp)
 
@@ -3047,11 +3042,7 @@ class UI_Document(UI_Document_FSM):
         # self.actions.update(context, event, print_actions=False)
 
         self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
-        self._mouse = Point2D((self._mx, self._my))
-        if not self.ignore_hover_change: self._under_mouse = self._body.get_under_mouse(self._mouse)
-        self._lmb = self.actions.using({'LEFTMOUSE', 'LEFTMOUSE+DRAG'})
-        self._mmb = self.actions.using({'MIDDLEMOUSE','MIDDLEMOUSE+DRAG'})
-        self._rmb = self.actions.using({'RIGHTMOUSE','RIGHTMOUSE+DRAG'})
+        if not self.ignore_hover_change: self._under_mouse = self._body.get_under_mouse(self.actions.mouse)
 
         next_message = None
         if self._under_mouse and self._under_mouse.title:
@@ -3071,16 +3062,14 @@ class UI_Document(UI_Document_FSM):
 
         self._last_mx = self._mx
         self._last_my = self._my
-        self._last_mouse = self._mouse
-        self._last_lmb = self._lmb
-        self._last_mmb = self._mmb
-        self._last_rmb = self._rmb
+        self._last_mouse = self.actions.mouse
         if not self.ignore_hover_change: self._last_under_mouse = self._under_mouse
 
         uictrld = False
         uictrld |= self._under_mouse is not None and self._under_mouse != self._body
         uictrld |= self.fsm.state != 'main'
         # uictrld |= self._focus is not None
+
         return {'hover'} if uictrld else None
 
 
@@ -3120,7 +3109,7 @@ class UI_Document(UI_Document_FSM):
     def handle_mousemove(self, ui_element=None):
         ui_element = ui_element or self._under_mouse
         if ui_element is None: return
-        if self._last_mouse.x == self._mouse.x and self._last_mouse.y == self._mouse.y: return
+        if self._last_mouse == self.actions.mouse: return
         ui_element._dispatch_event('on_mousemove')
 
 
@@ -3132,13 +3121,13 @@ class UI_Document(UI_Document_FSM):
     def modal_main(self):
         # print('UI_Document.main', self.actions.event_type, time.time())
 
-        if self._mmb and not self._last_mmb:
+        if self.actions.pressed('MIDDEMOUSE'):
             return 'scroll'
 
-        if self._lmb and not self._last_lmb:
+        if self.actions.pressed('LEFTMOUSE', unpress=False, ignoremods=True, ignoremulti=True):
             return 'mousedown'
 
-        # if self._rmb and not self._last_rmb and self._under_mouse:
+        # if self.actions.pressed('RIGHTMOUSE') and self._under_mouse:
         #     self._debug_print(self._under_mouse)
         #     #print('focus:', self._focus)
 
@@ -3187,34 +3176,34 @@ class UI_Document(UI_Document_FSM):
         return self._scroll_element
 
     @UI_Document_FSM.FSM_State('scroll', 'can enter')
-    def modal_scroll_canenter(self):
+    def scroll_canenter(self):
         if not self._get_scrollable(): return False
 
     @UI_Document_FSM.FSM_State('scroll', 'enter')
-    def modal_scroll_enter(self):
-        self._scroll_point = self._mouse
+    def scroll_enter(self):
+        self._scroll_point = self.actions.mouse
         self.ignore_hover_change = True
         Globals.cursors.set('SCROLL_Y')
 
     @UI_Document_FSM.FSM_State('scroll')
-    def modal_scroll(self):
-        if not self._mmb:
+    def scroll_main(self):
+        if self.actions.released('MIDDLEMOUSE', ignoremods=True, ignoremulti=True):
             # done scrolling
             return 'main'
         nx = self._scroll_element.scrollLeft + (self._scroll_point.x - self._mx)
         ny = self._scroll_element.scrollTop  - (self._scroll_point.y - self._my)
         self._scroll_element.scrollLeft = nx
         self._scroll_element.scrollTop = ny
-        self._scroll_point = self._mouse
+        self._scroll_point = self.actions.mouse
         self._scroll_element._setup_ltwh(recurse_children=False)
 
     @UI_Document_FSM.FSM_State('scroll', 'exit')
-    def modal_scroll_exit(self):
+    def scroll_exit(self):
         self.ignore_hover_change = False
 
 
     @UI_Document_FSM.FSM_State('mousedown', 'can enter')
-    def modal_mousedown_canenter(self):
+    def mousedown_canenter(self):
         disabled_under = self._under_mouse and self._under_mouse.is_disabled
         if UI_Document.allow_disabled_to_blur and disabled_under:
             # user clicked on disabled element, so blur current focused element
@@ -3225,7 +3214,7 @@ class UI_Document(UI_Document_FSM):
         return self._under_mouse is not None and self._under_mouse != self._body and not self._under_mouse.is_disabled
 
     @UI_Document_FSM.FSM_State('mousedown', 'enter')
-    def modal_mousedown_enter(self):
+    def mousedown_enter(self):
         change_focus = self._focus != self._under_mouse
         if change_focus:
             if self._under_mouse.can_focus:
@@ -3245,20 +3234,19 @@ class UI_Document(UI_Document_FSM):
         # print(self._under_mouse.get_pathToRoot())
 
     @UI_Document_FSM.FSM_State('mousedown')
-    def modal_mousedown(self):
-        # print('mousedown', self._lmb, self._mmb, self._rmb)
-        if not self._lmb:
+    def mousedown_main(self):
+        if self.actions.released('LEFTMOUSE', ignoremods=True, ignoremulti=True):
             # done with mousedown
             return 'focus' if self._under_mousedown.can_focus else 'main'
         self.handle_hover(change_cursor=False)
         self.handle_mousemove(ui_element=self._under_mousedown)
 
     @UI_Document_FSM.FSM_State('mousedown', 'exit')
-    def modal_mousedown_exit(self):
+    def mousedown_exit(self):
         self._under_mousedown._dispatch_event('on_mouseup')
         click = False
         click |= time.time() - self._mousedown_time < self.allow_click_time
-        click |= self._under_mousedown.get_mouse_distance(self._mouse) <= self._ui_scale * self.max_click_dist
+        click |= self._under_mousedown.get_mouse_distance(self.actions.mouse) <= self._ui_scale * self.max_click_dist
         # print('mousedown_exit', self._under_mouse, self._under_mousedown, click)
         if click:
             # old/simple: self._under_mouse == self._under_mousedown:
@@ -3322,13 +3310,13 @@ class UI_Document(UI_Document_FSM):
         self._focus._dispatch_event('on_focusin', stop_at=stop_focus_at)
 
     @UI_Document_FSM.FSM_State('focus', 'enter')
-    def modal_focus_enter(self):
+    def focus_enter(self):
         self._last_pressed = None
         self._last_press_time = 0
         self._last_press_start = 0
 
     @UI_Document_FSM.FSM_State('focus')
-    def modal_focus(self):
+    def focus_main(self):
         if self.actions.pressed('LEFTMOUSE', unpress=False):
             return 'mousedown'
         # if self.actions.pressed('RIGHTMOUSE'):

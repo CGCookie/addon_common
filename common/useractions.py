@@ -497,8 +497,10 @@ class Actions:
         #     print('  %s' % str(entry))
         self.just_pressed = None
 
-    def using(self, actions, using_all=False, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, ignoredouble=False, ignoredrag=False):
+    def using(self, actions, using_all=False, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, ignoremulti=False, ignoredouble=False, ignoredrag=False):
         if actions is None: return False
+        if ignoremods: ignorectrl,ignoreshift,ignorealt,ignoreoskey = True,True,True,True
+        if ignoremulti: ignoredouble,ignoredrag = True,True
         actions = self.convert(actions)
         quantifier_fn = all if using_all else any
         return quantifier_fn(
@@ -513,9 +515,10 @@ class Actions:
         if any(p in actions for p in self.now_pressed.values()): return True
         return False
 
-    def pressed(self, actions, unpress=True, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, ignoredouble=False, ignoredrag=False, debug=False):
+    def pressed(self, actions, unpress=True, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, ignoremulti=False, ignoredouble=False, ignoredrag=False, debug=False):
         if actions is None: return False
-        if ignoremods: ignorectrl = ignoreshift = ignorealt = ignoreoskey = True
+        if ignoremods: ignorectrl,ignoreshift,ignorealt,ignoreoskey = True,True,True,True
+        if ignoremulti: ignoredouble,ignoredrag = True,True
         if debug: print('Actions.pressed 0: actions =', actions)
         actions = self.convert(actions)
         if debug: print('Actions.pressed 1: actions =', actions)
