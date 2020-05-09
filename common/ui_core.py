@@ -48,7 +48,7 @@ from .useractions import ActionHandler, kmi_to_keycode
 
 from .boundvar import BoundVar
 from .debug import debugger, dprint
-from .decorators import debug_test_call, blender_version_wrapper
+from .decorators import debug_test_call, blender_version_wrapper, add_cache
 from .fontmanager import FontManager
 from .globals import Globals
 from .hasher import Hasher
@@ -133,12 +133,6 @@ def get_image_path(fn, ext=None, subfolders=None):
     return iter_head(paths, None)
 
 
-def add_cache(start):
-    def wrapper(fn):
-        fn._cache = start
-        return fn
-    return wrapper
-
 @contextlib.contextmanager
 def temp_bglbuffer(*args):
     buf = bgl.Buffer(*args)
@@ -146,7 +140,7 @@ def temp_bglbuffer(*args):
     del buf
 
 
-@add_cache({})
+@add_cache('_cache', {})
 def load_image_png(fn):
     # important: assuming all images have distinct names!
     if fn not in load_image_png._cache:
@@ -159,7 +153,7 @@ def load_image_png(fn):
         load_image_png._cache[fn] = img
     return load_image_png._cache[fn]
 
-@add_cache({})
+@add_cache('_cache', {})
 def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR):
     if fn_image not in load_texture._cache:
         image = load_image_png(fn_image)
@@ -1439,19 +1433,26 @@ class UI_Element_PreventMultiCalls:
 
     @staticmethod
     def reset_multicalls():
+        # print(UI_Element_PreventMultiCalls.multicalls)
         UI_Element_PreventMultiCalls.multicalls = {}
 
     def record_multicall(self, label):
         # returns True if already called!
         d = UI_Element_PreventMultiCalls.multicalls
-        if label not in d: d[label] = { self }
-        elif self not in d[label]: d[label].add(self)
+        if label not in d: d[label] = { self._uid }
+        elif self._uid not in d[label]: d[label].add(self._uid)
         else: return True
         return False
 
 
 
 class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, UI_Element_Debug, UI_Element_PreventMultiCalls):
+    @staticmethod
+    @add_cache('uid', 0)
+    def get_uid():
+        UI_Element.get_uid.uid += 1
+        return UI_Element.get_uid.uid
+
     def __init__(self, **kwargs):
         ################################################################
         # attributes of UI_Element that are settable
@@ -1465,6 +1466,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._can_focus     = False     # True:self can take focus
         self._title         = None      # tooltip
         self._forId         = None      # used for labels
+        self._uid           = UI_Element.get_uid()
 
         # attribs
         self._type          = None
@@ -1690,6 +1692,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         rebuilds self._selector and computes the stylesheet, propagating computation to children
         '''
 
+        if self.record_multicall('_compute_style'): return
+
         if self._defer_clean: return
         if 'style' not in self._dirty_properties:
             self._defer_clean = True
@@ -1700,8 +1704,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self._dirty_callbacks['style'] = set()
             self._defer_clean = False
             return
-
-        if self.record_multicall('_compute_style'): return
 
         self._draw_dirty_style += 1
         self._clean_debugging['style'] = time.time()

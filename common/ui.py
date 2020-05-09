@@ -46,7 +46,7 @@ from .decorators import blender_version_wrapper
 from .drawing import Drawing, ScissorStack
 from .fontmanager import FontManager
 from .globals import Globals
-from .maths import Point2D, Vec2D, clamp, mid, Color, Box2D, Size2D
+from .maths import Point2D, Vec2D, clamp, mid, Color, Box2D, Size2D, NumberUnit
 from .markdown import Markdown
 from .useractions import is_keycode
 
@@ -646,7 +646,7 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
             dpi_mult = Globals.drawing.get_dpi_mult()
             l,t,w,h = ui_dialog.left_pixels, ui_dialog.top_pixels, ui_dialog.width_pixels, ui_dialog.height_pixels
             mt,mr,mb,ml = ui_dialog._get_style_trbl('margin', scale=dpi_mult)
-            bw = ui_dialog._get_style_num('border-width', 0, scale=dpi_mult)
+            bw = ui_dialog._get_style_num('border-width', def_v=NumberUnit.zero, scale=dpi_mult)
             ro = ui_dialog._relative_offset
             gl = l + ro.x + w - mr - bw
             gb = t - ro.y - h + mb + bw

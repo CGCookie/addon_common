@@ -44,7 +44,7 @@ from .ui_utilities import (
     skip_token,
 )
 
-from .decorators import blender_version_wrapper, debug_test_call
+from .decorators import blender_version_wrapper, debug_test_call, add_cache
 from .maths import Point2D, Vec2D, clamp, mid, Color, NumberUnit
 from .profiler import profiler
 from .drawing import Drawing, ScissorStack
@@ -366,6 +366,7 @@ class UI_Style_RuleSet:
     def __init__(self):
         self.selectors = []
         self.decllist = []
+        self._match_cache = {}
 
     def __str__(self):
         s = ', '.join(' '.join(selector) for selector in self.selectors)
@@ -373,59 +374,78 @@ class UI_Style_RuleSet:
         return '<UI_Style_RuleSet "%s"\n%s\n>' % (s,'\n'.join('  '+l for d in self.decllist for l in str(d).splitlines()))
     def __repr__(self): return self.__str__()
 
-    msel_cache = {}
-    sel_cache = {}
-    def match(self, selector):
-        # returns true if passed selector matches any selector in self.selectors
-        def splitsel(sel):
-            osel = str(sel)
-            if osel not in UI_Style_RuleSet.sel_cache:
-                p = {'type':'', 'class':[], 'id':'', 'pseudoelement':[], 'pseudoclass':[], 'attribs':set(), 'attribvals':{}}
-                transition = {'.':'class', '#':'id', '::':'pseudoelement', ':':'pseudoclass'}
-                for attrib in re.finditer(token_attribute, sel):
-                    k,v = attrib.group('key'),attrib.group('val')
-                    if v is None: p['attribs'].add(k)
-                    else: p['attribvals'][k] = v
-                sel = re.sub(token_attribute, '', sel)
-                sel = re.sub(r'([.]|#|::|:|\[|\])', r' \1 ', sel).split(' ')
-                v,m = '','type'
-                for c in sel:
-                    if c in {'.',':','::','#'}:
-                        if type(p[m]) is list: p[m].append(v)
-                        else: p[m] = v
-                        v,m = '',transition[c]
-                    else:
-                        v += c
-                if type(p[m]) is list: p[m].append(v)
-                else: p[m] = v
-                UI_Style_RuleSet.sel_cache[osel] = p
-            return UI_Style_RuleSet.sel_cache[osel]
+    @staticmethod
+    @add_cache('_cache', {})
+    def _split_selector(sel):
+        osel = str(sel)
+        if osel not in UI_Style_RuleSet._split_selector._cache:
+            p = {'type':'', 'class':[], 'id':'', 'pseudoelement':[], 'pseudoclass':[], 'attribs':set(), 'attribvals':{}}
+            transition = {'.':'class', '#':'id', '::':'pseudoelement', ':':'pseudoclass'}
+            for attrib in re.finditer(token_attribute, sel):
+                k,v = attrib.group('key'),attrib.group('val')
+                if v is None: p['attribs'].add(k)
+                else: p['attribvals'][k] = v
+            sel = re.sub(token_attribute, '', sel)
+            sel = re.sub(r'([.]|#|::|:|\[|\])', r' \1 ', sel).split(' ')
+            v,m = '','type'
+            for c in sel:
+                if c in {'.',':','::','#'}:
+                    if type(p[m]) is list: p[m].append(v)
+                    else: p[m] = v
+                    v,m = '',transition[c]
+                else:
+                    v += c
+            if type(p[m]) is list: p[m].append(v)
+            else: p[m] = v
+            UI_Style_RuleSet._split_selector._cache[osel] = p
+        return UI_Style_RuleSet._split_selector._cache[osel]
 
+    @staticmethod
+    @add_cache('_cache', {})
+    def _match_selector(sel_elem, sel_style, cont=True):
         # ex:
         #   sel_elem  = ['body:hover', 'button:hover']
         #   sel_style = ['button:hover']
-        def msel(sel_elem, sel_style, cont=True):
-            if len(sel_style) == 0: return True
-            if len(sel_elem) == 0: return False
-            key = (tuple(sel_elem), tuple(sel_style), cont)
-            if key not in UI_Style_RuleSet.msel_cache:
-                a0,b0 = sel_elem[-1],sel_style[-1]
-                if b0 == '>': return msel(sel_elem, sel_style[:-1], cont=False)
-                ap,bp = splitsel(a0),splitsel(b0)
-                m = True
-                m &= (bp['type'] == '*' and ap['type'] != '') or ap['type'] == bp['type']
-                m &= bp['id'] == '' or ap['id'] == bp['id']
-                m &= all(c in ap['class'] for c in bp['class'])
-                m &= all(c in ap['pseudoelement'] for c in bp['pseudoelement'])
-                m &= all(c in ap['pseudoclass'] for c in bp['pseudoclass'])
-                m &= all(key in ap['attribs'] for key in bp['attribs'])
-                m &= all(key in ap['attribvals'] and ap['attribvals'][key] == val for (key,val) in bp['attribvals'].items())
-                if m and msel(sel_elem[:-1], sel_style[:-1]): UI_Style_RuleSet.msel_cache[key] = True
-                elif not cont: UI_Style_RuleSet.msel_cache[key] = False
-                else: UI_Style_RuleSet.msel_cache[key] = msel(sel_elem[:-1], sel_style)
-            return UI_Style_RuleSet.msel_cache[key]
-
-        return any(msel(selector, sel, cont=False) for sel in self.selectors)
+        if len(sel_style) == 0: return True
+        if len(sel_elem) == 0: return False
+        msel = UI_Style_RuleSet._match_selector
+        cache = msel._cache
+        key = (tuple(sel_elem), tuple(sel_style), cont)
+        if key not in cache:
+            a0,b0 = sel_elem[-1],sel_style[-1]
+            if b0 == '>': return msel(sel_elem, sel_style[:-1], cont=False)
+            ap = UI_Style_RuleSet._split_selector(a0)
+            bp = UI_Style_RuleSet._split_selector(b0)
+            def matches():
+                if not ((bp['type'] == '*' and ap['type'] != '') or ap['type'] == bp['type']): return False
+                if not (bp['id'] == '' or ap['id'] == bp['id']): return False
+                if not all(c in ap['class'] for c in bp['class']): return False
+                if not all(c in ap['pseudoelement'] for c in bp['pseudoelement']): return False
+                if not all(c in ap['pseudoclass'] for c in bp['pseudoclass']): return False
+                if not all(key in ap['attribs'] for key in bp['attribs']): return False
+                if not all(key in ap['attribvals'] and ap['attribvals'][key] == val for (key,val) in bp['attribvals'].items()): return False
+                return True
+            # m = True
+            # m &= (bp['type'] == '*' and ap['type'] != '') or ap['type'] == bp['type']
+            # m &= bp['id'] == '' or ap['id'] == bp['id']
+            # m &= all(c in ap['class'] for c in bp['class'])
+            # m &= all(c in ap['pseudoelement'] for c in bp['pseudoelement'])
+            # m &= all(c in ap['pseudoclass'] for c in bp['pseudoclass'])
+            # m &= all(key in ap['attribs'] for key in bp['attribs'])
+            # m &= all(key in ap['attribvals'] and ap['attribvals'][key] == val for (key,val) in bp['attribvals'].items())
+            m = matches()
+            if m and msel(sel_elem[:-1], sel_style[:-1]): cache[key] = True
+            elif not cont: cache[key] = False
+            else: cache[key] = msel(sel_elem[:-1], sel_style)
+        return cache[key]
+        
+    @profiler.function
+    def match(self, selector):
+        # returns true if passed selector matches any selector in self.selectors
+        key = tuple(selector)
+        if key not in self._match_cache:
+            self._match_cache[key] = any(UI_Style_RuleSet._match_selector(selector, sel, cont=False) for sel in self.selectors)
+        return self._match_cache[key]
 
 
 class UI_Styling:
@@ -499,13 +519,11 @@ class UI_Styling:
         if not self.rules: return []
         selector_key = tuple(selector) #'~'.join(selector)
         if selector_key not in self._decllist_cache:
-            with profiler.code('creating cached value'):
+            with profiler.code('UI_Styling.get_decllist: creating cached value'):
                 # print('UI_Styling%d.get_decllist: creating cached value:' % self._uid, selector_key)
-                # return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
-                matchingrules = [rule for rule in self.rules if rule.match(selector)]
-                # if '*text*' in selector[-1]: print('elem:%s matched %s' % (selector, str(matchingrules)))
-                # print('elem:%s matched %s' % (selector, str(matchingrules)))
-                self._decllist_cache[selector_key] = [d for rule in matchingrules for d in rule.decllist]
+                # matchingrules = [rule for rule in self.rules if rule.match(selector)]
+                # self._decllist_cache[selector_key] = [d for rule in matchingrules for d in rule.decllist]
+                self._decllist_cache[selector_key] = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
         return self._decllist_cache[selector_key]
 
     def append(self, other_styling):

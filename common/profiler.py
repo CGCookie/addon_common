@@ -237,8 +237,8 @@ class Profiler:
             'Profiler:',
             '  run: %6.2fsecs' % (time.time() - self.clear_time),
             '----------------------------------------------------------------------------------------------',
-            '   total      call   ------- seconds / call -------             delta                         ',
-            '    secs /   count =   last,    min,    avg,    max  (  fps) -  time  - call stack            ',
+            '     total      call   ------- seconds / call -------             delta                         ',
+            '      secs /   count =   last,    min,    avg,    max  (  fps) -  time  - call stack            ',
             '----------------------------------------------------------------------------------------------',
         ]
         for text in sorted(self.d_times):
@@ -254,7 +254,7 @@ class Profiler:
                 ' |  '*(len(calls)-2) + ' \\- ' + calls[-1])
             fps = totcount / tottime if tottime > 0 else 1000
             fps = ' 1k+ ' if fps >= 1000 else '%5.1f' % fps
-            s += ['  %6.2f / %7d = %6.4f, %6.4f, %6.4f, %6.4f, (%s) - %6.2f - %s' % (
+            s += ['  %8.4f / %7d = %6.4f, %6.4f, %6.4f, %6.4f, (%s) - %6.2f - %s' % (
                 tottime, totcount, last, mint, avgt, maxt, fps, deltime, t)]
         s += ['run: %6.2fsecs' % (time.time() - self.clear_time)]
         return '\n'.join(s)
