@@ -278,6 +278,11 @@ class Actions:
             del Actions._create
         return Actions._instance
 
+    @staticmethod
+    def done():
+        if not hasattr(Actions, '_instance'): return
+        del Actions._instance
+
     def __init__(self, context):
         assert hasattr(Actions, '_create'), 'Do not create new instance of Actions.  Instead, use Actions.get_instance()'
         assert not hasattr(Actions, '_instance'), 'Only create one instance of Actions!  Then use Actions.get_instance()'
