@@ -467,6 +467,7 @@ class UI_Styling:
             self.rules.append(UI_Style_RuleSet.from_lexer(lexer))
 
     def clear_cache(self):
+        # print('UI_Styling%d.clear_cache' % self._uid)
         self._decllist_cache = {}
 
     @staticmethod

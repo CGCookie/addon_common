@@ -1727,7 +1727,7 @@ class NumberUnit:
         if self._unit == 'pt':       return self._num
         if self._unit in {'px', ''}: return self._num
         assert False, 'Unhandled unit "%s"' % self._unit
-
+NumberUnit.zero = NumberUnit(0, 'px')
 
 
 

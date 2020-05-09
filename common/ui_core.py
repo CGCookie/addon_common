@@ -440,20 +440,21 @@ class UI_Element_Utils:
 
     #####################################################################
     # helper functions
+    # these functions use self._computed_style, so these functions
     # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
 
     @profiler.function
-    def _get_style_num(self, k, def_v, percent_of=None, min_v=None, max_v=None, scale=None, override_v=None):
+    def _get_style_num(self, k, def_v=None, percent_of=None, min_v=None, max_v=None, scale=None):
         v = self._computed_styles.get(k, 'auto')
-        if v == 'auto':
-            if def_v == 'auto': return 'auto'
-            v = def_v
-        if override_v is not None:
-            v = override_v
-        elif isinstance(v, NumberUnit): # type(v) is NumberUnit:
+        if v == 'auto': v = def_v or 'auto'
+        if v == 'auto': return 'auto'
+        # v must be NumberUnit here!
+        try:
             if v.unit == '%': scale = None
             v = v.val(base=(percent_of if percent_of is not None else float(def_v)))
-        v = float(v)
+            v = float(v)
+        except:
+            v = 0
         if min_v is not None: v = max(float(min_v), v)
         if max_v is not None: v = min(float(max_v), v)
         if scale is not None: v *= scale
@@ -461,10 +462,10 @@ class UI_Element_Utils:
 
     @profiler.function
     def _get_style_trbl(self, kb, scale=None):
-        t = self._get_style_num('%s-top' % kb, 0, scale=scale)
-        r = self._get_style_num('%s-right' % kb, 0, scale=scale)
-        b = self._get_style_num('%s-bottom' % kb, 0, scale=scale)
-        l = self._get_style_num('%s-left' % kb, 0, scale=scale)
+        t = self._get_style_num('%s-top' % kb, def_v=NumberUnit.zero, scale=scale)
+        r = self._get_style_num('%s-right' % kb, def_v=NumberUnit.zero, scale=scale)
+        b = self._get_style_num('%s-bottom' % kb, def_v=NumberUnit.zero, scale=scale)
+        l = self._get_style_num('%s-left' % kb, def_v=NumberUnit.zero, scale=scale)
         return (t,r,b,l)
 
 
@@ -1562,6 +1563,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         self._defer_clean = False               # set to True to defer cleaning (useful when many changes are occurring)
         self._clean_debugging = {}
         self._do_not_dirty_parent = False
+        self._draw_dirty_style = 0              # keeping track of times style is dirtied since last draw
 
         ########################################################
         # TODO: REPLACE WITH BETTER PROPERTIES AND DELETE!!
@@ -1649,6 +1651,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._defer_clean = False
             return
 
+        self._draw_dirty_style += 1
         self._clean_debugging['style'] = time.time()
 
         # self.defer_dirty_propagation = True
@@ -1730,7 +1733,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 sc['bottom'] = self._computed_styles.get('bottom', 'auto')
                 sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = self._get_style_trbl('margin',  scale=dpi_mult)
                 sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = self._get_style_trbl('padding', scale=dpi_mult)
-                sc['border-width']        = self._get_style_num('border-width', 0, scale=dpi_mult)
+                sc['border-width']        = self._get_style_num('border-width', def_v=NumberUnit.zero, scale=dpi_mult)
                 sc['border-radius']       = self._computed_styles.get('border-radius', 0)
                 sc['border-left-color']   = self._computed_styles.get('border-left-color',   Color.transparent)
                 sc['border-right-color']  = self._computed_styles.get('border-right-color',  Color.transparent)
@@ -2206,12 +2209,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         parent_width  = parent_size.get_width_midmaxmin()  or 0
         parent_height = parent_size.get_height_midmaxmin() or 0
         # --> NOTE: width,height,min_*,max_* could be 'auto'!
-        width         = self._get_style_num('width',      'auto', percent_of=parent_width,  scale=dpi_mult, override_v=self._style_width)
-        height        = self._get_style_num('height',     'auto', percent_of=parent_height, scale=dpi_mult, override_v=self._style_height)
-        min_width     = self._get_style_num('min-width',  'auto', percent_of=parent_width,  scale=dpi_mult)
-        min_height    = self._get_style_num('min-height', 'auto', percent_of=parent_height, scale=dpi_mult)
-        max_width     = self._get_style_num('max-width',  'auto', percent_of=parent_width,  scale=dpi_mult)
-        max_height    = self._get_style_num('max-height', 'auto', percent_of=parent_height, scale=dpi_mult)
+        width         = self._get_style_num('width',      def_v='auto', percent_of=parent_width,  scale=dpi_mult) # override_v=self._style_width)
+        height        = self._get_style_num('height',     def_v='auto', percent_of=parent_height, scale=dpi_mult) # override_v=self._style_height)
+        min_width     = self._get_style_num('min-width',  def_v='auto', percent_of=parent_width,  scale=dpi_mult)
+        min_height    = self._get_style_num('min-height', def_v='auto', percent_of=parent_height, scale=dpi_mult)
+        max_width     = self._get_style_num('max-width',  def_v='auto', percent_of=parent_width,  scale=dpi_mult)
+        max_height    = self._get_style_num('max-height', def_v='auto', percent_of=parent_height, scale=dpi_mult)
         overflow_x   = styles.get('overflow-x', 'visible')
         overflow_y   = styles.get('overflow-y', 'visible')
 
@@ -2748,10 +2751,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _draw(self, offset=(0,0)):
         if not self.is_visible: return
         if self._w <= 0 or self._h <= 0: return
+        # if self._draw_dirty_style > 1: print(self, self._draw_dirty_style)
         ox,oy = offset
         if not ScissorStack.is_box_visible(self._l+ox, self._t+oy, self._w, self._h): return
         # print('drawing %s' % str(self))
         self._draw_cache(offset)
+        self._draw_dirty_style = 0
 
     def draw(self):
         bgl.glBlendFunc(bgl.GL_ONE, bgl.GL_ONE_MINUS_SRC_ALPHA)
