@@ -400,9 +400,6 @@ class UI_Element_Utils:
         labels_dirtied = list(labels_dirtied) if labels_dirtied else []
         for l in [label]+labels_dirtied: g.setdefault(l, {'fn':None, 'children':[], 'parents':[]})
         def wrapper(fn):
-            def wrapped_cleaning_callback(self, *args, **kwargs):
-                ret = fn(self, *args, **kwargs)
-                return ret
             g[label]['fn'] = fn
             g[label]['children'] = labels_dirtied
             for l in labels_dirtied: g[l]['parents'].append(label)
@@ -413,7 +410,7 @@ class UI_Element_Utils:
             # TODO: also detect cycles such as: a->b->c->d->b->...
             #       done in call_cleaning_callbacks, but could be done here instead?
 
-            return wrapped_cleaning_callback
+            return fn
         return wrapper
 
     @profiler.function
@@ -451,10 +448,11 @@ class UI_Element_Utils:
         if v == 'auto':
             if def_v == 'auto': return 'auto'
             v = def_v
-        if isinstance(v, NumberUnit): # type(v) is NumberUnit:
+        if override_v is not None:
+            v = override_v
+        elif isinstance(v, NumberUnit): # type(v) is NumberUnit:
             if v.unit == '%': scale = None
             v = v.val(base=(percent_of if percent_of is not None else float(def_v)))
-        if override_v is not None: v = override_v
         v = float(v)
         if min_v is not None: v = max(float(min_v), v)
         if max_v is not None: v = min(float(max_v), v)
@@ -698,14 +696,18 @@ class UI_Element_Properties:
         return str(self._style_str)
     @style.setter
     def style(self, style):
-        self._style_str = str(style or '')
+        style = str(style or '')
+        if self._style_str == style: return
+        self._style_str = style
         self._styling_custom = None
         self._dirty('changing style for %s affects style' % str(self), 'style', parent=False, children=False)
         if self._parent:
             self._dirty('changing style for %s affects parent content' % str(self), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
     def add_style(self, style):
-        self._style_str = '%s;%s' % (self._style_str, str(style or ''))
+        style = '%s;%s' % (self._style_str, str(style or ''))
+        if self._style_str == style: return
+        self._style_str = style
         self._styling_custom = None
         self._dirty('adding style for %s affects style' % str(self), 'style', parent=False, children=False)
         if self._parent:
@@ -1638,15 +1640,20 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if self._defer_clean: return
         if 'style' not in self._dirty_properties:
-            for e in self._dirty_callbacks.get('style', []): e._compute_style()
-            self._dirty_callbacks['style'] = set()
+            self._defer_clean = True
+            with profiler.code('style.calling back callbacks'):
+                for e in self._dirty_callbacks.get('style', []):
+                    # print(self,'->', e)
+                    e._compute_style()
+                self._dirty_callbacks['style'] = set()
+            self._defer_clean = False
             return
 
         self._clean_debugging['style'] = time.time()
 
         # self.defer_dirty_propagation = True
 
-        with profiler.code('rebuild full selector'):
+        with profiler.code('style.rebuild full selector'):
             sel_parent = [] if not self._parent else self._parent._selector
             if self._pseudoelement:
                 # this is either a ::before or ::after pseudoelement
@@ -1675,7 +1682,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
                 self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
 
-        with profiler.code('initialize styles in order: default, focus, active, hover, hover+active'):
+        with profiler.code('style.initialize styles in order: parent, default, custom'):
+            #  default, focus, active, hover, hover+active
+
             # TODO: inherit parent styles with other elements (not just *text*)
             if self._styling_parent is None:
                 if self._parent:
@@ -1685,28 +1694,22 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                     # }
                     # decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
                     # self._styling_parent = UI_Styling.from_decllist(decllist)
-                    self._styling_parent = UI_Styling()
-                else:
-                    self._styling_parent = UI_Styling()
+                    self._styling_parent = None #UI_Styling()
 
             # computed default styling
             if self._styling_default is None:
-                if self._innerTextAsIs is not None:
-                    self._styling_default = UI_Styling()
-                else:
+                if self._innerTextAsIs is None:
                     self._styling_default = ui_defaultstylings
 
             # compute custom styles
             if self._styling_custom is None:
                 if self._style_str:
                     self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
-                else:
-                    self._styling_custom = UI_Styling()
 
             styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
             self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
 
-        with profiler.code('filling style cache'):
+        with profiler.code('style.filling style cache'):
             if self._is_visible and not self._pseudoelement:
                 # need to compute ::before and ::after styles to know whether there is content to compute and render
                 self._computed_styles_before = None # UI_Styling.compute_style(self._selector_before, *styling_list)
@@ -1765,15 +1768,21 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
             self._whitespace = self._computed_styles.get('white-space', 'normal')
 
-        with profiler.code('recursing to children'):
+        with profiler.code('style.recursing to children'):
             # tell children to recompute selector
             # NOTE: self._children_all has not been constructed, yet!
-            for child in self._children: child._compute_style()
-            for child in self._children_text: child._compute_style()
-            if self._child_before: self._child_before._compute_styles()
-            if self._child_after: self._child_after._compute_styles()
+            if self._children:
+                with profiler.code('style._children'):
+                    for child in self._children: child._compute_style()
+            if self._children_text:
+                with profiler.code('style._children_text'):
+                    for child in self._children_text: child._compute_style()
+            if self._child_before or self._child_after:
+                with profiler.code('style._child_before / _child_after'):
+                    if self._child_before: self._child_before._compute_styles()
+                    if self._child_after: self._child_after._compute_styles()
 
-        with profiler.code('hashing for cache'):
+        with profiler.code('style.hashing for cache'):
             style_content_hash = Hasher(
                 self.is_visible,
                 self.innerText,

@@ -432,6 +432,7 @@ class UI_Styling:
     '''
     Parses input to a CSSOM-like object
     '''
+    uid = 0
 
     @staticmethod
     @profiler.function
@@ -446,6 +447,7 @@ class UI_Styling:
         return var
 
     @staticmethod
+    @profiler.function
     def from_file(filename):
         lines = open(filename, 'rt').read()
         return UI_Styling(lines)
@@ -454,6 +456,7 @@ class UI_Styling:
         text = open(filename, 'rt').read()
         self.load_from_text(text)
 
+    @profiler.function
     def load_from_text(self, text):
         self.clear_cache()
         self.rules = []
@@ -475,24 +478,34 @@ class UI_Styling:
         return var
 
     def __init__(self, lines=''):
-        self.load_from_text(lines)
+        self._uid = UI_Styling.uid
+        UI_Styling.uid += 1
+        self.rules = []
+        self._decllist_cache = {}
+        if lines: self.load_from_text(lines)
 
     def __str__(self):
-        if not self.rules: return '<UI_Styling>'
-        return '<UI_Styling\n%s\n>' % ('\n'.join('  '+l for r in self.rules for l in str(r).splitlines()))
+        if not self.rules: return '<UI_Styling%d>' % self._uid
+        return '<UI_Styling%d\n%s\n>' % (self._uid, '\n'.join('  '+l for r in self.rules for l in str(r).splitlines()))
 
     def __repr__(self): return self.__str__()
 
+    @property
+    def simple_str(self): return '<UI_Styling%d>' % self._uid
+
     @profiler.function
     def get_decllist(self, selector):
-        selector_tuple = tuple(selector)
-        if selector_tuple not in self._decllist_cache:
-            # return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
-            matchingrules = [rule for rule in self.rules if rule.match(selector)]
-            # if '*text*' in selector[-1]: print('elem:%s matched %s' % (selector, str(matchingrules)))
-            # print('elem:%s matched %s' % (selector, str(matchingrules)))
-            self._decllist_cache[selector_tuple] = [d for rule in matchingrules for d in rule.decllist]
-        return self._decllist_cache[selector_tuple]
+        if not self.rules: return []
+        selector_key = tuple(selector) #'~'.join(selector)
+        if selector_key not in self._decllist_cache:
+            with profiler.code('creating cached value'):
+                # print('UI_Styling%d.get_decllist: creating cached value:' % self._uid, selector_key)
+                # return [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+                matchingrules = [rule for rule in self.rules if rule.match(selector)]
+                # if '*text*' in selector[-1]: print('elem:%s matched %s' % (selector, str(matchingrules)))
+                # print('elem:%s matched %s' % (selector, str(matchingrules)))
+                self._decllist_cache[selector_key] = [d for rule in matchingrules for d in rule.decllist]
+        return self._decllist_cache[selector_key]
 
     def append(self, other_styling):
         self.clear_cache()
