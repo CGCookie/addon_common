@@ -1400,6 +1400,7 @@ class UI_Element_Dirtiness:
         self._was_dirty = self.is_dirty
         self._call_preclean()
         if not self.is_dirty or self._defer_clean: return
+        if self.record_multicall('_clean'): return
         self.call_cleaning_callbacks()
         for child in self._children_all: child.clean(depth=depth+1)
         self._call_postclean()
@@ -1410,7 +1411,47 @@ class UI_Element_Dirtiness:
     def clean(self, *args, **kwargs): self._clean(*args, **kwargs)
 
 
-class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
+class UI_Element_Debug:
+    def debug_print(self, d, already_printed):
+        sp = '    '*d
+        tag = self.as_html
+        tagc = '</%s>' % self.tagName
+        tagsc = '%s />' % tag[:-1]
+        if self in already_printed:
+            print('%s%s...%s' % (sp, tag, tagc))
+            return
+        already_printed.add(self)
+        if self._children:
+            print('%s%s' % (sp, tag))
+            for c in self._children:
+                c.debug_print(d+1, already_printed)
+            print('%s%s' % (sp, tagc))
+        else:
+            print('%s%s' % (sp, tagsc))
+
+    def structure(self, depth=0, all_children=False):
+        l = self._children if not all_children else self._children_all
+        return '\n'.join([('  '*depth) + str(self)] + [child.structure(depth+1) for child in l])
+
+
+class UI_Element_PreventMultiCalls:
+    multicalls = {}
+
+    @staticmethod
+    def reset_multicalls():
+        UI_Element_PreventMultiCalls.multicalls = {}
+
+    def record_multicall(self, label):
+        # returns True if already called!
+        d = UI_Element_PreventMultiCalls.multicalls
+        if label not in d: d[label] = { self }
+        elif self not in d[label]: d[label].add(self)
+        else: return True
+        return False
+
+
+
+class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, UI_Element_Debug, UI_Element_PreventMultiCalls):
     def __init__(self, **kwargs):
         ################################################################
         # attributes of UI_Element that are settable
@@ -1633,6 +1674,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         if self._atomic: info += ['atomic']
         return '<%s>' % ' '.join(['UI_Element'] + info)
 
+    @property
+    def as_html(self):
+        info = ['id', 'classes', 'type', 'innerText', 'innerTextAsIs', 'value', 'title']
+        info = [(k, getattr(self, k)) for k in info if hasattr(self, k)]
+        info = ['%s="%s"' % (k, str(v)) for k,v in info if v]
+        if self.is_dirty: info += ['dirty']
+        if self._atomic: info += ['atomic']
+        return '<%s>' % ' '.join([self.tagName] + info)
+
     @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content', 'renderbuf'})
     @profiler.function
     def _compute_style(self):
@@ -1650,6 +1700,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
                 self._dirty_callbacks['style'] = set()
             self._defer_clean = False
             return
+
+        if self.record_multicall('_compute_style'): return
 
         self._draw_dirty_style += 1
         self._clean_debugging['style'] = time.time()
@@ -2042,6 +2094,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             self._dirty_callbacks['blocks'] = set()
             return
 
+        if self.record_multicall('_compute_blocks'): return
+
         self._clean_debugging['blocks'] = time.time()
 
         # self.defer_dirty_propagation = True
@@ -2092,6 +2146,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
             for e in self._dirty_callbacks.get('size', []): e._compute_static_content_size()
             self._dirty_callbacks['size'] = set()
             return
+
+        if self.record_multicall('_compute_static_content_size'): return
 
         self._clean_debugging['size'] = time.time()
 
@@ -2198,6 +2254,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
 
         if not self._dirtying_flow:
             return
+
+        if self.record_multicall('_layout'): return
 
         self._clean_debugging['layout'] = time.time()
 
@@ -2553,6 +2611,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
     def _setup_ltwh(self, recurse_children=True):
         if not self.is_visible: return
 
+        if self.record_multicall('_setup_ltwh'): return
+
         # parent_pos = self._parent.absolute_pos if self._parent else Point2D((0, self._parent_size.max_height-1))
         if self._tablecell_table:
             table_pos = self._tablecell_table.absolute_pos
@@ -2807,10 +2867,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness):
         return math.sqrt(dx*dx + dy*dy)
 
 
-    def structure(self, depth=0, all_children=False):
-        l = self._children if not all_children else self._children_all
-        return '\n'.join([('  '*depth) + str(self)] + [child.structure(depth+1) for child in l])
-
 
     ################################################################################
     # event-related functionality
@@ -2939,6 +2995,22 @@ class UI_Proxy:
         ui_element = self._mapping.get(attrib, None)
         if ui_element is None: ui_element = self._default_element
         return setattr(ui_element, attrib, val)
+    def debug_print(self, d, already_printed):
+        sp0 = '    '*d
+        sp1 = '    '*(d+1)
+        if self in already_printed:
+            print('%s<proxy>...</proxy>' % (sp))
+            return
+        already_printed.add(self)
+        print('%s<proxy>' % sp0)
+        print('%s<default>' % sp1)
+        self._default_element.debug_print(d+2, already_printed)
+        print('%s</default>' % sp1)
+        print('%s<other>' % sp1)
+        for c in self._other_elements:
+            c.debug_print(d+2, already_printed)
+        print('%s</other>' % sp1)
+        print('%s</proxy>' % sp0)
 
 
 class UI_Document_FSM:
@@ -3042,6 +3114,8 @@ class UI_Document(UI_Document_FSM):
     def update(self, context, event):
         if context.area != self._area: return
 
+        UI_Element_PreventMultiCalls.reset_multicalls()
+
         w,h = context.region.width, context.region.height
         if self._last_w != w or self._last_h != h:
             # print('Document:', (self._last_w, self._last_h), (w,h))
@@ -3093,6 +3167,10 @@ class UI_Document(UI_Document_FSM):
         for e in rem - add: e._del_pseudoclass(pseudoclass)
         for e in add - rem: e._add_pseudoclass(pseudoclass)
 
+    def debug_print(self):
+        print('')
+        print('UI_Document.debug_print')
+        self._body.debug_print(0, set())
     def _debug_print(self, ui_from):
         # debug print!
         path = ui_from.get_pathToRoot()
@@ -3365,6 +3443,7 @@ class UI_Document(UI_Document_FSM):
     def draw(self, context):
         if self._area != context.area: return
 
+        UI_Element_PreventMultiCalls.reset_multicalls()
         time_start = time.time()
 
         # print('UI_Document.draw', random.random())

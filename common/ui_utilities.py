@@ -25,7 +25,7 @@ from functools import lru_cache
 
 from .colors import colorname_to_color
 from .globals import Globals
-from .decorators import debug_test_call, blender_version_wrapper
+from .decorators import debug_test_call, blender_version_wrapper, add_cache
 from .maths import Color, NumberUnit
 from .shaders import Shader
 
@@ -205,3 +205,10 @@ def helper_wraptext(text='', width=None, fontid=0, fontsize=12, preserve_newline
     Globals.drawing.set_font_size(size_prev, fontid=fontid, force=True)
     if False: print('wrapped ' + str(random.random()))
     return text
+
+
+@add_cache('guid', 0)
+def get_unique_ui_id(prefix='', postfix=''):
+    get_unique_ui_id.guid += 1
+    return '%s%d%s' % (prefix, get_unique_ui_id.guid, postfix)
+

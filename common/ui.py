@@ -37,7 +37,7 @@ import bpy
 import bgl
 
 from .ui_core import UI_Element, UI_Proxy
-from .ui_utilities import UIRender_Block, UIRender_Inline
+from .ui_utilities import UIRender_Block, UIRender_Inline, get_unique_ui_id
 from .utils import kwargopts, kwargs_translate, kwargs_splitter, iter_head
 from .ui_styling import UI_Styling
 
@@ -347,7 +347,7 @@ def collapsible(label, **kwargs):
 
     kwargs['classes'] = 'collapsible %s' % kwargs.get('classes', '')
     ui_container = UI_Element(tagName='div', **kwargs, **kw_all)
-    ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id',str(random.random()))), classes='header', parent=ui_container, **kw_input, **kw_all)
+    ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id', get_unique_ui_id('collapsible-'))), classes='header', parent=ui_container, **kw_input, **kw_all)
     # ui_label = UI_Element(tagName='input', classes='header', innerText=label, type="checkbox", parent=ui_container, **kw_input)
     ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside, **kw_all)
 
