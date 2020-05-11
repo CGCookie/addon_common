@@ -2221,6 +2221,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
         # given size might by inf. given can be ignored due to style. constraints applied at end.
         # positioning (with definitive size) should happen
+        
+        # IMPORTANT: as current written, this function needs to be able to be run multiple times!
+        #            DO NOT PREVENT THIS, otherwise layout bugs will occur!
 
         if not self.is_visible:
             return
@@ -2256,8 +2259,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
         if not self._dirtying_flow:
             return
-
-        if self.record_multicall('_layout'): return
 
         self._clean_debugging['layout'] = time.time()
 
