@@ -36,6 +36,7 @@ varying vec2 screen_pos;
 
 const bool DEBUG = false;
 const bool DEBUG_CHECKER = true;
+const bool DEBUG_IGNORE_ALPHA = false;
 
 const int REGION_OUTSIDE_LEFT   = -4;
 const int REGION_OUTSIDE_BOTTOM = -3;
@@ -303,4 +304,11 @@ void main() {
 
     // https://wiki.blender.org/wiki/Reference/Release_Notes/2.83/Python_API
     outColor = blender_srgb_to_framebuffer_space(outColor);
+    if(DEBUG_IGNORE_ALPHA) {
+        if(outColor.a < 0.25) {
+            discard;
+        } else {
+            outColor.a = 1.0;
+        }
+    }
 }
