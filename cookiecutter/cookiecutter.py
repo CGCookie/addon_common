@@ -110,11 +110,10 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self.event = event
         self.drawcallbacks.reset_pre()
 
-        profiler.printfile()
-
         if time.time() - self._tmp_time >= 1:
             self._tmp_time = time.time()
             # print('--- %d ---' % int(self._tmp_time - self._start_time))
+            profiler.printfile()
 
         if self._done:
             self._cc_actions_end()

@@ -26,6 +26,9 @@ import contextlib
 
 from .globals import Globals
 
+def clamp(v, m, M):
+    return max(m, min(M, v))
+
 class ProfilerHelper:
     def __init__(self, pr, text):
         full_text = (pr.stack[-1].full_text+'^' if pr.stack else '') + text
@@ -57,6 +60,10 @@ class ProfilerHelper:
     def update(self, key, delta, key_parent=None):
         self.pr.d_count[key] = self.pr.d_count.get(key, 0) + 1
         self.pr.d_times[key] = self.pr.d_times.get(key, 0) + delta
+        if self.pr._keep_all_times:
+            if key not in self.pr.d_times_all:
+                self.pr.d_times_all[key] = []
+            self.pr.d_times_all[key].append(delta)
         if key_parent:
             self.pr.d_times_sub[key_parent] = self.pr.d_times_sub.get(key_parent, 0) + delta
         self.pr.d_mins[key] = min(
@@ -96,6 +103,7 @@ profilerhelper_ignore = ProfilerHelper_Ignore()
 
 class Profiler:
     _enabled = False
+    _keep_all_times = False
     _filename = 'Profiler'
     _broken = False
     _clear = False
@@ -134,6 +142,7 @@ class Profiler:
         self.d_start = {}
         self.d_times = {}
         self.d_times_sub = {}
+        self.d_times_all = {}
         self.d_mins = {}
         self.d_maxs = {}
         self.d_last = {}
@@ -231,6 +240,9 @@ class Profiler:
         return wrapper
 
     def strout(self):
+        all_width = 50
+        all_chars = '.:-=+#%%@'
+        # all_chars = ' .:;+=xX$'
         if not Profiler._enabled:
             return ''
         s = [
@@ -256,6 +268,16 @@ class Profiler:
             fps = ' 1k+ ' if fps >= 1000 else '%5.1f' % fps
             s += ['  %8.4f / %7d = %6.4f, %6.4f, %6.4f, %6.4f, (%s) - %6.2f - %s' % (
                 tottime, totcount, last, mint, avgt, maxt, fps, deltime, t)]
+            if self._keep_all_times and maxt > mint:
+                histo = [0 for _ in range(all_width)]
+                l = len(all_chars)
+                for t in self.d_times_all[text]:
+                    i = int(clamp((t - mint) / (maxt - mint) * all_width, 0, all_width-1))
+                    histo[i] += 1
+                m = max(histo)
+                if m:
+                    histo = [' ' if v==0 else all_chars[int(clamp(v/m*l, 0, l-1))] for v in histo]
+                    s += ['                       [%s]' % ''.join(histo)]
         s += ['run: %6.2fsecs' % (time.time() - self.clear_time)]
         return '\n'.join(s)
 

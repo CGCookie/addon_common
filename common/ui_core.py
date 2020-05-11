@@ -543,7 +543,6 @@ class UI_Element_Properties:
         assert len(set(ntagName) - set('abcdefghijklmnopqrstuvwxyz0123456789')) == 0, errmsg
         if self._tagName == ntagName: return
         self._tagName = ntagName
-        self._styling_default = None
         self._dirty('changing tagName can affect children styles', parent=True, children=True)
 
     @property
@@ -1297,9 +1296,8 @@ class UI_Element_Dirtiness:
     @profiler.function
     def _dirty_styling(self):
         self._computed_styles = {}
-        self._styling_default = None
         self._styling_parent = None
-        self._styling_custom = None
+        # self._styling_custom = None
         self._style_content_hash = None
         self._style_size_hash = None
         for child in self._children_all: child.dirty_styling()
@@ -1573,7 +1571,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._selector         = None   # full selector of self, built in compute_style()
         self._selector_before  = None   # full selector of ::before pseudoelement for self
         self._selector_after   = None   # full selector of ::after pseudoelement for self
-        self._styling_default  = None   # default styling for element (depends on tagName)
         self._styling_custom   = None   #
         self._styling_parent   = None
         self._innerTextAsIs    = None   # text to display as-is (no wrapping)
@@ -1743,27 +1740,26 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             #  default, focus, active, hover, hover+active
 
             # TODO: inherit parent styles with other elements (not just *text*)
-            if self._styling_parent is None:
-                if self._parent:
-                    # keep = {
-                    #     'font-family', 'font-style', 'font-weight', 'font-size',
-                    #     'color',
-                    # }
-                    # decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
-                    # self._styling_parent = UI_Styling.from_decllist(decllist)
-                    self._styling_parent = None #UI_Styling()
-
-            # computed default styling
-            if self._styling_default is None:
-                if self._innerTextAsIs is None:
-                    self._styling_default = ui_defaultstylings
+            # if self._styling_parent is None:
+            #     if self._parent:
+            #         # keep = {
+            #         #     'font-family', 'font-style', 'font-weight', 'font-size',
+            #         #     'color',
+            #         # }
+            #         # decllist = {k:v for (k,v) in self._parent._computed_styles.items() if k in keep}
+            #         # self._styling_parent = UI_Styling.from_decllist(decllist)
+            #         self._styling_parent = None
 
             # compute custom styles
-            if self._styling_custom is None:
-                if self._style_str:
-                    self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
+            if self._styling_custom is None and self._style_str:
+                self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
 
-            styling_list = [self._styling_parent, self._styling_default, ui_draw.stylesheet, self._styling_custom]
+            styling_list = [
+                ui_defaultstylings,
+                ui_draw.stylesheet,
+                # self._styling_parent,
+                self._styling_custom
+            ]
             self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
 
         with profiler.code('style.filling style cache'):

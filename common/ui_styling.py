@@ -425,14 +425,6 @@ class UI_Style_RuleSet:
                 if not all(key in ap['attribs'] for key in bp['attribs']): return False
                 if not all(key in ap['attribvals'] and ap['attribvals'][key] == val for (key,val) in bp['attribvals'].items()): return False
                 return True
-            # m = True
-            # m &= (bp['type'] == '*' and ap['type'] != '') or ap['type'] == bp['type']
-            # m &= bp['id'] == '' or ap['id'] == bp['id']
-            # m &= all(c in ap['class'] for c in bp['class'])
-            # m &= all(c in ap['pseudoelement'] for c in bp['pseudoelement'])
-            # m &= all(c in ap['pseudoclass'] for c in bp['pseudoclass'])
-            # m &= all(key in ap['attribs'] for key in bp['attribs'])
-            # m &= all(key in ap['attribvals'] and ap['attribvals'][key] == val for (key,val) in bp['attribvals'].items())
             m = matches()
             if m and msel(sel_elem[:-1], sel_style[:-1]): cache[key] = True
             elif not cont: cache[key] = False
@@ -524,6 +516,7 @@ class UI_Styling:
                 # matchingrules = [rule for rule in self.rules if rule.match(selector)]
                 # self._decllist_cache[selector_key] = [d for rule in matchingrules for d in rule.decllist]
                 self._decllist_cache[selector_key] = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+                # print('get_decllist', self._uid, selector_key, len(self._decllist_cache[selector_key]))
         return self._decllist_cache[selector_key]
 
     def append(self, other_styling):
