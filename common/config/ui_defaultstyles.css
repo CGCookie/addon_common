@@ -577,7 +577,7 @@ div.mdown img.inline {
 
 *.inputtext-container {
     margin: 0px;
-    position: relative; /*relative;*/
+    /*position: relative;*/
     left: 0px;
     top: 0px;
     width: 100%;

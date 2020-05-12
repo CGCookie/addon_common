@@ -28,6 +28,7 @@ import traceback
 import contextlib
 from math import floor, ceil
 from inspect import signature
+from itertools import dropwhile
 
 import bpy
 import bgl
@@ -795,26 +796,47 @@ class UI_Element_Properties:
 
     def _add_pseudoclass(self, pseudo):
         if pseudo in self._pseudoclasses: return
+
+        self._rebuild_style_selector()
+        has_descendant = (self._children_text is not None)
+        has_descendant |= UI_Styling.has_matches(self._selector+['*'], *self._styling_list)
+
         self._pseudoclasses.add(pseudo)
 
         if pseudo == 'disabled':
             self._del_pseudoclass('active')
             self._del_pseudoclass('focus')
             # TODO: on_blur?
-        self._dirty('adding psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=True)
+
         if self._parent:
             self._dirty('adding pseudoclass %s for %s affects parent content' % (pseudo, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
+
+        # if self that has descendant that is affected by change, dirty descendants!
+        self._rebuild_style_selector()
+        has_descendant |= UI_Styling.has_matches(self._selector+['*'], *self._styling_list)
+        self._dirty('adding psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=has_descendant)
+
     def add_pseudoclass(self, pseudo): self._add_pseudoclass(pseudo)
 
     def _del_pseudoclass(self, pseudo):
         if pseudo not in self._pseudoclasses: return
+
+        self._rebuild_style_selector()
+        has_descendant = (self._children is not None)
+        has_descendant |= UI_Styling.has_matches(self._selector+['*'], *self._styling_list)
+
         self._pseudoclasses.discard(pseudo)
 
-        self._dirty('deleting psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=True)
         if self._parent:
             self._dirty('deleting psuedoclass %s for %s affects parent content' % (pseudo, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
+
+        # if self that has descendant that is affected by change, dirty descendants!
+        self._rebuild_style_selector()
+        has_descendant |= UI_Styling.has_matches(self._selector+['*'], *self._styling_list)
+        self._dirty('deleting psuedoclass %s for %s affects style' % (pseudo, str(self)), 'style', parent=False, children=has_descendant)
+
     def del_pseudoclass(self, pseudo): self._del_pseudoclass(pseudo)
 
     def _has_pseudoclass(self, pseudo):
@@ -1271,6 +1293,11 @@ class UI_Element_Properties:
     @can_focus.setter
     def can_focus(self, v): self._can_focus = v
 
+    @property
+    def can_hover(self): return self._can_hover
+    @can_hover.setter
+    def can_hover(self, v): self._can_hover = v
+
 
 
 class UI_Element_Dirtiness:
@@ -1462,6 +1489,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._innerText     = None      # text to display (converted to UI_Elements)
         self._src_str       = None      # path to resource, such as image
         self._can_focus     = False     # True:self can take focus
+        self._can_hover     = True      # True:self can take hover
         self._title         = None      # tooltip
         self._forId         = None      # used for labels
         self._uid           = UI_Element.get_uid()
@@ -1573,6 +1601,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._selector_after   = None   # full selector of ::after pseudoelement for self
         self._styling_custom   = None   #
         self._styling_parent   = None
+        self._styling_list     = []
         self._innerTextAsIs    = None   # text to display as-is (no wrapping)
         self._src              = None
         self._textwrap_opts    = {}
@@ -1682,6 +1711,36 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         if self._atomic: info += ['atomic']
         return '<%s>' % ' '.join([self.tagName] + info)
 
+    @profiler.function
+    def _rebuild_style_selector(self):
+        sel_parent = [] if not self._parent else self._parent._selector
+        if self._pseudoelement:
+            # this is either a ::before or ::after pseudoelement
+            self._selector = sel_parent[:-1] + [sel_parent[-1] + '::' + self._pseudoelement]
+            self._selector_before = None
+            self._selector_after  = None
+        elif self._innerTextAsIs:
+            # this is a text element
+            self._selector = sel_parent + ['*text*']
+            self._selector_before = None
+            self._selector_after = None
+        else:
+            attribs = ['type', 'value']
+            sel_tagName = self._tagName
+            sel_id = '#%s' % self._id if self._id else ''
+            sel_cls = ''.join('.%s' % c for c in self._classes)
+            sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
+            if self._value_bound and self._value.disabled: sel_pseudo += ':disabled'
+            if self._checked_bound and self._checked.disabled: sel_pseudo += ':disabled'
+            sel_attribs = ''.join('[%s]' % p for p in attribs if getattr(self,p) is not None)
+            sel_attribvals = ''.join('[%s="%s"]' % (p,str(getattr(self,p))) for p in attribs if getattr(self,p) is not None)
+            if self.checked:
+                sel_attribs += '[checked]'
+                sel_attribvals += '[checked="checked"]'
+            self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
+            self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
+            self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
+
     @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content', 'renderbuf'})
     @profiler.function
     def _compute_style(self):
@@ -1707,34 +1766,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
         # self.defer_dirty_propagation = True
 
-        with profiler.code('style.rebuild full selector'):
-            sel_parent = [] if not self._parent else self._parent._selector
-            if self._pseudoelement:
-                # this is either a ::before or ::after pseudoelement
-                self._selector = sel_parent[:-1] + [sel_parent[-1] + '::' + self._pseudoelement]
-                self._selector_before = None
-                self._selector_after  = None
-            elif self._innerTextAsIs:
-                # this is a text element
-                self._selector = sel_parent + ['*text*']
-                self._selector_before = None
-                self._selector_after = None
-            else:
-                attribs = ['type', 'value']
-                sel_tagName = self._tagName
-                sel_id = '#%s' % self._id if self._id else ''
-                sel_cls = ''.join('.%s' % c for c in self._classes)
-                sel_pseudo = ''.join(':%s' % p for p in self._pseudoclasses)
-                if self._value_bound and self._value.disabled: sel_pseudo += ':disabled'
-                if self._checked_bound and self._checked.disabled: sel_pseudo += ':disabled'
-                sel_attribs = ''.join('[%s]' % p for p in attribs if getattr(self,p) is not None)
-                sel_attribvals = ''.join('[%s="%s"]' % (p,str(getattr(self,p))) for p in attribs if getattr(self,p) is not None)
-                if self.checked:
-                    sel_attribs += '[checked]'
-                    sel_attribvals += '[checked="checked"]'
-                self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
-                self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
-                self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
+        self._rebuild_style_selector()
 
         with profiler.code('style.initialize styles in order: parent, default, custom'):
             #  default, focus, active, hover, hover+active
@@ -1754,13 +1786,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             if self._styling_custom is None and self._style_str:
                 self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
 
-            styling_list = [
+            self._styling_list = [
                 ui_defaultstylings,
                 ui_draw.stylesheet,
                 # self._styling_parent,
                 self._styling_custom
             ]
-            self._computed_styles = UI_Styling.compute_style(self._selector, *styling_list)
+            self._computed_styles = UI_Styling.compute_style(self._selector, *self._styling_list)
 
         with profiler.code('style.filling style cache'):
             if self._is_visible and not self._pseudoelement:
@@ -2610,7 +2642,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     def _setup_ltwh(self, recurse_children=True):
         if not self.is_visible: return
 
-        if self.record_multicall('_setup_ltwh'): return
+        # IMPORTANT! do NOT prevent this function from being called multiple times!
+        # the position of input text boxes (inside the container) is set incorrectly when
+        # :focus is set (might have to do with position: relative)
 
         # parent_pos = self._parent.absolute_pos if self._parent else Point2D((0, self._parent_size.max_height-1))
         if self._tablecell_table:
@@ -2628,12 +2662,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             abs_size = self._absolute_size
 
         self._absolute_pos = abs_pos + self._scroll_offset
-        self._l = floor(abs_pos.x)
-        self._t = ceil(abs_pos.y)
+        self._l = ceil(abs_pos.x - 0.01)
+        self._t = floor(abs_pos.y + 0.01)
         self._w = ceil(abs_size.width)
         self._h = ceil(abs_size.height)
-        self._r = self._l + (self._w - 1)
-        self._b = self._t - (self._h - 1)
+        self._r = ceil(self._l + (self._w - 0.01))
+        self._b = floor(self._t - (self._h - 0.01))
 
         if recurse_children:
             for child in self._children_all:
@@ -2855,9 +2889,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         if self._w < 1 or self._h < 1: return None
         if not (self._l <= p.x <= self._r and self._b <= p.y <= self._t): return None
         if not self._atomic:
-            for child in reversed(self._children):
-                r = child.get_under_mouse(p)
-                if r: return r
+            iter_under = (child.get_under_mouse(p) for child in reversed(self._children))
+            iter_under = dropwhile(lambda r: r is None, iter_under)
+            under = next(iter_under, self)
+            return under
         return self
 
     def get_mouse_distance(self, p:Point2D):
@@ -3070,7 +3105,7 @@ class UI_Document(UI_Document_FSM):
         self._area = context.area
         self.actions = ActionHandler(bpy.context, UI_Document.default_keymap)
         self._body = UI_Element(tagName='body')
-        self._tooltip = UI_Element(tagName='dialog', classes='tooltip', parent=self._body)
+        self._tooltip = UI_Element(tagName='dialog', classes='tooltip', can_hover=False, parent=self._body)
         self._tooltip.is_visible = False
         self._tooltip_message = None
         self._tooltip_wait = None
@@ -3161,10 +3196,15 @@ class UI_Document(UI_Document_FSM):
 
 
     def _addrem_pseudoclass(self, pseudoclass, remove_from=None, add_to=None):
-        rem = set(remove_from.get_pathToRoot()) if remove_from else set()
-        add = set(add_to.get_pathToRoot()) if add_to else set()
-        for e in rem - add: e._del_pseudoclass(pseudoclass)
-        for e in add - rem: e._add_pseudoclass(pseudoclass)
+        rem = remove_from.get_pathToRoot() if remove_from else []
+        add = add_to.get_pathToRoot() if add_to else []
+        rem.reverse()
+        add.reverse()
+        while rem and add and rem[0] == add[0]:
+            rem = rem[1:]
+            add = add[1:]
+        for e in rem: e._del_pseudoclass(pseudoclass)
+        for e in add: e._add_pseudoclass(pseudoclass)
 
     def debug_print(self):
         print('')
@@ -3191,6 +3231,7 @@ class UI_Document(UI_Document_FSM):
             Globals.cursors.set(convert_token_to_cursor(cursor))
 
         if self._under_mouse == self._last_under_mouse: return
+        if self._under_mouse and not self._under_mouse.can_hover: return
 
         self._addrem_pseudoclass('hover', remove_from=self._last_under_mouse, add_to=self._under_mouse)
         if self._last_under_mouse: self._last_under_mouse._dispatch_event('on_mouseleave')
@@ -3372,6 +3413,7 @@ class UI_Document(UI_Document_FSM):
 
     def blur(self, stop_at=None):
         if self._focus is None: return
+        print('UI_Document.blur', self._focus)
         self._focus._del_pseudoclass('focus')
         self._focus._dispatch_event('on_blur')
         self._focus._dispatch_event('on_focusout', stop_at=stop_at)
