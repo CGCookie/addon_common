@@ -3413,7 +3413,6 @@ class UI_Document(UI_Document_FSM):
 
     def blur(self, stop_at=None):
         if self._focus is None: return
-        print('UI_Document.blur', self._focus)
         self._focus._del_pseudoclass('focus')
         self._focus._dispatch_event('on_blur')
         self._focus._dispatch_event('on_focusout', stop_at=stop_at)
