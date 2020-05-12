@@ -3133,6 +3133,14 @@ class UI_Document(UI_Document_FSM):
     def body(self):
         return self._body
 
+    def center_on_mouse(self, element):
+        if element is None: return
+        element._relative_pos = None
+        mx,my = self.actions.mouse
+        w = element.width_pixels
+        h = element.height_pixels
+        element.reposition(left=mx-w/2, top=-self._body.height_pixels + my + h/2)
+
     def _reposition_tooltip(self, force=False):
         if self._tooltip_mouse == self.actions.mouse and not force: return
         self._tooltip_mouse = self.actions.mouse
@@ -3479,15 +3487,7 @@ class UI_Document(UI_Document_FSM):
 
         if not self._focus: return 'main'
 
-    @profiler.function
-    def draw(self, context):
-        if self._area != context.area: return
-
-        UI_Element_PreventMultiCalls.reset_multicalls()
-        time_start = time.time()
-
-        # print('UI_Document.draw', random.random())
-
+    def force_clean(self, context):
         w,h = context.region.width, context.region.height
         sz = Size2D(width=w, max_width=w, height=h, max_height=h)
 
@@ -3502,13 +3502,6 @@ class UI_Document(UI_Document_FSM):
             self._body._dirty_flow()
             # self._body.dirty('region size changed', 'style', children=True)
 
-        ScissorStack.start(context)
-        bgl.glClearColor(0, 0, 0, 0)
-        bgl.glBlendColor(0, 0, 0, 0)
-        # bgl.glBlendFunc(bgl.GL_SRC_ALPHA, bgl.GL_ONE_MINUS_SRC_ALPHA)
-        bgl.glEnable(bgl.GL_BLEND)
-        bgl.glEnable(bgl.GL_SCISSOR_TEST)
-        bgl.glDisable(bgl.GL_DEPTH_TEST)
         self._body._clean()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
         self._body._set_view_size(sz)
@@ -3518,6 +3511,23 @@ class UI_Document(UI_Document_FSM):
         if self._reposition_tooltip_before_draw:
             self._reposition_tooltip_before_draw = False
             self._reposition_tooltip()
+
+    @profiler.function
+    def draw(self, context):
+        if self._area != context.area: return
+
+        UI_Element_PreventMultiCalls.reset_multicalls()
+        time_start = time.time()
+
+        self.force_clean(context)
+
+        ScissorStack.start(context)
+        bgl.glClearColor(0, 0, 0, 0)
+        bgl.glBlendColor(0, 0, 0, 0)
+        # bgl.glBlendFunc(bgl.GL_SRC_ALPHA, bgl.GL_ONE_MINUS_SRC_ALPHA)
+        bgl.glEnable(bgl.GL_BLEND)
+        bgl.glEnable(bgl.GL_SCISSOR_TEST)
+        bgl.glDisable(bgl.GL_DEPTH_TEST)
         self._body.draw()
         ScissorStack.end()
 
