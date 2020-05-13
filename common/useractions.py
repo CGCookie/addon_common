@@ -324,13 +324,13 @@ class Actions:
                 # '3D View | view3d.navigate',              # View Navigation
             ],
         }, {
-            'name': 'window actions',
+            'name': 'window action',
             'operators': [
                 'Screen | screen.screen_full_area',
                 'Window | wm.window_fullscreen_toggle',
             ],
         }, {
-            'name': 'save actions',
+            'name': 'save action',
             'operators': [
                 'Window | wm.save_mainfile',
             ],
@@ -357,9 +357,9 @@ class Actions:
         # set up universal keymaps
         self.keymap = {}  # universal keymap
         self.keymap2 = {} # context keymap
-        self.keymap['navigate'] = set()         # filled in below
-        self.keymap['window actions'] = set()   # filled in below
+        self.keymap['window action'] = set()    # filled in below
         self.keymap['save action'] = set()      # filled in below
+        self.keymap['navigate'] = set()         # filled in below
         self.keymap['navigate'] |= Actions.trackpad_actions
         self.keymap['navigate'] |= Actions.ndof_actions
         for action in Actions.special_events:
