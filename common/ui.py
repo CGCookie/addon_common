@@ -393,8 +393,9 @@ def load_text_file(path):
         print('Exception:', e)
         assert False
 
-def set_markdown(ui_mdown, mdown=None, mdown_path=None):
+def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None):
     if mdown_path: mdown = load_text_file(get_mdown_path(mdown_path))
+    if preprocess_fn: mdown = preprocess_fn(mdown)
     mdown = Markdown.preprocess(mdown or '')                # preprocess mdown
     if getattr(ui_mdown, '__mdown', None) == mdown: return  # ignore updating if it's exactly the same as previous
     ui_mdown.__mdown = mdown                                # record the mdown to prevent reprocessing same
@@ -434,7 +435,7 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None):
                         if Markdown.is_url(link):
                             bpy.ops.wm.url_open(url=link)
                         else:
-                            set_markdown(ui_mdown, mdown_path=link)
+                            set_markdown(ui_mdown, mdown_path=link, preprocess_fn=preprocess_fn)
                     process_words(text, lambda word: a(innerText=word, href=link, title=title, on_mouseclick=mouseclick, parent=container))
                 elif t == 'bold':
                     process_words(m.group('text'), lambda word: b(innerText=word, parent=container))
@@ -578,9 +579,9 @@ def set_markdown_old(ui_mdown, mdown):
 
     ui_mdown.defer_dirty_propagation = False
 
-def markdown(mdown=None, mdown_path=None, **kwargs):
+def markdown(mdown=None, mdown_path=None, preprocess_fn=None, **kwargs):
     ui_container = UI_Element(tagName='div', classes='mdown', **kwargs)
-    set_markdown(ui_container, mdown=mdown, mdown_path=mdown_path)
+    set_markdown(ui_container, mdown=mdown, mdown_path=mdown_path, preprocess_fn=preprocess_fn)
     return ui_container
 
 

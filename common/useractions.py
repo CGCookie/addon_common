@@ -117,6 +117,73 @@ kmi_to_char = {
     'SHIFT+Y':'Y', 'SHIFT+Z':'Z',
 }
 
+# these are separated into a list so that "SHIFT+ZERO" (for example) is handled
+# before the "SHIFT" gets turned into "Shift"
+kmi_to_humanreadable = [
+    {
+        # most printable characters
+        'SHIFT+ZERO':   ')',
+        'SHIFT+ONE':    '!',
+        'SHIFT+TWO':    '@',
+        'SHIFT+THREE':  '#',
+        'SHIFT+FOUR':   '$',
+        'SHIFT+FIVE':   '%',
+        'SHIFT+SIX':    '^',
+        'SHIFT+SEVEN':  '&',
+        'SHIFT+EIGHT':  '*',
+        'SHIFT+NINE':   '(',
+        'SHIFT+PERIOD': '>',
+        'SHIFT+PLUS':   '+',
+        'SHIFT+MINUS':  '_',
+        'SHIFT+SLASH':  '?',
+        'SHIFT+BACK_SLASH':   '|',
+        'SHIFT+EQUAL':        '+',
+        'SHIFT+SEMI_COLON':   ':', 'SHIFT+COMMA':         '<',
+        'SHIFT+LEFT_BRACKET': '{', 'SHIFT+RIGHT_BRACKET': '}',
+        'SHIFT+QUOTE':        '"', 'SHIFT+ACCENT_GRAVE':  '~',
+
+        'BACK_SPACE': 'Backspace',
+        'BACK_SLASH':   '\\',
+    },{
+        'SPACE':        ' ',
+
+        'ZERO':   '0', 'NUMPAD_0':       '0',
+        'ONE':    '1', 'NUMPAD_1':       '1',
+        'TWO':    '2', 'NUMPAD_2':       '2',
+        'THREE':  '3', 'NUMPAD_3':       '3',
+        'FOUR':   '4', 'NUMPAD_4':       '4',
+        'FIVE':   '5', 'NUMPAD_5':       '5',
+        'SIX':    '6', 'NUMPAD_6':       '6',
+        'SEVEN':  '7', 'NUMPAD_7':       '7',
+        'EIGHT':  '8', 'NUMPAD_8':       '8',
+        'NINE':   '9', 'NUMPAD_9':       '9',
+        'PERIOD': '.', 'NUMPAD_PERIOD':  '.',
+        'PLUS':   '+', 'NUMPAD_PLUS':    '+',
+        'MINUS':  '-', 'NUMPAD_MINUS':   '-',
+        'SLASH':  '/', 'NUMPAD_SLASH':   '/',
+                       'NUMPAD_ASTERIX': '*',
+
+        'EQUAL':        '=',
+        'SEMI_COLON':   ';', 'COMMA':         ',',
+        'LEFT_BRACKET': '[', 'RIGHT_BRACKET': ']',
+        'QUOTE':        "'", 'ACCENT_GRAVE':  '`',
+        # prefix modifiers
+        'SHIFT': 'Shift', 'CTRL': 'Ctrl', 'ALT': 'Alt', 'OSKEY': 'OSKey',
+
+        # non-printable characters
+        'ESC': 'Esc',
+        'RET': 'Enter', 'NUMPAD_ENTER': 'Enter',
+        'TAB': 'Tab',
+        'DEL': 'Delete',
+        'UP_ARROW': 'Up', 'DOWN_ARROW': 'Down', 'LEFT_ARROW': 'Left', 'RIGHT_ARROW': 'Right',
+        # mouse
+        'LEFTMOUSE': 'LMB', 'MIDDLEMOUSE': 'MMB', 'RIGHTMOUSE': 'RMB',
+        'WHEELUPMOUSE': 'WheelUp', 'WHEELDOWNMOUSE': 'WheelDown',
+        # postfix modifiers
+        'DRAG': 'Drag', 'DOUBLE': 'Double',
+    }
+]
+
 
 def kmi_details(kmi, event_type=None, double_click=False, drag_click=False):
     kmi_ctrl  = 'CTRL+'  if kmi.ctrl  else ''
@@ -474,7 +541,9 @@ class Actions:
         else:
             if event_type in self.now_pressed:
                 del self.now_pressed[event_type]
-        # print('Actions.update: (ftype, pressed) =', (ftype, pressed), self.just_pressed, self.now_pressed, self.last_pressed)
+
+        if print_actions and event_type not in self.nonprintable_actions:
+            print('Actions.update: (ftype, pressed) =', (ftype, pressed), self.just_pressed, self.now_pressed, self.last_pressed)
 
     def convert(self, actions):
         t = type(actions)
@@ -486,6 +555,15 @@ class Actions:
         for action in actions:
             ret |= (self.keymap.get(action, set()) | self.keymap2.get(action, set())) or { action }
         return ret
+
+    def to_human_readable(self, actions, join=','):
+        ret = set()
+        for action in self.convert(actions):
+            for kmi2hr in kmi_to_humanreadable:
+                for k,v in kmi2hr.items():
+                    action = action.replace(k, v)
+            ret.add(action)
+        return join.join(sorted(ret))
 
 
     def unuse(self, actions):
@@ -506,7 +584,7 @@ class Actions:
         if actions is None: return False
         if ignoremods: ignorectrl,ignoreshift,ignorealt,ignoreoskey = True,True,True,True
         if ignoremulti: ignoredouble,ignoredrag = True,True
-        actions = self.convert(actions)
+        actions = [strip_mods(p, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey, double_click=ignoredouble, drag_click=ignoredrag) for p in self.convert(actions)]
         quantifier_fn = all if using_all else any
         return quantifier_fn(
             strip_mods(p, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey, double_click=ignoredouble, drag_click=ignoredrag) in actions
@@ -558,19 +636,21 @@ class Actions:
 
 
 class ActionHandler:
-    def __init__(self, context, keymap):
-        self.__dict__['_action'] = Actions.get_instance(context)
+    _actions = None
+    def __init__(self, context, keymap={}):
+        if not ActionHandler._actions:
+            ActionHandler._actions = Actions.get_instance(context)
         _keymap = {}
         for (k,v) in keymap.items():
             if type(v) is not set and type(v) is not list: v = { v }
             _keymap[k] = { op for action in v for op in translate_blenderop(action) }
         self.__dict__['_keymap'] = _keymap
     def __getattr__(self, key):
-        self._action.keymap2 = self._keymap
-        return getattr(self._action, key)
+        ActionHandler._actions.keymap2 = self._keymap
+        return getattr(ActionHandler._actions, key)
     def __setattr__(self, key, value):
-        self._action.keymap2 = self._keymap
-        return setattr(self._action, key, value)
+        ActionHandler._actions.keymap2 = self._keymap
+        return setattr(ActionHandler._actions, key, value)
 
 
 

@@ -58,7 +58,6 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
     bl_idname = "view3d.cookiecutter_unnamed"
     bl_label = "CookieCutter Unnamed"
-    default_keymap = {}
 
     @classmethod
     def can_start(cls, context): return True
@@ -136,14 +135,14 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
             ret = {'RUNNING_MODAL'}
         else:
             # allow window actions to pass through to Blender
-            if self.actions.using('window actions'): ret = {'PASS_THROUGH'}
+            if self._cc_actions.using('window actions'): ret = {'PASS_THROUGH'}
 
             # allow navigation actions to pass through to Blender
-            if self.actions.navigating() or (self.actions.timer and self._nav):
+            if self._cc_actions.navigating() or (self._cc_actions.timer and self._nav):
                 # let Blender handle navigation
-                self.actions.unuse('navigate')  # pass-through commands do not receive a release event
+                self._cc_actions.unuse('navigate')  # pass-through commands do not receive a release event
                 self._nav = True
-                if not self.actions.trackpad: self.drawing.set_cursor('HAND')
+                if not self._cc_actions.trackpad: self.drawing.set_cursor('HAND')
                 ret = {'PASS_THROUGH'}
             elif self._nav:
                 self._nav = False
@@ -160,11 +159,11 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         return {'RUNNING_MODAL'}
 
     def _cc_actions_init(self):
-        self.actions = ActionHandler(self.context, self.default_keymap)
-        self._timer = self.actions.start_timer(10)
+        self._cc_actions = ActionHandler(self.context)
+        self._timer = self._cc_actions.start_timer(10)
 
     def _cc_actions_update(self):
-        self.actions.update(self.context, self.event, print_actions=False)
+        self._cc_actions.update(self.context, self.event, print_actions=False)
 
     def _cc_actions_end(self):
         self._timer.done()
