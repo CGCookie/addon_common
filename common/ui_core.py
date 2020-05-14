@@ -3461,6 +3461,8 @@ class UI_Document(UI_Document_FSM):
 
     def focus(self, ui_element):
         if ui_element is None: return
+        if type(ui_element) is UI_Proxy:
+            ui_element = ui_element._default_element
         if self._focus == ui_element: return
 
         stop_focus_at = None
