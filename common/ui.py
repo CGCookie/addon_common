@@ -236,6 +236,7 @@ def input_text(**kwargs):
     def postflow():
         if data['text'] is None: return
         data['pos'] = ui_input.get_text_pos(data['idx'])
+        print('input_text.postflow', data['pos'])
         ui_cursor.left = data['pos'].x - ui_input._mbp_left - ui_cursor._absolute_size.width / 2
         ui_cursor.top  = data['pos'].y + ui_input._mbp_top
     def cursor_postflow():
