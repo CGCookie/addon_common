@@ -25,17 +25,23 @@ import inspect
 class IgnoreChange(Exception): pass
 
 class BoundVar:
-    def __init__(self, value_str, *, on_change=None, frame_depth=1):
+    def __init__(self, value_str, *, on_change=None, frame_depth=1, f_globals=None, f_locals=None):
         assert type(value_str) is str, 'BoundVar: constructor needs value as string!'
-        frame = inspect.currentframe()
-        for i in range(frame_depth): frame = frame.f_back
-        self._f_globals = frame.f_globals
-        self._f_locals = dict(frame.f_locals)
+        if f_globals is None or f_locals is None:
+            frame = inspect.currentframe()
+            for i in range(frame_depth): frame = frame.f_back
+            self._f_globals = f_globals or frame.f_globals
+            self._f_locals = dict(f_locals or frame.f_locals)
+        else:
+            self._f_globals = f_globals
+            self._f_locals = dict(f_locals)
         try:
             exec(value_str, self._f_globals, self._f_locals)
         except Exception as e:
             print('Caught exception when trying to bind to variable')
-            print(e)
+            print('exception:', e)
+            print('globals:', f_globals)
+            print('locals:', f_locals)
             assert False, 'BoundVar: value string ("%s") must be a valid variable!' % (value_str)
         self._f_locals.update({'boundvar_interface': self._boundvar_interface})
         self._value_str = value_str

@@ -41,6 +41,7 @@ class Markdown:
         'code':   re.compile(r'`(?P<text>[^`]+)`'),
         'link':   re.compile(r'\[(?P<text>.+?)\]\((?P<link>.+?)\)'),
         'italic': re.compile(r'_(?P<text>.+?)_'),
+        'checkbox': re.compile(r'<input (?P<params>.*?type="checkbox".*?)>(?P<innertext>.*?)<\/input>'),
     }
 
     # https://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url

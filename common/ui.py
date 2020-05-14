@@ -27,6 +27,7 @@ import types
 import codecs
 import struct
 import random
+import inspect
 import traceback
 import functools
 import urllib.request
@@ -393,7 +394,13 @@ def load_text_file(path):
         print('Exception:', e)
         assert False
 
-def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None):
+
+def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_globals=None, f_locals=None):
+    if f_globals is None or f_locals is None:
+        frame = inspect.currentframe().f_back               # get frame   of calling function
+        if f_globals is None: f_globals = frame.f_globals   # get globals of calling function
+        if f_locals  is None: f_locals  = frame.f_locals    # get locals  of calling function
+
     if mdown_path: mdown = load_text_file(get_mdown_path(mdown_path))
     if preprocess_fn: mdown = preprocess_fn(mdown)
     mdown = Markdown.preprocess(mdown or '')                # preprocess mdown
@@ -435,12 +442,28 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None):
                         if Markdown.is_url(link):
                             bpy.ops.wm.url_open(url=link)
                         else:
-                            set_markdown(ui_mdown, mdown_path=link, preprocess_fn=preprocess_fn)
+                            set_markdown(ui_mdown, mdown_path=link, preprocess_fn=preprocess_fn, f_globals=f_globals, f_locals=f_locals)
                     process_words(text, lambda word: a(innerText=word, href=link, title=title, on_mouseclick=mouseclick, parent=container))
                 elif t == 'bold':
                     process_words(m.group('text'), lambda word: b(innerText=word, parent=container))
                 elif t == 'italic':
                     process_words(m.group('text'), lambda word: i(innerText=word, parent=container))
+                elif t == 'checkbox':
+                    params = m.group('params')
+                    innertext = m.group('innertext')
+                    value = None
+                    for param in re.finditer(r'(?P<key>[a-zA-Z]+)(="(?P<val>.*?)")?', params):
+                        key = param.group('key')
+                        val = param.group('val')
+                        if key == 'type':
+                            pass
+                        elif key == 'value':
+                            value = val
+                        else:
+                            assert False, 'Unhandled checkbox parameter key="%s", val="%s" (%s)' % (key,val,param)
+                    assert value is not None, 'Unhandled checkbox parameters: expected value (%s)' % (params)
+                    print('CREATING input_checkbox(label="%s", checked=BoundVar("%s", ...)' % (innertext, value))
+                    container.append_child(input_checkbox(label=innertext, checked=BoundVar(value, f_globals=f_globals, f_locals=f_locals)))
                 else:
                     assert False, 'Unhandled inline markdown type "%s" ("%s") with "%s"' % (str(t), str(m), line)
                 para = para[m.end():]
@@ -579,9 +602,14 @@ def set_markdown_old(ui_mdown, mdown):
 
     ui_mdown.defer_dirty_propagation = False
 
-def markdown(mdown=None, mdown_path=None, preprocess_fn=None, **kwargs):
+def markdown(mdown=None, mdown_path=None, preprocess_fn=None, f_globals=None, f_locals=None, **kwargs):
+    if f_globals is None or f_locals is None:
+        frame = inspect.currentframe().f_back               # get frame   of calling function
+        if f_globals is None: f_globals = frame.f_globals   # get globals of calling function
+        if f_locals  is None: f_locals  = frame.f_locals    # get locals  of calling function
+
     ui_container = UI_Element(tagName='div', classes='mdown', **kwargs)
-    set_markdown(ui_container, mdown=mdown, mdown_path=mdown_path, preprocess_fn=preprocess_fn)
+    set_markdown(ui_container, mdown=mdown, mdown_path=mdown_path, preprocess_fn=preprocess_fn, f_globals=f_globals, f_locals=f_locals)
     return ui_container
 
 

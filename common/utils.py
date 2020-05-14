@@ -164,9 +164,10 @@ def find_and_import_all_subclasses(cls, root_path=None):
 #########################################################
 
 def delay_exec(action, f_globals=None, f_locals=None):
-    frame = inspect.currentframe().f_back               # get frame   of calling function
-    if f_globals is None: f_globals = frame.f_globals   # get globals of calling function
-    if f_locals  is None: f_locals  = frame.f_locals    # get locals  of calling function
+    if f_globals is None or f_locals is None:
+        frame = inspect.currentframe().f_back               # get frame   of calling function
+        if f_globals is None: f_globals = frame.f_globals   # get globals of calling function
+        if f_locals  is None: f_locals  = frame.f_locals    # get locals  of calling function
     def run_it(*args, **kwargs):
         # args are ignored!?
         d = dict(f_locals)
