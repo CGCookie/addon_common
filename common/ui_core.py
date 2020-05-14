@@ -250,7 +250,7 @@ class UI_Draw:
             nonlocal shader, batch, def_color, get_MVP_matrix
             def get_v(style_key, def_val):
                 v = style.get(style_key, def_val)
-                if type(v) is NumberUnit: v = v.val()
+                if type(v) is NumberUnit: v = v.val() * dpi_mult
                 return v
             shader.bind()
             # uMVPMatrix needs to be set every draw call, because it could be different
