@@ -180,16 +180,18 @@ kmi_to_humanreadable = [
         'LEFTMOUSE': 'LMB', 'MIDDLEMOUSE': 'MMB', 'RIGHTMOUSE': 'RMB',
         'WHEELUPMOUSE': 'WheelUp', 'WHEELDOWNMOUSE': 'WheelDown',
         # postfix modifiers
-        'DRAG': 'Drag', 'DOUBLE': 'Double',
+        'DRAG': 'Drag', 'DOUBLE': 'Double', 'CLICK': 'Click',
     }
 ]
 
 
-def kmi_details(kmi, event_type=None, double_click=False, drag_click=False):
+def kmi_details(kmi, event_type=None, click=False, double_click=False, drag_click=False):
     kmi_ctrl  = 'CTRL+'  if kmi.ctrl  else ''
     kmi_shift = 'SHIFT+' if kmi.shift else ''
     kmi_alt   = 'ALT+'   if kmi.alt   else ''
     kmi_os    = 'OSKEY+' if kmi.oskey else ''
+    # https://docs.blender.org/api/current/bpy.types.KeyMapItem.html#bpy.types.KeyMapItem.value
+    kmi_click  = '+CLICK'  if kmi.value=='CLICK'        or click        else ''
     kmi_double = '+DOUBLE' if kmi.value=='DOUBLE_CLICK' or double_click else ''
     kmi_drag   = '+DRAG'   if kmi.value=='CLICK_DRAG'   or drag_click   else ''
 
@@ -197,7 +199,7 @@ def kmi_details(kmi, event_type=None, double_click=False, drag_click=False):
     if kmi_type == 'WHEELINMOUSE':  kmi_type = 'WHEELUPMOUSE'
     if kmi_type == 'WHEELOUTMOUSE': kmi_type = 'WHEELDOWNMOUSE'
 
-    return kmi_ctrl + kmi_shift + kmi_alt + kmi_os + kmi_type + kmi_double + kmi_drag
+    return kmi_ctrl + kmi_shift + kmi_alt + kmi_os + kmi_type + kmi_click + kmi_double + kmi_drag
 
 
 re_blenderop = re.compile(r'(?P<keymap>.+?) *\| *(?P<operator>.+)')
@@ -224,12 +226,13 @@ def translate_blenderop(action, keyconfig=None):
 
 
 
-def strip_mods(action, ctrl=True, shift=True, alt=True, oskey=True, double_click=True, drag_click=True):
+def strip_mods(action, ctrl=True, shift=True, alt=True, oskey=True, click=True, double_click=True, drag_click=True):
     if action is None: return None
     if ctrl:  action = action.replace('CTRL+',  '')
     if shift: action = action.replace('SHIFT+', '')
     if alt:   action = action.replace('ALT+',   '')
     if oskey: action = action.replace('OSKEY+', '')
+    if click: action = action.replace('+CLICK', '')
     if double_click: action = action.replace('+DOUBLE', '')
     if drag_click:   action = action.replace('+DRAG',   '')
     return action
@@ -411,7 +414,6 @@ class Actions:
         self.mousedown_middle = None    # mouse position when MMB was pressed
         self.mousedown_right  = None    # mouse position when RMB was pressed
         self.mousedown_drag   = False   # is user dragging?
-        self.mousedown_dblclick = False # is user double clicking?
 
         self.timer      = False     # is action from timer?
         self.time_delta = 0         # elapsed time since last "step" (units=seconds)
@@ -421,7 +423,13 @@ class Actions:
         self.hit_pos  = None    # position of raytraced mouse to scene (updated externally!)
         self.hit_norm = None    # normal of raytraced mouse to scene (updated externally!)
 
+    actions_prevtime_default = (0,0,float('inf'))
     def update(self, context, event, print_actions=False):
+        if self.just_pressed:
+            if '+CLICK' in self.just_pressed:
+                del self.now_pressed[strip_mods(self.just_pressed)]
+            elif '+DOUBLE' in self.just_pressed:
+                del self.now_pressed[strip_mods(self.just_pressed)]
         self.just_pressed = None
 
         self.context = context
@@ -447,9 +455,10 @@ class Actions:
         # if event_type not in {'TIMER', 'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
         #     print('Actions.update', event_type, event.value)
 
-        action_prevtime = self.actions_prevtime.get(event_type, float('-inf'))
         if pressed:
-            self.actions_prevtime[event_type] = time.time()
+            _,prevtime,_ = self.actions_prevtime.get(event_type, self.actions_prevtime_default)
+            curtime = time.time()
+            self.actions_prevtime[event_type] = (prevtime, curtime, curtime - prevtime)
 
         self.event_type = event_type
         self.mousemove_prev = self.mousemove
@@ -511,24 +520,14 @@ class Actions:
         mouse_event = event_type in self.mousebutton_actions and not self.navevent
         if mouse_event:
             if pressed:
-                curtime = time.time()
-                dbltime = action_prevtime + bprefs.mouse_doubleclick() # latest time to consider double click
-                self.mousedown_dblclick = curtime < dbltime and not self.mousedown_drag and self.mouse_lastb == event_type
                 if self.mouse_lastb != event_type: self.mousedown_drag = False
                 self.mousedown = Point2D((float(event.mouse_region_x), float(event.mouse_region_y)))
                 if   event_type == 'LEFTMOUSE':   self.mousedown_left   = self.mousedown
                 elif event_type == 'MIDDLEMOUSE': self.mousedown_middle = self.mousedown
                 elif event_type == 'RIGHTMOUSE':  self.mousedown_right  = self.mousedown
                 self.mouse_lastb = event_type
-            else:
-                self.mousedown = None
-                self.mousedown_left = None
-                self.mousedown_middle = None
-                self.mousedown_right = None
-                self.mousedown_drag = False
-                self.mousedown_dblclick = False
 
-        ftype = kmi_details(event, event_type=event_type, double_click=self.mousedown_dblclick and mouse_event, drag_click=self.mousedown_drag and mouse_event)
+        ftype = kmi_details(event, event_type=event_type, drag_click=self.mousedown_drag and mouse_event)
         if pressed:
             # if event_type not in self.now_pressed:
             #     self.just_pressed = ftype
@@ -540,7 +539,19 @@ class Actions:
             self.last_pressed = ftype
         else:
             if event_type in self.now_pressed:
-                del self.now_pressed[event_type]
+                if event_type in Actions.mousebutton_actions and not self.mousedown_drag:
+                    _,_,deltatime = self.actions_prevtime.get(event_type, self.actions_prevtime_default)
+                    single = (deltatime > bprefs.mouse_doubleclick()) or (self.mouse_lastb != event_type)
+                    self.just_pressed = kmi_details(event, event_type=event_type, click=single, double_click=not single)
+                else:
+                    del self.now_pressed[event_type]
+
+        if mouse_event and not pressed:
+            self.mousedown = None
+            self.mousedown_left = None
+            self.mousedown_middle = None
+            self.mousedown_right = None
+            self.mousedown_drag = False
 
         if print_actions and event_type not in self.nonprintable_actions:
             print('Actions.update: (ftype, pressed) =', (ftype, pressed), self.just_pressed, self.now_pressed, self.last_pressed)
@@ -580,16 +591,26 @@ class Actions:
         #     print('  %s' % str(entry))
         self.just_pressed = None
 
-    def using(self, actions, using_all=False, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, ignoremulti=False, ignoredouble=False, ignoredrag=False):
+    def using(self, actions, using_all=False, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, ignoremulti=False, ignoreclick=False, ignoredouble=False, ignoredrag=False):
         if actions is None: return False
         if ignoremods: ignorectrl,ignoreshift,ignorealt,ignoreoskey = True,True,True,True
-        if ignoremulti: ignoredouble,ignoredrag = True,True
-        actions = [strip_mods(p, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey, double_click=ignoredouble, drag_click=ignoredrag) for p in self.convert(actions)]
+        if ignoremulti: ignoreclick,ignoredouble,ignoredrag = True,True,True
+        actions = [strip_mods(p, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey, click=ignoreclick, double_click=ignoredouble, drag_click=ignoredrag) for p in self.convert(actions)]
         quantifier_fn = all if using_all else any
         return quantifier_fn(
-            strip_mods(p, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey, double_click=ignoredouble, drag_click=ignoredrag) in actions
+            strip_mods(p, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey, click=ignoreclick, double_click=ignoredouble, drag_click=ignoredrag) in actions
             for p in self.now_pressed.values()
         )
+
+    def using_onlymods(self, actions):
+        if actions is None: return False
+        def action_good(action):
+            for p in action.split('+'):
+                if p == 'CTRL' and not self.ctrl: return False
+                if p == 'SHIFT' and not self.shift: return False
+                if p == 'ALT' and not self.alt: return False
+            return True
+        return any(action_good(action) for action in self.convert(actions))
 
     def navigating(self):
         actions = self.convert('navigate')
@@ -598,14 +619,14 @@ class Actions:
         if any(p in actions for p in self.now_pressed.values()): return True
         return False
 
-    def pressed(self, actions, unpress=True, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, ignoremulti=False, ignoredouble=False, ignoredrag=False, debug=False):
+    def pressed(self, actions, unpress=True, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, ignoremulti=False, ignoreclick=False, ignoredouble=False, ignoredrag=False, debug=False):
         if actions is None: return False
         if ignoremods: ignorectrl,ignoreshift,ignorealt,ignoreoskey = True,True,True,True
-        if ignoremulti: ignoredouble,ignoredrag = True,True
+        if ignoremulti: ignoreclick,ignoredouble,ignoredrag = True,True,True
         if debug: print('Actions.pressed 0: actions =', actions)
         actions = self.convert(actions)
         if debug: print('Actions.pressed 1: actions =', actions)
-        just_pressed = strip_mods(self.just_pressed, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey, double_click=ignoredouble, drag_click=ignoredrag)
+        just_pressed = strip_mods(self.just_pressed, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey, click=ignoreclick, double_click=ignoredouble, drag_click=ignoredrag)
         if debug: print('Actions.pressed 2: just_pressed =', just_pressed, self.just_pressed, ', actions =', actions)
         ret = just_pressed in actions
         if ret and unpress: self.just_pressed = None
