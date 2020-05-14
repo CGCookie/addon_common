@@ -134,6 +134,11 @@ def get_image_path(fn, ext=None, subfolders=None):
     return iter_head(paths, None)
 
 
+def floor_if_finite(v):
+    return v if v is None or math.isinf(v) else math.floor(v)
+
+
+
 @contextlib.contextmanager
 def temp_bglbuffer(*args):
     buf = bgl.Buffer(*args)
@@ -453,7 +458,7 @@ class UI_Element_Utils:
         if min_v is not None: v = max(float(min_v), v)
         if max_v is not None: v = min(float(max_v), v)
         if scale is not None: v *= scale
-        return v
+        return floor_if_finite(v)
 
     @profiler.function
     def _get_style_trbl(self, kb, scale=None):
@@ -2359,6 +2364,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             if min_width  != 'auto': inside_size.min_width  = max(0, min_width  - mbp_width)
             if min_height != 'auto': inside_size.min_height = max(0, min_height - mbp_height)
 
+            inside_size.width      = floor_if_finite(inside_size.width)
+            inside_size.height     = floor_if_finite(inside_size.height)
+            inside_size.max_width  = floor_if_finite(inside_size.max_width)
+            inside_size.max_height = floor_if_finite(inside_size.max_height)
+            inside_size.min_width  = floor_if_finite(inside_size.min_width)
+            inside_size.min_height = floor_if_finite(inside_size.min_height)
+
             if self._innerText is not None and self._whitespace in {'nowrap', 'pre'}:
                 inside_size.min_width = inside_size.width = inside_size.max_width = float('inf')
 
@@ -2406,8 +2418,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             document_elem=document_elem,
                             table_data=table_data,
                         )
-                        w = element._dynamic_full_size.width
-                        h = element._dynamic_full_size.height
+                        w = math.ceil(element._dynamic_full_size.width)
+                        h = math.ceil(element._dynamic_full_size.height)
                         is_good = False
                         is_good |= first_child                  # always add child to an empty line
                         is_good |= c and w<=rw and h<=rh        # child fits on current line
@@ -2417,8 +2429,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             # clamp width and height only if scrolling (respectively)
                             if sx == 'scroll': w = remaining.clamp_width(w)
                             if sy == 'scroll': h = remaining.clamp_height(h)
-                            w = math.floor(w)
-                            h = math.floor(h)
+                            w = math.ceil(w)
+                            h = math.ceil(h)
                             sz = Size2D(width=w, height=h)
                             element._set_view_size(sz)
                             if position != 'fixed':
@@ -2456,7 +2468,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         if max_width  != 'auto': dw = min(max_width,  dw)
         if max_height != 'auto': dh = min(max_height, dh)
 
-        self._dynamic_full_size = Size2D(width=dw, height=dh)
+        self._dynamic_full_size = Size2D(width=math.ceil(dw), height=math.ceil(dh))
         # if self._tagName == 'body': print(self._dynamic_content_size, self._dynamic_full_size)
 
         if display == 'table-row':
@@ -2487,7 +2499,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             fw = sum(ws.values())
             fh = sum(hs.values())
             self._dynamic_content_size = Size2D(width=fw, height=fh)
-            self._dynamic_full_size = Size2D(width=fw+mbp_width, height=fh+mbp_height)
+            self._dynamic_full_size = Size2D(width=math.ceil(fw+mbp_width), height=math.ceil(fh+mbp_height))
 
         self._tmp_max_width = max_width
 
@@ -3525,6 +3537,8 @@ class UI_Document(UI_Document_FSM):
         w,h = context.region.width, context.region.height
         sz = Size2D(width=w, max_width=w, height=h, max_height=h)
 
+        UI_Element_PreventMultiCalls.reset_multicalls()
+
         Globals.ui_draw.update()
         if Globals.drawing.get_dpi_mult() != self._ui_scale:
             self._ui_scale = Globals.drawing.get_dpi_mult()
@@ -3536,10 +3550,13 @@ class UI_Document(UI_Document_FSM):
             self._body._dirty_flow()
             # self._body.dirty('region size changed', 'style', children=True)
 
+        # UI_Element_PreventMultiCalls.reset_multicalls()
         self._body._clean()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
         self._body._set_view_size(sz)
         self._body._call_postflow()
+
+        # UI_Element_PreventMultiCalls.reset_multicalls()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
         self._body._set_view_size(sz)
         if self._reposition_tooltip_before_draw:
@@ -3550,7 +3567,6 @@ class UI_Document(UI_Document_FSM):
     def draw(self, context):
         if self._area != context.area: return
 
-        UI_Element_PreventMultiCalls.reset_multicalls()
         time_start = time.time()
 
         self.force_clean(context)
