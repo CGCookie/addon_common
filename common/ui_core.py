@@ -589,6 +589,12 @@ class UI_Element_Properties:
         while c._parent: c = c._parent
         return c
 
+    def is_descendant_of(self, ancestor):
+        if self == ancestor: return True
+        if not self._parent: return False
+        return self._parent.is_descendant_of(ancestor)
+
+
     def getElementById(self, element_id):
         if element_id is None: return None
         if self._id == element_id: return self
@@ -2896,8 +2902,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         return self
 
     def get_mouse_distance(self, p:Point2D):
-        dx = p.x - clamp(p.x, self._l, self._r)
-        dy = p.y - clamp(p.y, self._b, self._t)
+        l,t,w,h = self._l, self._t, self._w, self._h
+        r,b = l+(w-1),t-(h-1)
+        dx = p.x - clamp(p.x, l, r)
+        dy = p.y - clamp(p.y, b, t)
         return math.sqrt(dx*dx + dy*dy)
 
 
@@ -3115,6 +3123,9 @@ class UI_Document(UI_Document_FSM):
 
         self.ignore_hover_change = False
 
+        self._sticky_dist = 20
+        self._sticky_element = None # allows the mouse to drift a few pixels off before handling mouseleave
+
         self._under_mouse = None
         self._under_down = None
         self._focus = None
@@ -3155,6 +3166,7 @@ class UI_Document(UI_Document_FSM):
     @profiler.function
     def update(self, context, event):
         if context.area != self._area: return
+        self._ui_scale = Globals.drawing.get_dpi_mult()
 
         UI_Element_PreventMultiCalls.reset_multicalls()
 
@@ -3171,8 +3183,16 @@ class UI_Document(UI_Document_FSM):
         #self.actions.update(context, event, self._timer, print_actions=False)
         # self.actions.update(context, event, print_actions=False)
 
+        if self._sticky_element and not self._sticky_element.is_visible:
+            self._sticky_element = None
+
         self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
-        if not self.ignore_hover_change: self._under_mouse = self._body.get_under_mouse(self.actions.mouse)
+        if not self.ignore_hover_change:
+            self._under_mouse = self._body.get_under_mouse(self.actions.mouse)
+            if self._sticky_element:
+                if self._sticky_element.get_mouse_distance(self.actions.mouse) < self._sticky_dist * self._ui_scale:
+                    if not self._under_mouse.is_descendant_of(self._sticky_element):
+                        self._under_mouse = self._sticky_element
 
         next_message = None
         if self._under_mouse and self._under_mouse.title:
@@ -3228,6 +3248,18 @@ class UI_Document(UI_Document_FSM):
             tprint(str(ui_elem))
             tprint(ui_elem._selector, extra=1)
             tprint(ui_elem._l, ui_elem._t, ui_elem._w, ui_elem._h, extra=1)
+
+    @property
+    def sticky_element(self):
+        return self._stick_element
+    @sticky_element.setter
+    def sticky_element(self, element):
+        if type(element) is UI_Proxy:
+            element = element._default_element
+        self._sticky_element = element
+
+    def clear_last_under(self):
+        self._last_under_mouse = None
 
     @profiler.function
     def handle_hover(self, change_cursor=True):
