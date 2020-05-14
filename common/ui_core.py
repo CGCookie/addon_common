@@ -1976,6 +1976,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             }
             # TODO: if whitespace:pre, then make self NOT wrap
             innerTextWrapped = helper_wraptext(**textwrap_opts)
+            print('"%s"' % innerTextWrapped)
             # print(self, id(self), self._innerTextWrapped, innerTextWrapped)
             rewrap = False
             rewrap |= self._innerTextWrapped != innerTextWrapped
