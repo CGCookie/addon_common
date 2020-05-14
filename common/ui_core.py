@@ -1976,7 +1976,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             }
             # TODO: if whitespace:pre, then make self NOT wrap
             innerTextWrapped = helper_wraptext(**textwrap_opts)
-            print('"%s"' % innerTextWrapped)
+            # print('"%s"' % innerTextWrapped)
             # print(self, id(self), self._innerTextWrapped, innerTextWrapped)
             rewrap = False
             rewrap |= self._innerTextWrapped != innerTextWrapped
@@ -1999,7 +1999,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             'pre': '',
                         })
                         idx += 1
-                    words = re.split(r'([^ \n]* +)', l)
+                    if self._whitespace in {'pre', 'nowrap'}:
+                        words = [l]
+                    else:
+                        words = re.split(r'([^ \n]* +)', l)
                     for word in words:
                         if not word: continue
                         ui_word = UI_Element(innerTextAsIs=word, _parent=self)
