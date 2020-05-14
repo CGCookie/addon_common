@@ -632,7 +632,7 @@ div.collapsible > div.inside.collapsed {
 }
 
 *.inputtext-input:focus > *.inputtext-cursor {
-    display: inline;
+    display: block;
 }
 
 

@@ -2428,6 +2428,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                         is_good |= first_child                  # always add child to an empty line
                         is_good |= c and w<=rw and h<=rh        # child fits on current line
                         is_good |= not c                        # child does not contribute to our size
+                        is_good |= self._innerText is not None and self._whitespace in {'nowrap', 'pre'}
                         if is_good:
                             if c: cur_line.append(element)
                             # clamp width and height only if scrolling (respectively)
