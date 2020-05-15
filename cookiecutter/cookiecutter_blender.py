@@ -42,9 +42,9 @@ class CookieCutter_Blender:
         self.panels_store()
         self.overlays_store()
 
-    def _cc_blenderui_end(self):
+    def _cc_blenderui_end(self, ignore_panels=False):
         self.overlays_restore()
-        self.panels_restore()
+        if not ignore_panels: self.panels_restore()
         self.manipulator_restore()
         self.viewaa_restore()
         self.cursor_modal_restore()
