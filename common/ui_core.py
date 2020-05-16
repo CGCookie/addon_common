@@ -3100,7 +3100,7 @@ class UI_Document(UI_Document_FSM):
     show_tooltips = True
     tooltip_delay = 0.50
     max_click_dist = 10         # allows mouse to travel off element and still register a click event
-    allow_click_time = 0.20     # allows for very fast clicking. ignore max_click_dist if time(mouseup-mousedown) is at most allow_click_time
+    allow_click_time = 0.50     # allows for very fast clicking. ignore max_click_dist if time(mouseup-mousedown) is at most allow_click_time
 
     def __init__(self):
         self._context = None
@@ -3435,8 +3435,8 @@ class UI_Document(UI_Document_FSM):
         self._under_mousedown._dispatch_event('on_mouseup')
         click = False
         click |= time.time() - self._mousedown_time < self.allow_click_time
-        click |= self._under_mousedown.get_mouse_distance(self.actions.mouse) <= self._ui_scale * self.max_click_dist
-        # print('mousedown_exit', self._under_mouse, self._under_mousedown, click)
+        click |= self._under_mousedown.get_mouse_distance(self.actions.mouse) <= self.max_click_dist * self._ui_scale
+        # print('mousedown_exit', time.time()-self._mousedown_time, self.allow_click_time, self.actions.mouse, self._under_mousedown.get_mouse_distance(self.actions.mouse), self.max_click_dist)
         if click:
             # old/simple: self._under_mouse == self._under_mousedown:
             dblclick = True
