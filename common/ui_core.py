@@ -136,7 +136,8 @@ def get_image_path(fn, ext=None, subfolders=None):
 
 def floor_if_finite(v):
     return v if v is None or math.isinf(v) else math.floor(v)
-
+def ceil_if_finite(v):
+    return v if v is None or math.isinf(v) else math.ceil(v)
 
 
 @contextlib.contextmanager
@@ -1727,7 +1728,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
     @profiler.function
     def _rebuild_style_selector(self):
-        sel_parent = [] if not self._parent else self._parent._selector
+        sel_parent = (None if not self._parent else self._parent._selector) or []
         if self._pseudoelement:
             # this is either a ::before or ::after pseudoelement
             self._selector = sel_parent[:-1] + [sel_parent[-1] + '::' + self._pseudoelement]
@@ -2688,12 +2689,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             abs_size = self._absolute_size
 
         self._absolute_pos = abs_pos + self._scroll_offset
-        self._l = ceil(abs_pos.x - 0.01)
-        self._t = floor(abs_pos.y + 0.01)
-        self._w = ceil(abs_size.width)
-        self._h = ceil(abs_size.height)
-        self._r = ceil(self._l + (self._w - 0.01))
-        self._b = floor(self._t - (self._h - 0.01))
+        self._l = ceil_if_finite(abs_pos.x - 0.01)
+        self._t = floor_if_finite(abs_pos.y + 0.01)
+        self._w = ceil_if_finite(abs_size.width)
+        self._h = ceil_if_finite(abs_size.height)
+        self._r = ceil_if_finite(self._l + (self._w - 0.01))
+        self._b = floor_if_finite(self._t - (self._h - 0.01))
 
         if recurse_children:
             for child in self._children_all:
