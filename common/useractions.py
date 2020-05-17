@@ -423,7 +423,10 @@ class Actions:
         self.hit_pos  = None    # position of raytraced mouse to scene (updated externally!)
         self.hit_norm = None    # normal of raytraced mouse to scene (updated externally!)
 
-    actions_prevtime_default = (0,0,float('inf'))
+    actions_prevtime_default = (0, 0, float('inf'))
+    def get_last_press_time(self, event_type):
+        return self.actions_prevtime.get(event_type, self.actions_prevtime_default)
+
     def update(self, context, event, print_actions=False):
         if self.just_pressed:
             if '+CLICK' in self.just_pressed:
@@ -439,24 +442,10 @@ class Actions:
             self.size = Vec2D((context.region.width, context.region.height))
             self.r3d = context.space_data.region_3d
 
-        # # handle strange edge cases
-        # if not context.area:
-        #     #dprint('Context with no area')
-        #     #dprint(context)
-        #     return {'RUNNING_MODAL'}
-        # if not hasattr(context.space_data, 'region_3d'):
-        #     #dprint('context.space_data has no region_3d')
-        #     #dprint(context)
-        #     #dprint(context.space_data)
-        #     return {'RUNNING_MODAL'}
-
         event_type, pressed = event.type, event.value=='PRESS'
 
-        # if event_type not in {'TIMER', 'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
-        #     print('Actions.update', event_type, event.value)
-
         if pressed:
-            _,prevtime,_ = self.actions_prevtime.get(event_type, self.actions_prevtime_default)
+            _,prevtime,_ = self.get_last_press_time(event_type)
             curtime = time.time()
             self.actions_prevtime[event_type] = (prevtime, curtime, curtime - prevtime)
 
@@ -540,7 +529,7 @@ class Actions:
         else:
             if event_type in self.now_pressed:
                 if event_type in Actions.mousebutton_actions and not self.mousedown_drag:
-                    _,_,deltatime = self.actions_prevtime.get(event_type, self.actions_prevtime_default)
+                    _,_,deltatime = self.get_last_press_time(event_type)
                     single = (deltatime > bprefs.mouse_doubleclick()) or (self.mouse_lastb != event_type)
                     self.just_pressed = kmi_details(event, event_type=event_type, click=single, double_click=not single)
                 else:

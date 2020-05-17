@@ -249,6 +249,9 @@ default_styling = {
 }
 
 
+# (?P<type>[^\n .#:[=\]]+)(?:(?:\.(?P<class>[^\n .#:[=\]]+))|(?:::(?P<pseudoelement>[^\n .#:[=\]]+))|(?::(?P<pseudoclass>[^\n .#:[=\]]+))|(?:#(?P<id>[^\n .#:[=\]]+))|(?:\[(?P<akey>[^\n .#:[=\]]+)(?:=\"(?P<aval>[^\"]+)\")?\]))*
+# (?:(?P<type>[ .#:[]+)(?P<name>[^\n .#:[=\]]+)(?:=\"(?P<val>[^\"]+)\")?]?)
+
 class UI_Style_Declaration:
     '''
     CSS Declarations are of the form:

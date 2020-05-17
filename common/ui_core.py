@@ -1617,7 +1617,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._src              = None
         self._textwrap_opts    = {}
         self._l, self._t, self._w, self._h = 0,0,0,0    # scissor position
-
+        self._fontid           = 0
+        self._fontsize         = 12
+        self._fontcolor        = (0,0,0,1)
+        self._whitespace       = 'normal'
         self._cacheRenderBuf   = None   # GPUOffScreen buffer
         self._dirty_renderbuf  = True
 
@@ -3521,19 +3524,28 @@ class UI_Document(UI_Document_FSM):
         pressed = None
         if self.actions.using('keypress', ignoreshift=True):
             pressed = self.actions.as_char(self.actions.last_pressed)
+        # WHAT IS HAPPENING HERE?
         for k,v in kmi_to_keycode.items():
             if self.actions.using(k, ignoreshift=True): pressed = v
         if pressed:
             cur = time.time()
+            # print('focus_main', pressed, self.actions.last_pressed, self.actions.get_last_press_time(self.actions.last_pressed))
             if self._last_pressed != pressed:
                 self._last_press_start = cur
                 self._last_press_time = 0
+                # self._last_press_time2 = self.actions.get_last_press_time(pressed)[1]
                 if self._focus:
                     self._focus._dispatch_event('on_keypress', key=pressed)
+            # elif self.actions.get_last_press_time(self.actions.last_pressed)[1] != self._last_press_time2:
+            #     self._last_press_time2 = self.actions.get_last_press_time(self.actions.last_pressed)[1]
+            #     if self._focus:
+            #         self._focus._dispatch_event('on_keypress', key=pressed)
             elif cur >= self._last_press_start + UI_Document.key_repeat_delay and cur >= self._last_press_time + UI_Document.key_repeat_pause:
                 self._last_press_time = cur
                 if self._focus:
                     self._focus._dispatch_event('on_keypress', key=pressed)
+        else:
+            self._last_press_time2 = 0
         self._last_pressed = pressed
 
         if not self._focus: return 'main'
