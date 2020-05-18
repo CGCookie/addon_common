@@ -83,6 +83,13 @@ class ModifierWrapper_Mirror:
         self.write()
 
     @property
+    def use_clip(self):
+        return self.mod.use_clip
+    @use_clip.setter
+    def use_clip(self, v):
+        self.mod.use_clip = v
+
+    @property
     def xyz(self):
         return set(self._symmetry)
 
