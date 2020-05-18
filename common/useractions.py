@@ -428,12 +428,7 @@ class Actions:
         return self.actions_prevtime.get(event_type, self.actions_prevtime_default)
 
     def update(self, context, event, print_actions=False):
-        if self.just_pressed:
-            if '+CLICK' in self.just_pressed:
-                del self.now_pressed[strip_mods(self.just_pressed)]
-            elif '+DOUBLE' in self.just_pressed:
-                del self.now_pressed[strip_mods(self.just_pressed)]
-        self.just_pressed = None
+        self.unpress()
 
         self.context = context
 
@@ -572,12 +567,17 @@ class Actions:
         # print('Actions.unuse', actions, self.now_pressed, keys)
         for k in keys: del self.now_pressed[k]
         # print('unuse', self.just_pressed)
-        self.just_pressed = None
+        self.unpress()
 
     def unpress(self):
         # print('unpress', self.just_pressed)
         # for entry in enumerate(inspect.stack()):
         #     print('  %s' % str(entry))
+        if not self.just_pressed: return
+        if '+CLICK' in self.just_pressed:
+            del self.now_pressed[strip_mods(self.just_pressed)]
+        elif '+DOUBLE' in self.just_pressed:
+            del self.now_pressed[strip_mods(self.just_pressed)]
         self.just_pressed = None
 
     def using(self, actions, using_all=False, ignoremods=False, ignorectrl=False, ignoreshift=False, ignorealt=False, ignoreoskey=False, ignoremulti=False, ignoreclick=False, ignoredouble=False, ignoredrag=False):
@@ -618,7 +618,7 @@ class Actions:
         just_pressed = strip_mods(self.just_pressed, ctrl=ignorectrl, shift=ignoreshift, alt=ignorealt, oskey=ignoreoskey, click=ignoreclick, double_click=ignoredouble, drag_click=ignoredrag)
         if debug: print('Actions.pressed 2: just_pressed =', just_pressed, self.just_pressed, ', actions =', actions)
         ret = just_pressed in actions
-        if ret and unpress: self.just_pressed = None
+        if ret and unpress: self.unpress()
         return ret
 
     def released(self, actions, released_all=False, ignoredrag=True, **kwargs):
