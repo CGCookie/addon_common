@@ -401,6 +401,7 @@ class UI_Element_Utils:
         labels_dirtied = list(labels_dirtied) if labels_dirtied else []
         for l in [label]+labels_dirtied: g.setdefault(l, {'fn':None, 'children':[], 'parents':[]})
         def wrapper(fn):
+            g[label]['name'] = label
             g[label]['fn'] = fn
             g[label]['children'] = labels_dirtied
             for l in labels_dirtied: g[l]['parents'].append(label)
@@ -419,6 +420,7 @@ class UI_Element_Utils:
         g = UI_Element_Utils._cleaning_graph
         working = set(UI_Element_Utils._cleaning_graph_roots)
         done = set()
+        restarts = []
         while working:
             current = working.pop()
             curnode = g[current]
@@ -431,9 +433,13 @@ class UI_Element_Utils:
                 curnode['fn'](self, *args, **kwargs)
             redirtied = [d for d in self._dirty_properties if d in done]
             if redirtied:
-                profiler.add_note('restarting')
-                working = set(UI_Element_Utils._cleaning_graph_roots)
-                done = set()
+                if len(restarts) < 50:
+                    profiler.add_note('restarting')
+                    working = set(UI_Element_Utils._cleaning_graph_roots)
+                    done = set()
+                    restarts.append((curnode, self._dirty_properties))
+                else:
+                    return
             else:
                 working.update(curnode['children'])
                 done.add(current)
@@ -1231,6 +1237,7 @@ class UI_Element_Properties:
             self._value = v
             self._value_change()
     def _value_change(self):
+        if not self.is_visible: return
         self._dispatch_event('on_input')
         self._dirty('Changing value can affect style and content')
         #self.dirty_styling()
@@ -1436,9 +1443,10 @@ class UI_Element_Dirtiness:
         for child in self._children_all: child.clean(depth=depth+1)
         self._call_postclean()
         if self.is_dirty:
-            print('WARNING: UI element is still dirty after cleaning!')
-            print('  UI:', self)
-            print('  Properties:', self._dirty_properties)
+            # print('WARNING: UI element is still dirty after cleaning!')
+            # print('  UI:', self)
+            # print('  Properties:', self._dirty_properties)
+            pass
     def clean(self, *args, **kwargs): self._clean(*args, **kwargs)
 
 
@@ -1761,9 +1769,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     def _compute_style(self):
         '''
         rebuilds self._selector and computes the stylesheet, propagating computation to children
-        '''
 
-        if self.record_multicall('_compute_style'): return
+        IMPORTANT: as current written, this function needs to be able to be run multiple times!
+                   DO NOT PREVENT THIS, otherwise infinite loop bugs will occur!
+        '''
 
         if self._defer_clean: return
         if 'style' not in self._dirty_properties:
@@ -1927,6 +1936,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     @profiler.function
     def _compute_content(self):
         if self._defer_clean:
+            # print('_compute_content: cleaning deferred!')
             return
         if not self.is_visible:
             self._dirty_properties.discard('content')
@@ -1954,7 +1964,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self._new_content = True
 
         content_after  = self._computed_styles_after.get('content', None)  if self._computed_styles_after  else None
-        if content_after:
+        if content_after is not None:
             # TODO: cache this!!
             self._child_after = UI_Element(tagName=self._tagName, innerText=content_after, pseudoelement='after', _parent=self)
             self._child_after._clean()
@@ -2131,7 +2141,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     @UI_Element_Utils.add_cleaning_callback('blocks', {'size', 'renderbuf'})
     @profiler.function
     def _compute_blocks(self):
-        # split up all children into layout blocks
+        '''
+        split up all children into layout blocks
+
+        IMPORTANT: as current written, this function needs to be able to be run multiple times!
+                   DO NOT PREVENT THIS, otherwise infinite loop bugs will occur!
+        '''
 
         if self._defer_clean:
             return
@@ -2142,8 +2157,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             for e in self._dirty_callbacks.get('blocks', []): e._compute_blocks()
             self._dirty_callbacks['blocks'] = set()
             return
-
-        if self.record_multicall('_compute_blocks'): return
 
         self._clean_debugging['blocks'] = time.time()
 
@@ -2248,29 +2261,31 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
     @profiler.function
     def _layout(self, **kwargs):
-        # layout each block into lines.  if a content box of child element is too wide to fit in line and
-        # child is not only element on the current line, then end current line, start a new line, relayout the child.
-        # this function does not set the final position and size for element.
+        '''
+        layout each block into lines.  if a content box of child element is too wide to fit in line and
+        child is not only element on the current line, then end current line, start a new line, relayout the child.
+        this function does not set the final position and size for element.
 
-        # through this function, we are calculating and committing to a certain width and height
-        # although the parent element might give us something different.  if we end up with a
-        # different width and height in self.position() below, we will need to improvise by
-        # adjusting margin (if bigger) or using scrolling (if smaller)
+        through this function, we are calculating and committing to a certain width and height
+        although the parent element might give us something different.  if we end up with a
+        different width and height in self.position() below, we will need to improvise by
+        adjusting margin (if bigger) or using scrolling (if smaller)
 
-        # TODO: allow for horizontal growth rather than biasing for vertical
-        # TODO: handle other types of layouts (ex: table, flex)
-        # TODO: allow for different line alignments (top for now; bottom, baseline)
-        # TODO: percent_of (style width, height, etc.) could be of last non-static element or document
-        # TODO: position based on bottom-right,etc.
+        TODO: allow for horizontal growth rather than biasing for vertical
+        TODO: handle other types of layouts (ex: table, flex)
+        TODO: allow for different line alignments (top for now; bottom, baseline)
+        TODO: percent_of (style width, height, etc.) could be of last non-static element or document
+        TODO: position based on bottom-right,etc.
 
-        # NOTE: parent ultimately controls layout and viewing area of child, but uses this layout function to "ask"
-        #       child how much space it would like
+        NOTE: parent ultimately controls layout and viewing area of child, but uses this layout function to "ask"
+              child how much space it would like
 
-        # given size might by inf. given can be ignored due to style. constraints applied at end.
-        # positioning (with definitive size) should happen
-        
-        # IMPORTANT: as current written, this function needs to be able to be run multiple times!
-        #            DO NOT PREVENT THIS, otherwise layout bugs will occur!
+        given size might by inf. given can be ignored due to style. constraints applied at end.
+        positioning (with definitive size) should happen
+
+        IMPORTANT: as current written, this function needs to be able to be run multiple times!
+                   DO NOT PREVENT THIS, otherwise layout bugs will occur!
+        '''
 
         if not self.is_visible:
             return
