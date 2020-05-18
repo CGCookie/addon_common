@@ -1168,19 +1168,12 @@ class UI_Element_Properties:
     @property
     def is_visible(self):
         # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
-        if self._is_visible is None:
-            v = self._computed_styles.get('display', 'auto') != 'none'
-        else:
-            v = self._is_visible
-        return v and (self._parent.is_visible if self._parent else True)
+        return self.get_is_visible() and (self._parent.is_visible if self._parent else True)
     @is_visible.setter
     def is_visible(self, v):
         if self._is_visible == v: return
         self._is_visible = v
-        # self._dirty('changing visibility can affect style', 'style', children=True)
         self._dirty('changing visibility can affect everything', parent=True, children=True)
-        #self._dirty_styling()
-        #self._dirty_flow()
 
     # self.get_is_visible() is same as self.is_visible() except it doesn't check parent
     def get_is_visible(self):
@@ -1892,14 +1885,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                     if self._child_after: self._child_after._compute_styles()
 
         with profiler.code('style.hashing for cache'):
+            # style changes => content changes
             style_content_hash = Hasher(
                 self.is_visible,
+                self.src,                       # image is loaded in compute_content
                 self.innerText,
-                self._src_str,
-                self._fontid, self._fontsize, self._fontcolor,
+                self._fontid, self._fontsize,
                 self._whitespace,
-                self._computed_styles.get('background-image', None),
-                self._computed_styles.get('background-color', None),
                 self._computed_styles_before.get('content', None) if self._computed_styles_before else None,
                 self._computed_styles_after.get('content',  None) if self._computed_styles_after  else None,
             )
@@ -1910,6 +1902,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self._innerTextWrapped = None
                 self._style_content_hash = style_content_hash
 
+            # style changes => size changes
             style_size_hash = Hasher(
                 self._fontid, self._fontsize, self._whitespace,
                 {k:sc[k] for k in [
@@ -1926,6 +1919,16 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self._dirty_flow()
                 self._innerTextWrapped = None
                 self._style_size_hash = style_size_hash
+
+            # style changes => render changes
+            style_render_hash = Hasher(
+                self._fontcolor,
+                self._computed_styles.get('background-color', None),
+                self._computed_styles.get('border-color', None),
+            )
+            if style_render_hash != getattr(self, '_style_render_hash', None):
+                self._dirty('style changed renderbuf', 'renderbuf')
+                self._style_render_hash = style_render_hash
 
         self._dirty_properties.discard('style')
         self._dirty_callbacks['style'] = set()

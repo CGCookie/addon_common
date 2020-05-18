@@ -81,6 +81,7 @@ class CookieCutter_UI:
         self._cc_blenderui_init()
         self.drawcallbacks.init(self)
         self._ignore_ui_events = False
+        self._hover_ui = False
         tag_redraw_all('CC ui_init', only_tag=False)
 
     @property
@@ -126,8 +127,8 @@ class CookieCutter_UI:
         self.drawing.update_dpi()
         if self._ignore_ui_events: return False
         ret = self.document.update(self.context, self.event)
-        if ret and 'hover' in ret: return True
-        return False
+        self._hover_ui = ret and 'hover' in ret
+        return self._hover_ui
 
     def _cc_ui_end(self):
         self._cc_blenderui_end()
