@@ -30,7 +30,7 @@ from ..common.blender import bversion, tag_redraw_all
 from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger
 from ..common.drawing import Drawing, DrawCallbacks, ScissorStack
-from ..common.ui_core import UI_Document
+from ..common.ui_core import UI_Document, preload_image_png
 
 
 if bversion() >= "2.80":
@@ -73,6 +73,10 @@ class CookieCutter_UI:
     PreDraw = drawcallbacks.wrapper_pre
 
     def _cc_ui_init(self):
+        # preload images
+        preload_image_png(
+            'checkmark.png', 'close.png', 'collapse_close.png', 'collapse_open.png', 'radio.png'
+        )
         self.document = Globals.ui_document # UI_Document(self.context)
         self.document.init(self.context)
         self.document.add_exception_callback(lambda e: self._handle_exception(e, 'handle exception caught by UI'))

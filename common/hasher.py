@@ -23,7 +23,7 @@ import time
 from hashlib import md5
 
 import bpy
-from bmesh.types import BMesh, BMVert, BMEdge, BMFace
+from bmesh.types import BMesh
 from mathutils import Vector, Matrix
 
 from .maths import (

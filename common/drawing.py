@@ -525,7 +525,7 @@ class Drawing:
     @blender_version_wrapper('<', '2.80')
     def glCheckError(title):
         err = bgl.glGetError()
-        if err == bgl.GL_NO_ERROR: return
+        if err == bgl.GL_NO_ERROR: return False
 
         derrs = {
             bgl.GL_INVALID_ENUM: 'invalid enum',
@@ -541,11 +541,12 @@ class Drawing:
         else:
             print('ERROR (%s): code %d' % (title, err))
         traceback.print_stack()
+        return True
     @staticmethod
     @blender_version_wrapper('>=', '2.80')
     def glCheckError(title):
         err = bgl.glGetError()
-        if err == bgl.GL_NO_ERROR: return
+        if err == bgl.GL_NO_ERROR: return False
 
         derrs = {
             bgl.GL_INVALID_ENUM: 'invalid enum',
@@ -559,6 +560,7 @@ class Drawing:
         else:
             print('ERROR (%s): code %d' % (title, err))
         traceback.print_stack()
+        return True
 
     def Point2D_to_Ray(self, p2d):
         o = Point(region_2d_to_origin_3d(self.rgn, self.r3d, p2d))
@@ -1121,6 +1123,7 @@ class FrameBuffer:
         other._is_freed = True
 
     def _create(self, width, height):
+        Drawing.glCheckError('FrameBuffer._create: start')
         self._width = max(1, int(width))
         self._height = max(1, int(height))
         # print('Creating FrameBuffer of size %dx%d (%d)' % (self._width, self._height, len(FrameBuffer._all_fbs)))
@@ -1133,23 +1136,28 @@ class FrameBuffer:
         self._cur_viewport = bgl.Buffer(bgl.GL_INT, 4)
         self._cur_projection = gpu.matrix.get_projection_matrix()
 
+        # Drawing.glCheckError('FrameBuffer._create: gen render buf, tex')
         bgl.glGenRenderbuffers(1, self._buf_depth)
         bgl.glGenTextures(1, self._buf_color)
         self._config_textures()
 
+        # Drawing.glCheckError('FrameBuffer._create: gen fb')
         bgl.glGenFramebuffers(1, self._fbo)
         # IMPORTANT: do NOT clear color/depth yet, because color and depth buffers are not attached!
         self.bind(set_viewport=False, set_projection=False, clear_color=False, clear_depth=False)
+        # Drawing.glCheckError('FrameBuffer._create: setup fb')
         bgl.glFramebufferRenderbuffer(bgl.GL_FRAMEBUFFER, bgl.GL_DEPTH_ATTACHMENT,bgl.GL_RENDERBUFFER, self._buf_depth[0])
         bgl.glFramebufferTexture(bgl.GL_FRAMEBUFFER, bgl.GL_COLOR_ATTACHMENT0, self._buf_color[0], 0)
         bgl.glDrawBuffers(1, bgl.Buffer(bgl.GL_INT, 1, [bgl.GL_COLOR_ATTACHMENT0]))
+        # Drawing.glCheckError('FrameBuffer._create: check status')
         status = bgl.glCheckFramebufferStatus(bgl.GL_FRAMEBUFFER)
         if status != bgl.GL_FRAMEBUFFER_COMPLETE:
             print("Framebuffer Invalid", status)
             self._is_error = True
         bgl.glClear(bgl.GL_COLOR_BUFFER_BIT | bgl.GL_DEPTH_BUFFER_BIT)
+        # Drawing.glCheckError('FrameBuffer._create: unbind')
         self.unbind(unset_viewport=False, unset_projection=False)
-        Drawing.glCheckError('Done creating FrameBuffer')
+        Drawing.glCheckError('FrameBuffer._create: done')
 
     def __del__(self):
         if self not in FrameBuffer._all_fbs: return
@@ -1219,11 +1227,15 @@ class FrameBuffer:
         assert self._is_bound, 'Cannot unbind a unbounded FrameBuffer'
         assert not self._is_error, 'Cannot unbind a FrameBuffer with error'
         assert not self._is_freed, 'Cannot unbind a freed FrameBuffer'
+        # Drawing.glCheckError('FrameBuffer.unbind: unsetting projection, viewport')
         if unset_projection: gpu.matrix.load_projection_matrix(self._cur_projection)
         if unset_viewport: bgl.glViewport(*self._cur_viewport)
+        # Drawing.glCheckError('FrameBuffer.unbind: binding to prev')
         bgl.glBindFramebuffer(bgl.GL_FRAMEBUFFER, self._cur_fbo[0])
+        # Drawing.glCheckError('FrameBuffer.unbind: popping scissorstack')
         ScissorStack.pop()
         self._is_bound = False
+        # Drawing.glCheckError('FrameBuffer.unbind: done')
 
     @contextlib.contextmanager
     def bind_unbind(self, set_viewport=True, set_projection=True, clear_color=True, clear_depth=True):

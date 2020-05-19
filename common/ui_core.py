@@ -161,6 +161,9 @@ def load_image_png(fn):
         load_image_png._cache[fn] = img
     return load_image_png._cache[fn]
 
+def preload_image_png(*fns):
+    for fn in fns: load_image_png(fn)
+
 @add_cache('_cache', {})
 def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR):
     if fn_image not in load_texture._cache:
@@ -2898,10 +2901,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._draw_dirty_style = 0
 
     def draw(self):
+        # Globals.drawing.glCheckError('UI_Element.draw: start')
         bgl.glBlendFunc(bgl.GL_ONE, bgl.GL_ONE_MINUS_SRC_ALPHA)
+        # Globals.drawing.glCheckError('UI_Element.draw: setup ltwh')
         self._setup_ltwh()
+        # Globals.drawing.glCheckError('UI_Element.draw: cache')
         self._cache()
+        # Globals.drawing.glCheckError('UI_Element.draw: draw')
         self._draw()
+        # Globals.drawing.glCheckError('UI_Element.draw: done')
 
     def _draw_vscroll(self, depth=0):
         if not self.is_visible: return
@@ -3605,11 +3613,13 @@ class UI_Document(UI_Document_FSM):
     @profiler.function
     def draw(self, context):
         if self._area != context.area: return
+        Globals.drawing.glCheckError('UI_Document.draw: start')
 
         time_start = time.time()
 
         self.force_clean(context)
 
+        Globals.drawing.glCheckError('UI_Document.draw: options')
         ScissorStack.start(context)
         bgl.glClearColor(0, 0, 0, 0)
         bgl.glBlendColor(0, 0, 0, 0)
@@ -3617,6 +3627,7 @@ class UI_Document(UI_Document_FSM):
         bgl.glEnable(bgl.GL_BLEND)
         bgl.glEnable(bgl.GL_SCISSOR_TEST)
         bgl.glDisable(bgl.GL_DEPTH_TEST)
+        Globals.drawing.glCheckError('UI_Document.draw: draw')
         self._body.draw()
         ScissorStack.end()
 
@@ -3627,6 +3638,7 @@ class UI_Document(UI_Document_FSM):
             # print('~%f fps  (%f / %d = %f)' % (self._draw_fps, self._draw_time, self._draw_count, self._draw_time / self._draw_count))
             self._draw_count = 0
             self._draw_time = 0
+        Globals.drawing.glCheckError('UI_Document.draw: done')
 
 ui_document = Globals.set(UI_Document())
 
