@@ -50,12 +50,13 @@ from mathutils import Vector, Matrix, Quaternion
 from mathutils.bvhtree import BVHTree
 
 from .debug import dprint
+from .drawing import Drawing
 from .shaders import Shader
 from .utils import shorten_floats
 from .maths import Point, Direction, Frame, XForm
 from .maths import invert_matrix, matrix_normal
 from .profiler import profiler
-from .decorators import blender_version_wrapper
+from .decorators import blender_version_wrapper, add_cache
 
 
 
@@ -72,32 +73,6 @@ from .decorators import blender_version_wrapper
 print('(bmesh_render) GLSL Version:', bgl.glGetString(bgl.GL_SHADING_LANGUAGE_VERSION))
 
 
-
-def glCheckError(title):
-    if not glCheckError.CHECK_ERROR: return
-    err = bgl.glGetError()
-    if err == bgl.GL_NO_ERROR: return
-    print('ERROR (%s): %s' % (title, glCheckError.ERROR_MAP.get(err, 'code %d' % err)))
-    traceback.print_stack()
-glCheckError.CHECK_ERROR = True
-glCheckError.ERROR_MAP = {
-    getattr(bgl, k): s
-    for (k,s) in [
-        # https://www.khronos.org/opengl/wiki/OpenGL_Error#Meaning_of_errors
-        ('GL_INVALID_ENUM', 'invalid enum'),
-        ('GL_INVALID_VALUE', 'invalid value'),
-        ('GL_INVALID_OPERATION', 'invalid operation'),
-        ('GL_STACK_OVERFLOW', 'stack overflow'),    # does not exist in b3d 2.8x for OSX??
-        ('GL_STACK_UNDERFLOW', 'stack underflow'),  # does not exist in b3d 2.8x for OSX??
-        ('GL_OUT_OF_MEMORY', 'out of memory'),
-        ('GL_INVALID_FRAMEBUFFER_OPERATION', 'invalid framebuffer operation'),
-        ('GL_CONTEXT_LOST', 'context lost'),
-        ('GL_TABLE_TOO_LARGE', 'table too large'),  # deprecated in OpenGL 3.0, removed in 3.1 core and above
-    ]
-    if hasattr(bgl, k)
-}
-
-
 @blender_version_wrapper('<', '2.80')
 def glSetDefaultOptions():
     bgl.glDisable(bgl.GL_LIGHTING)
@@ -109,11 +84,11 @@ def glSetDefaultOptions():
     bgl.glHint(bgl.GL_LINE_SMOOTH_HINT, bgl.GL_NICEST)
 @blender_version_wrapper('>=', '2.80')
 def glSetDefaultOptions():
-    bgl.glEnable(bgl.GL_MULTISAMPLE)
+    # bgl.glEnable(bgl.GL_MULTISAMPLE)
     bgl.glEnable(bgl.GL_BLEND)
     bgl.glEnable(bgl.GL_DEPTH_TEST)
-    bgl.glEnable(bgl.GL_LINE_SMOOTH)
-    bgl.glHint(bgl.GL_LINE_SMOOTH_HINT, bgl.GL_NICEST)
+    # bgl.glEnable(bgl.GL_LINE_SMOOTH)
+    # bgl.glHint(bgl.GL_LINE_SMOOTH_HINT, bgl.GL_NICEST)
 
 @blender_version_wrapper('<', '2.80')
 def glEnableStipple(enable=True):
@@ -150,18 +125,19 @@ def glSetOptions(prefix, opts):
         opt = '%s%s' % (prefix, opt)
         if opt not in opts: return
         cb(opts[opt])
-        glCheckError('setting %s to %s' % (str(opt), str(opts[opt])))
+        Drawing.glCheckError('setting %s to %s' % (str(opt), str(opts[opt])))
     def set_linewidth(v):
         dpi_mult = opts.get('dpi mult', 1.0)
         #bgl.glLineWidth(v*dpi_mult)
-        glCheckError('setting line width to %s' % (str(v*dpi_mult)))
+        Drawing.glCheckError('setting line width to %s' % (str(v*dpi_mult)))
     def set_pointsize(v):
         dpi_mult = opts.get('dpi mult', 1.0)
         bgl.glPointSize(v*dpi_mult)
-        glCheckError('setting point size to %s' % (str(v*dpi_mult)))
+        Drawing.glCheckError('setting point size to %s' % (str(v*dpi_mult)))
     def set_stipple(v):
         glEnableStipple(v)
-        glCheckError('setting stipple to %s' % (str(v)))
+        Drawing.glCheckError('setting stipple to %s' % (str(v)))
+    Drawing.glCheckError('about to set options')
     set_if_set('offset',         lambda v: bmeshShader.assign('offset', v))
     set_if_set('dotoffset',      lambda v: bmeshShader.assign('dotoffset', v))
     set_if_set('color',          lambda v: bmeshShader.assign('color', v))
@@ -273,8 +249,9 @@ class BufferedRender_Batch:
             opt = '%s%s' % (prefix, opt)
             if opt not in opts: return
             cb(opts[opt])
-            glCheckError('setting %s to %s' % (str(opt), str(opts[opt])))
+            Drawing.glCheckError('setting %s to %s' % (str(opt), str(opts[opt])))
 
+        Drawing.glCheckError('BufferedRender_Batch.set_options: start')
         dpi_mult = opts.get('dpi mult', 1.0)
         set_if_set('color',          lambda v: self.uniform_float('color', v))
         set_if_set('color selected', lambda v: self.uniform_float('color_selected', v))
@@ -289,7 +266,7 @@ class BufferedRender_Batch:
     def _draw(self, sx, sy, sz):
         self.uniform_float('vert_scale', (sx, sy, sz))
         self.batch.draw(self.shader)
-        #glCheckError('_draw: glDrawArrays (%d)' % self.count)
+        # Drawing.glCheckError('_draw: glDrawArrays (%d)' % self.count)
 
     def is_quarantined(self, k):
         return k in self._quarantine[self.shader]

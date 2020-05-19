@@ -193,6 +193,9 @@ class Drawing:
     _dpi_mult = 1
     _custom_dpi_mult = 1
     _prefs = get_preferences()
+    _error_check = True
+    _error_count = 0
+    _error_limit = 10 # after this many check errors, no more will be reported to console
 
     @staticmethod
     def get_custom_dpi_mult():
@@ -527,40 +530,53 @@ class Drawing:
         err = bgl.glGetError()
         if err == bgl.GL_NO_ERROR: return False
 
-        derrs = {
-            bgl.GL_INVALID_ENUM: 'invalid enum',
-            bgl.GL_INVALID_VALUE: 'invalid value',
-            bgl.GL_INVALID_OPERATION: 'invalid operation',
-            bgl.GL_STACK_OVERFLOW: 'stack overflow',
-            bgl.GL_STACK_UNDERFLOW: 'stack underflow',
-            bgl.GL_OUT_OF_MEMORY: 'out of memory',
-            bgl.GL_INVALID_FRAMEBUFFER_OPERATION: 'invalid framebuffer operation',
-        }
-        if err in derrs:
-            print('ERROR (%s): %s' % (title, derrs[err]))
-        else:
-            print('ERROR (%s): code %d' % (title, err))
-        traceback.print_stack()
+        Drawing._error_count += 1
+        if Drawing._error_count <= Drawing._error_limit:
+            derrs = {
+                bgl.GL_INVALID_ENUM: 'invalid enum',
+                bgl.GL_INVALID_VALUE: 'invalid value',
+                bgl.GL_INVALID_OPERATION: 'invalid operation',
+                bgl.GL_STACK_OVERFLOW: 'stack overflow',
+                bgl.GL_STACK_UNDERFLOW: 'stack underflow',
+                bgl.GL_OUT_OF_MEMORY: 'out of memory',
+                bgl.GL_INVALID_FRAMEBUFFER_OPERATION: 'invalid framebuffer operation',
+            }
+            if err in derrs:
+                print('ERROR %d (%s): %s' % (Drawing._error_count, title, derrs[err]))
+            else:
+                print('ERROR %d (%s): code %d' % (Drawing._error_count, title, err))
+            traceback.print_stack()
+
         return True
     @staticmethod
     @blender_version_wrapper('>=', '2.80')
     def glCheckError(title):
+        if not Drawing._error_check: return
         err = bgl.glGetError()
         if err == bgl.GL_NO_ERROR: return False
-
-        derrs = {
-            bgl.GL_INVALID_ENUM: 'invalid enum',
-            bgl.GL_INVALID_VALUE: 'invalid value',
-            bgl.GL_INVALID_OPERATION: 'invalid operation',
-            bgl.GL_OUT_OF_MEMORY: 'out of memory',
-            bgl.GL_INVALID_FRAMEBUFFER_OPERATION: 'invalid framebuffer operation',
-        }
-        if err in derrs:
-            print('ERROR (%s): %s' % (title, derrs[err]))
-        else:
-            print('ERROR (%s): code %d' % (title, err))
-        traceback.print_stack()
+        Drawing._error_count += 1
+        if Drawing._error_count <= Drawing._error_limit:
+            error_map = {
+                getattr(bgl, k): s
+                for (k,s) in [
+                    # https://www.khronos.org/opengl/wiki/OpenGL_Error#Meaning_of_errors
+                    ('GL_INVALID_ENUM', 'invalid enum'),
+                    ('GL_INVALID_VALUE', 'invalid value'),
+                    ('GL_INVALID_OPERATION', 'invalid operation'),
+                    ('GL_STACK_OVERFLOW', 'stack overflow'),    # does not exist in b3d 2.8x for OSX??
+                    ('GL_STACK_UNDERFLOW', 'stack underflow'),  # does not exist in b3d 2.8x for OSX??
+                    ('GL_OUT_OF_MEMORY', 'out of memory'),
+                    ('GL_INVALID_FRAMEBUFFER_OPERATION', 'invalid framebuffer operation'),
+                    ('GL_CONTEXT_LOST', 'context lost'),
+                    ('GL_TABLE_TOO_LARGE', 'table too large'),  # deprecated in OpenGL 3.0, removed in 3.1 core and above
+                ]
+                if hasattr(bgl, k)
+            }
+            print('ERROR %d/%d (%s): %s' % (Drawing._error_count, Drawing._error_limit, title, error_map.get(err, 'code %d' % err)))
+            traceback.print_stack()
         return True
+
+
 
     def Point2D_to_Ray(self, p2d):
         o = Point(region_2d_to_origin_3d(self.rgn, self.r3d, p2d))

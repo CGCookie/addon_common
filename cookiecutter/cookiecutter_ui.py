@@ -110,7 +110,7 @@ class CookieCutter_UI:
                 ScissorStack.end(force=True)
         def postpixel():
             # print('***** postpixel')
-            bgl.glEnable(bgl.GL_MULTISAMPLE)
+            # bgl.glEnable(bgl.GL_MULTISAMPLE)
             bgl.glEnable(bgl.GL_BLEND)
             try: self.drawcallbacks.post2d()
             except Exception as e:
