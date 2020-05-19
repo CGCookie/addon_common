@@ -38,7 +38,6 @@ import ctypes
 import random
 import traceback
 
-import bmesh
 import bgl
 import bpy
 from bpy_extras.view3d_utils import (

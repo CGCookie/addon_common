@@ -27,7 +27,6 @@ import inspect
 import importlib
 
 import bpy
-from bmesh.types import BMesh, BMVert, BMEdge, BMFace
 from mathutils import Vector, Matrix
 
 from .blender import get_preferences
