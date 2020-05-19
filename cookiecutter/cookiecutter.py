@@ -17,6 +17,7 @@ https://github.com/CGCookie/retopoflow
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+import sys
 import math
 import time
 
@@ -127,6 +128,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
                 self._handle_exception(e, 'call end() with %s' % self._done)
             return {'FINISHED'} if self._done=='finish' else {'CANCELLED'}
 
+        perform_redraw_all(only_area=context.area)
+
         ret = None
 
         self._cc_actions_update()
@@ -150,8 +153,6 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
         try: self.update()
         except Exception as e: self._handle_exception(e, 'call update')
-
-        perform_redraw_all()
 
         if ret: return ret
 

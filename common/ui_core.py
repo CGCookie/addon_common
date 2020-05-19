@@ -21,6 +21,7 @@ Created by Jonathan Denning, Jonathan Williamson
 
 import os
 import re
+import sys
 import math
 import time
 import random
@@ -3570,6 +3571,8 @@ class UI_Document(UI_Document_FSM):
         if not self._focus: return 'main'
 
     def force_clean(self, context):
+        time_start = time.time()
+
         w,h = context.region.width, context.region.height
         sz = Size2D(width=w, max_width=w, height=h, max_height=h)
 

@@ -251,6 +251,10 @@ default_styling = {
 
 # (?P<type>[^\n .#:[=\]]+)(?:(?:\.(?P<class>[^\n .#:[=\]]+))|(?:::(?P<pseudoelement>[^\n .#:[=\]]+))|(?::(?P<pseudoclass>[^\n .#:[=\]]+))|(?:#(?P<id>[^\n .#:[=\]]+))|(?:\[(?P<akey>[^\n .#:[=\]]+)(?:=\"(?P<aval>[^\"]+)\")?\]))*
 # (?:(?P<type>[ .#:[]+)(?P<name>[^\n .#:[=\]]+)(?:=\"(?P<val>[^\"]+)\")?]?)
+# (?:(?P<type>[.#:[]+)?(?P<name>[^\n .#:[=\]]+)(?:=\"(?P<val>[^\"]+)\")?]?)
+
+selector_splitter = re.compile(r"(?:(?P<type>[.#:[]+)?(?P<name>[^\n .#:[=\]]+)(?:=\"(?P<val>[^\"]+)\")?]?)")
+
 
 class UI_Style_Declaration:
     '''
@@ -380,71 +384,80 @@ class UI_Style_RuleSet:
     @staticmethod
     @add_cache('_cache', {})
     def _split_selector(sel):
-        # TODO: rewrite to use regex iterator only
+        # (?:(?P<type>[.#:[]+)?(?P<name>[^\n .#:[=\]]+)(?:=\"(?P<val>[^\"]+)\")?]?)
         cache = UI_Style_RuleSet._split_selector._cache
         osel = str(sel)
         if osel not in cache:
             p = {'type':'', 'class':[], 'id':'', 'pseudoelement':[], 'pseudoclass':[], 'attribs':set(), 'attribvals':{}}
-            transition = {'.':'class', '#':'id', '::':'pseudoelement', ':':'pseudoclass'}
-            for attrib in re.finditer(token_attribute, sel):
-                k,v = attrib.group('key'),attrib.group('val')
-                if v is None: p['attribs'].add(k)
-                else: p['attribvals'][k] = v
-            sel = re.sub(token_attribute, '', sel)
-            sel = re.sub(r'([.]|#|::|:|\[|\])', r' \1 ', sel).split(' ')
-            v,m = '','type'
-            for c in sel:
-                if c in {'.',':','::','#'}:
-                    if type(p[m]) is list: p[m].append(v)
-                    else: p[m] = v
-                    v,m = '',transition[c]
-                else:
-                    v += c
-            if type(p[m]) is list: p[m].append(v)
-            else: p[m] = v
+            for part in selector_splitter.finditer(sel):
+                t,n,v = part.group('type'),part.group('name'),part.group('val')
+                if t is None: p['type'] = n
+                elif t == '.': p['class'].append(n)
+                elif t == '#': p['id'] = n
+                elif t == ':': p['pseudoclass'].append(n)
+                elif t == '::': p['pseudoelement'].append(n)
+                elif t == '[':
+                    if v is None: p['attribs'].add(n)
+                    else: p['attribvals'][n] = v
+                else: assert False, 'Unhandled selector type "%s" (%s, %s) in "%s"' % (str(t), str(n), str(v), str(sel))
+            p['names'] = {p['type'], p['id']} | set(p['class']) | set(p['pseudoelement']) | set(p['pseudoclass'])
+            p['names'] |= p['attribs'] | set(p['attribvals'].keys()) # | set(p['attribvals'].values())
             cache[osel] = p
         return cache[osel]
 
     @staticmethod
+    def _match_selector_approx(parts_elem, parts_style):
+        names_elem = {n for p in parts_elem for n in p['names']} - {'*', '>'}
+        names_style = {n for p in parts_style for n in p['names']} - {'*', '>'}
+        return not (names_style - names_elem)
+
+    @staticmethod
+    def _match_selector_matches(ap, bp):
+        # NOTE: ap['type'] == '' with UI_Elements that contain the innertext
+        # TODO: consider giving this a special type, ex: **text**
+        return all([
+            ((bp['type'] == '*' and ap['type'] != '') or ap['type'] == bp['type']),
+            (bp['id'] == '' or ap['id'] == bp['id']),
+            all(c in ap['class'] for c in bp['class']),
+            all(c in ap['pseudoelement'] for c in bp['pseudoelement']),
+            all(c in ap['pseudoclass'] for c in bp['pseudoclass']),
+            all(key in ap['attribs'] for key in bp['attribs']),
+            all(key in ap['attribvals'] and ap['attribvals'][key] == val for (key,val) in bp['attribvals'].items()),
+        ])
+
+    @staticmethod
     @add_cache('_cache', {})
-    def _match_selector(sel_elem, sel_style, cont):
+    @profiler.function
+    def _match_selector(sel_e, pts_e, sel_l, pts_s, cont):
         # ex:
-        #   sel_elem  = ['body:hover', 'button:hover']
-        #   sel_style = ['button:hover']
-        if not sel_style: return True       # nothing left to match (potential extra in element)
-        if not sel_elem: return False       # nothing left to match, but still have extra in style
+        #   sel_e  = ['body:hover', 'button:hover']
+        #   sel_l = ['button:hover']
+        if not sel_l: return True       # nothing left to match (potential extra in element)
+        if not sel_e: return False       # nothing left to match, but still have extra in style
         msel = UI_Style_RuleSet._match_selector
+        matches = UI_Style_RuleSet._match_selector_matches
         cache = msel._cache
-        key = '%s %s %s' % (str(sel_elem), str(sel_style), str(cont))
+        key = (tuple(sel_e), tuple(sel_l), cont)
         if key not in cache:
-            a0,b0 = sel_elem[-1],sel_style[-1]
-            if b0 == '>':
-                # parent selector in style MUST match (> means child, not descendant)
-                return msel(sel_elem, sel_style[:-1], False)
-            ap = UI_Style_RuleSet._split_selector(a0)
-            bp = UI_Style_RuleSet._split_selector(b0)
-            def matches():
-                # NOTE: ap['type'] == '' with UI_Elements that contain the innertext
-                # TODO: consider giving this a special type, ex: **text**
-                return all([
-                    ((bp['type'] == '*' and ap['type'] != '') or ap['type'] == bp['type']),
-                    (bp['id'] == '' or ap['id'] == bp['id']),
-                    all(c in ap['class'] for c in bp['class']),
-                    all(c in ap['pseudoelement'] for c in bp['pseudoelement']),
-                    all(c in ap['pseudoclass'] for c in bp['pseudoclass']),
-                    all(key in ap['attribs'] for key in bp['attribs']),
-                    all(key in ap['attribvals'] and ap['attribvals'][key] == val for (key,val) in bp['attribvals'].items()),
-                ])
-            if matches() and msel(sel_elem[:-1], sel_style[:-1], True): r = True
-            elif not cont: r = False
-            else: r = msel(sel_elem[:-1], sel_style, True)
+            if not UI_Style_RuleSet._match_selector_approx(pts_e, pts_s):
+                r = False
+            else:
+                if sel_l[-1] == '>':
+                    # parent selector in style MUST match (> means child, not descendant)
+                    r = msel(sel_e, pts_e, sel_l[:-1], pts_s[:-1], False)
+                else:
+                    if matches(pts_e[-1], pts_s[-1]) and msel(sel_e[:-1], pts_e[:-1], sel_l[:-1], pts_s[:-1], True): r = True
+                    elif not cont: r = False
+                    else: r = msel(sel_e[:-1], pts_e[:-1], sel_l, pts_s, True)
             cache[key] = r
         return cache[key]
 
     @staticmethod
     def match_selector(sel_elem, sel_style):
         # must match the final element, so pass False for cont
-        return UI_Style_RuleSet._match_selector(sel_elem, sel_style, False)
+        split = UI_Style_RuleSet._split_selector
+        parts_elem, parts_style = [split(p) for p in sel_elem], [split(p) for p in sel_style]
+        return UI_Style_RuleSet._match_selector(sel_elem, parts_elem, sel_style, parts_style, False)
 
     @profiler.function
     def match(self, selector):

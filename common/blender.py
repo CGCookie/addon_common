@@ -242,16 +242,19 @@ def tag_redraw_all(reason, only_tag=True):
     tagged_redraw_all = True
     tag_reasons.add(reason)
     if not only_tag: perform_redraw_all()
-def perform_redraw_all():
+def perform_redraw_all(only_area=None):
     global tagged_redraw_all, tag_reasons
     if not tagged_redraw_all: return
     # print('Redrawing:', tag_reasons)
     tag_reasons.clear()
     tagged_redraw_all = False
-    for wm in bpy.data.window_managers:
-        for win in wm.windows:
-            for ar in win.screen.areas:
-                ar.tag_redraw()
+    if only_area:
+        only_area.tag_redraw()
+    else:
+        for wm in bpy.data.window_managers:
+            for win in wm.windows:
+                for ar in win.screen.areas:
+                    ar.tag_redraw()
 
 
 
