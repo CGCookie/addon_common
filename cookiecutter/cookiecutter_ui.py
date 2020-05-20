@@ -30,7 +30,7 @@ from ..common.blender import bversion, tag_redraw_all
 from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger
 from ..common.drawing import Drawing, DrawCallbacks, ScissorStack
-from ..common.ui_core import UI_Document, preload_image_png
+from ..common.ui_core import UI_Document, preload_image
 
 
 if bversion() >= "2.80":
@@ -74,7 +74,7 @@ class CookieCutter_UI:
 
     def _cc_ui_init(self):
         # preload images
-        preload_image_png(
+        preload_image(
             'checkmark.png', 'close.png', 'collapse_close.png', 'collapse_open.png', 'radio.png'
         )
         self.document = Globals.ui_document # UI_Document(self.context)

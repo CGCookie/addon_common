@@ -60,6 +60,7 @@ from .shaders import Shader
 from .utils import iter_head
 
 from ..ext import png
+from ..ext.apng import APNG
 
 
 '''
@@ -148,26 +149,40 @@ def temp_bglbuffer(*args):
     del buf
 
 
-@add_cache('_cache', {})
-def load_image_png(fn):
-    # important: assuming all images have distinct names!
-    if fn not in load_image_png._cache:
-        # have not seen this image before
-        # note: assuming 4 channels (rgba) per pixel!
-        path = get_image_path(fn)
-        dprint('Loading image "%s" (path=%s)' % (str(fn), str(path)))
-        w,h,d,m = png.Reader(path).asRGBA()
-        img = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
-        load_image_png._cache[fn] = img
-    return load_image_png._cache[fn]
+def load_image_png(path):
+    # note: assuming 4 channels (rgba) per pixel!
+    w,h,d,m = png.Reader(path).asRGBA()
+    img = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
+    return img
 
-def preload_image_png(*fns):
-    for fn in fns: load_image_png(fn)
+def load_image_apng(path):
+    im_apng = APNG.open(path)
+    print(path, im_apng, im_apng.frames, im_apng.num_plays)
+    im,control = im_apng.frames[0]
+    w,h = control.width,control.height
+    img = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
+    return img
+
+@add_cache('_cache', {})
+def load_image(fn):
+    # important: assuming all images have distinct names!
+    if fn not in load_image._cache:
+        # have not seen this image before
+        path = get_image_path(fn)
+        _,ext = os.path.splitext(fn)
+        dprint('Loading image "%s" (path=%s)' % (str(fn), str(path)))
+        if   ext == '.png':  img = load_image_png(path)
+        elif ext == '.apng': img = load_image_apng(path)
+        load_image._cache[fn] = img
+    return load_image._cache[fn]
+
+def preload_image(*fns):
+    for fn in fns: load_image(fn)
 
 @add_cache('_cache', {})
 def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR):
     if fn_image not in load_texture._cache:
-        image = load_image_png(fn_image)
+        image = load_image(fn_image)
         dprint('Buffering texture "%s"' % fn_image)
         height,width,depth = len(image),len(image[0]),len(image[0][0])
         assert depth == 4, 'Expected texture %s to have 4 channels per pixel (RGBA), not %d' % (fn_image, depth)

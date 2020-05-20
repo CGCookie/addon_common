@@ -156,7 +156,7 @@ class Profiler:
         self._clear = True
         self.clear_handler()
 
-    def start(self, text=None, addFile=True, enabled=True, n_backs=1):
+    def _start(self, text=None, addFile=True, enabled=True, n_backs=1):
         # assert not Profiler._broken
         if Profiler._broken:
             print('Profiler broken. Ignoring')
@@ -184,7 +184,7 @@ class Profiler:
         pass
 
     def add_note(self, *args, **kwargs):
-        self.start(*args, n_backs=2, **kwargs).done()
+        self._start(*args, n_backs=2, **kwargs).done()
 
     @contextlib.contextmanager
     def code(self, *args, enabled=True, **kwargs):
@@ -192,7 +192,7 @@ class Profiler:
             yield None
             return
         try:
-            pr = self.start(*args, n_backs=3, **kwargs)  # n_backs=3 for contextlib wrapper
+            pr = self._start(*args, n_backs=3, **kwargs)  # n_backs=3 for contextlib wrapper
             yield pr
             pr.done()
         except Exception as e:
@@ -223,7 +223,7 @@ class Profiler:
             if not Profiler._enabled:
                 return fn(*args, **kwargs)
 
-            pr = self.start(text=text, addFile=False)
+            pr = self._start(text=text, addFile=False)
             ret = None
             try:
                 ret = fn(*args, **kwargs)
@@ -310,7 +310,7 @@ Globals.set(profiler)
 #         self.args = args
 #         self.kwargs = kwargs
 #     def __enter__(self):
-#         self.pr = profiler.start(*self.args, n_backs=2, **self.kwargs)
+#         self.pr = profiler._start(*self.args, n_backs=2, **self.kwargs)
 #     def __exit__(self, exc_type, exc_val, exc_tb):
 #         self.pr.done()
 # profiler.code = CodeProfiler
