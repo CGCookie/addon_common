@@ -462,7 +462,7 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_gl
                         else:
                             assert False, 'Unhandled checkbox parameter key="%s", val="%s" (%s)' % (key,val,param)
                     assert value is not None, 'Unhandled checkbox parameters: expected value (%s)' % (params)
-                    print('CREATING input_checkbox(label="%s", checked=BoundVar("%s", ...)' % (innertext, value))
+                    # print('CREATING input_checkbox(label="%s", checked=BoundVar("%s", ...)' % (innertext, value))
                     container.append_child(input_checkbox(label=innertext, checked=BoundVar(value, f_globals=f_globals, f_locals=f_locals)))
                 else:
                     assert False, 'Unhandled inline markdown type "%s" ("%s") with "%s"' % (str(t), str(m), line)
@@ -471,6 +471,8 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_gl
 
     ui_mdown.defer_dirty_propagation = True
     ui_mdown.clear_children()
+    ui_mdown.scrollToTop(force=True)
+    if ui_mdown.parent: ui_mdown.parent.scrollToTop(force=True)
 
     paras = mdown.split('\n\n')         # split into paragraphs
     for para in paras:
@@ -539,68 +541,8 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_gl
         else:
             assert False, 'Unhandled markdown line type "%s" ("%s") with "%s"' % (str(t), str(m), para)
 
-    ui_mdown.scrollToTop()
     ui_mdown.defer_dirty_propagation = False
 
-
-def set_markdown_old(ui_mdown, mdown):
-    ui_mdown.defer_dirty_propagation = True
-    ui_mdown.clear_children()
-
-    # process message similarly to Markdown
-    mdown = re.sub(r'^\n*', r'', mdown)                 # remove leading \n
-    mdown = re.sub(r'\n*$', r'', mdown)                 # remove trailing \n
-    mdown = re.sub(r'\n\n\n*', r'\n\n', mdown)          # 2+ \n => \n\n
-    paras = mdown.split('\n\n')                         # split into paragraphs
-
-    for p in paras:
-        if p.startswith('# '):
-            # h1 heading!
-            h1text = re.sub(r'# +', r'', p)
-            UI_Element(tagName='h1', innerText=h1text, parent=ui_mdown)
-        elif p.startswith('## '):
-            # h2 heading!
-            h2text = re.sub(r'## +', r'', p)
-            UI_Element(tagName='h2', innerText=h2text, parent=ui_mdown)
-        elif p.startswith('### '):
-            # h3 heading!
-            h3text = re.sub(r'### +', r'', p)
-            UI_Element(tagName='h3', innerText=h3text, parent=ui_mdown)
-        elif p.startswith('- '):
-            # unordered list!
-            ui_ul = UI_Element(tagName='ul', parent=ui_mdown)
-            p = p[2:]
-            for litext in re.split(r'\n- ', p):
-                # litext = re.sub(r'- ', r'', litext)
-                ui_li = UI_Element(tagName='li', parent=ui_ul)
-                UI_Element(tagName='img', src='radio.png', parent=ui_li)
-                UI_Element(tagName='span', innerText=litext, parent=ui_li)
-        elif p.startswith('!['):
-            # image!
-            m = re.match(r'^!\[(?P<caption>.*)\]\((?P<filename>.*)\)$', p)
-            fn = m.group('filename')
-            UI_Element(tagName='img', src=fn, parent=ui_mdown)
-        elif p.startswith('| '):
-            # table
-            data = [l for l in p.split('\n')]
-            data = [re.sub(r'^\| ', r'', l) for l in data]
-            data = [re.sub(r' \|$', r'', l) for l in data]
-            data = [l.split(' | ') for l in data]
-            rows,cols = len(data),len(data[0])
-            # t = container.add(UI_TableContainer(rows, cols))
-            for r in range(rows):
-                for c in range(cols):
-                    if c == 0:
-                        pass
-                        # t.set(r, c, UI_Label(data[r][c]))
-                    else:
-                        pass
-                        # t.set(r, c, UI_WrappedLabel(data[r][c], min_size=(0, 12), max_size=(400, 12000)))
-        else:
-            p = re.sub(r'\n', ' ', p)      # join sentences of paragraph
-            UI_Element(tagName='p', innerText=p, parent=ui_mdown)
-
-    ui_mdown.defer_dirty_propagation = False
 
 def markdown(mdown=None, mdown_path=None, preprocess_fn=None, f_globals=None, f_locals=None, **kwargs):
     if f_globals is None or f_locals is None:
@@ -728,7 +670,7 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
 
     ui_proxy = UI_Proxy(ui_dialog)
     ui_proxy.translate_map('label', 'innerText', ui_label)
-    ui_proxy.map(['children','append_child','delete_child','clear_children','builder', 'getElementById'], ui_inside)
+    ui_proxy.map(['children','append_child','delete_child','clear_children','builder', 'getElementById', 'scrollToTop', 'scrollTop', 'scrollLeft'], ui_inside)
     return ui_proxy
 
 

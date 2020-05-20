@@ -1146,8 +1146,8 @@ class UI_Element_Properties:
             tag_redraw_all("UI_Element scrollTop")
             self._dirty('scrollTop', 'renderbuf')
 
-    def scrollToTop(self):
-        if self._scroll_offset.y != 0:
+    def scrollToTop(self, force=False):
+        if self._scroll_offset.y != 0 or force:
             self._scroll_offset.y = 0
             tag_redraw_all("UI_Element scrollToTop")
             self._dirty('scrollToTop', 'renderbuf')
@@ -3365,7 +3365,6 @@ class UI_Document(UI_Document_FSM):
             else:
                 d = self.wheel_scroll_lines * 8
                 move = Globals.drawing.scale(d) * (-1 if self.actions.pressed({'scroll up'}) else 1)
-                self.actions.unpress()
             self.actions.unpress()
             if self._get_scrollable():
                 self._scroll_element.scrollTop = self._scroll_last.y + move

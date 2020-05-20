@@ -247,7 +247,7 @@ div.mdown {
     border: 1px rgba(0,0,0,0.5);
     padding: 4px 4px 4px 4px;
     /*padding: 4px 4px 16px 4px;*/
-    background: rgba(0,0,0,0.25);
+    background: rgba(48,48,48,0.75);
 }
 
 div.mdown div {
@@ -437,10 +437,10 @@ div.mdown ol > li > span.text {
 /* background-color: hsla(200, 25%, 60%, 0.75); */
 
 div.mdown a {
-    padding: -1px;
+    padding: 0px -1px 0px 0px;
     margin: 0px;
-    background-color: hsla(200, 25%, 25%, 0.75);
-    border: 1px hsla(200, 25%, 25%, 0.75);
+    background-color: transparent; /* hsla(200, 25%, 25%, 0.75); */
+    border: 1px transparent; /* hsla(200, 25%, 25%, 0.75); */
     border-radius: 0px;
     border-bottom-color: rgba(255,255,255,0.5);
     cursor: pointer;
