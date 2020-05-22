@@ -3255,7 +3255,7 @@ class UI_Document(UI_Document_FSM):
             self._under_mouse = self._body.get_under_mouse(self.actions.mouse)
             if self._sticky_element:
                 if self._sticky_element.get_mouse_distance(self.actions.mouse) < self._sticky_dist * self._ui_scale:
-                    if not self._under_mouse.is_descendant_of(self._sticky_element):
+                    if self._under_mouse is None or not self._under_mouse.is_descendant_of(self._sticky_element):
                         self._under_mouse = self._sticky_element
 
         next_message = None

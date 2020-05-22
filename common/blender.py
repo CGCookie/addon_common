@@ -196,7 +196,7 @@ def link_object(o): bpy.context.scene.collection.objects.link(o)
 @blender_version_wrapper('<=','2.79')
 def set_active_object(o): bpy.context.scene.objects.active = o
 @blender_version_wrapper('>=','2.80')
-def set_active_object(o): bpy.context.window.view_layer.objects.active = o
+def set_active_object(o): bpy.context.view_layer.objects.active = o
 
 # use this, because bpy.context might not Screen context!
 # see https://docs.blender.org/api/current/bpy.context.html
@@ -299,14 +299,6 @@ def show_blender_popup(message, title="Message", icon="INFO", wrap=80):
 
 def show_error_message(message, title="Error", wrap=80):
     show_blender_popup(message, title, "ERROR", wrap)
-
-def create_and_show_blender_text(text, name='A Report', hide_header=True, goto_top=True):
-    # create a new textblock for reporting
-    bpy.ops.text.new()                  # create new text block, which is appended to list
-    bpy.data.texts[-1].name = name      # set name, but if another object exists with the
-    name = bpy.data.texts[-1].name      # same name, blender will append .001 (or similar)
-    bpy.data.texts[name].text = text    # set text of text block
-    show_blender_text(name, hide_header=hide_header, goto_top=goto_top)
 
 def show_blender_text(textblock_name, hide_header=True, goto_top=True):
     if textblock_name not in bpy.data.texts:
