@@ -567,6 +567,11 @@ class Actions:
         # print('Actions.unuse', actions, self.now_pressed, keys)
         for k in keys: del self.now_pressed[k]
         # print('unuse', self.just_pressed)
+        self.mousedown = None
+        self.mousedown_left = None
+        self.mousedown_middle = None
+        self.mousedown_right = None
+        self.mousedown_drag = False
         self.unpress()
 
     def unpress(self):
