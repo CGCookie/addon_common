@@ -85,6 +85,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self.event = None
         self._start_time = time.time()
         self._tmp_time = self._start_time
+        self._debug_print_actions = False
 
         try:
             self._cc_exception_init()
@@ -164,7 +165,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         self._timer = self._cc_actions.start_timer(10)
 
     def _cc_actions_update(self):
-        self._cc_actions.update(self.context, self.event, print_actions=False)
+        self._cc_actions.update(self.context, self.event, print_actions=self._debug_print_actions)
 
     def _cc_actions_end(self):
         self._timer.done()
