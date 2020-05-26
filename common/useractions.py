@@ -329,15 +329,26 @@ class Actions:
                 # '3D View | view3d.navigate',              # View Navigation
             ],
         }, {
-            'name': 'window action',
+            'name': 'blender window action',
             'operators': [
-                'Screen | screen.screen_full_area',
-                'Window | wm.window_fullscreen_toggle',
+                # COMMENTED OUT, BECAUSE THERE IS A BUG WITH CONTEXT CHANGING!!
+                # 'Screen | screen.screen_full_area',
+                # 'Window | wm.window_fullscreen_toggle',
             ],
         }, {
-            'name': 'save action',
+            'name': 'blender save',
             'operators': [
                 'Window | wm.save_mainfile',
+            ],
+        }, {
+            'name': 'blender undo',
+            'operators': [
+                'Screen | ed.undo',
+            ],
+        }, {
+            'name': 'blender redo',
+            'operators': [
+                'Screen | ed.redo',
             ],
         },
     ]
@@ -362,9 +373,7 @@ class Actions:
         # set up universal keymaps
         self.keymap = {}  # universal keymap
         self.keymap2 = {} # context keymap
-        self.keymap['window action'] = set()    # filled in below
-        self.keymap['save action'] = set()      # filled in below
-        self.keymap['navigate'] = set()         # filled in below
+        self.keymap['navigate'] = set()         # filled in more below
         self.keymap['navigate'] |= Actions.trackpad_actions
         self.keymap['navigate'] |= Actions.ndof_actions
         for action in Actions.special_events:

@@ -139,7 +139,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
             ret = {'RUNNING_MODAL'}
         else:
             # allow window actions to pass through to Blender
-            if self._cc_actions.using('window action'): ret = {'PASS_THROUGH'}
+            if self._cc_actions.using('blender window action'): ret = {'PASS_THROUGH'}
 
             # allow navigation actions to pass through to Blender
             if self._cc_actions.navigating() or (self._cc_actions.timer and self._nav):
