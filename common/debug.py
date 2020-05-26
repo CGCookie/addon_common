@@ -32,8 +32,9 @@ import inspect
 import itertools
 import linecache
 import traceback
-from datetime import datetime
+from math import floor
 from hashlib import md5
+from datetime import datetime
 
 from .globals import Globals
 from .blender import show_blender_popup
@@ -156,6 +157,18 @@ class Debugger:
     #     if exc_traceback:
     #         print("*** tb_lineno:", exc_traceback.tb_lineno)
 
+    start_time = time.time()
+    last_time = time.time()
+    @staticmethod
+    def tprint(*args):
+        t = time.time()
+        td = t - Debugger.last_time
+        lbar = min(25, floor(td*20))
+        bar = '%s%s' % ('X' * lbar, '_' * (25-lbar))
+        print(bar, '%8.4f' % td, *args)
+        sys.stdout.flush()
+        Debugger.last_time = t
+
 
 class ExceptionHandler:
     _universal = []
@@ -201,6 +214,7 @@ class ExceptionHandler:
 
 debugger = Debugger()
 dprint = debugger.dprint
+tprint = debugger.tprint
 exceptionhandler = ExceptionHandler(universal=True)
 Globals.set(debugger)
 Globals.dprint = dprint

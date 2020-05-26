@@ -25,7 +25,7 @@ import bpy
 from bpy.types import Operator
 
 from ..common.blender import perform_redraw_all
-from ..common.debug import debugger
+from ..common.debug import debugger, tprint
 from ..common.profiler import profiler
 from ..common.useractions import Actions, ActionHandler
 
@@ -129,8 +129,6 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
             self._cc_actions_end()
             return {'FINISHED'} if self._done=='finish' else {'CANCELLED'}
 
-        perform_redraw_all(only_area=context.area)
-
         ret = None
 
         self._cc_actions_update()
@@ -155,10 +153,13 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
         try: self.update()
         except Exception as e: self._handle_exception(e, 'call update')
 
-        if ret: return ret
+        if not ret:
+            self._cc_fsm_update()
+            ret = {'RUNNING_MODAL'}
 
-        self._cc_fsm_update()
-        return {'RUNNING_MODAL'}
+        perform_redraw_all(only_area=context.area)
+        return ret
+
 
     def _cc_actions_init(self):
         self._cc_actions = ActionHandler(self.context)

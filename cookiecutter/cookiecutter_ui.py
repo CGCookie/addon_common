@@ -28,7 +28,7 @@ from mathutils import Matrix
 from ..common.globals import Globals
 from ..common.blender import bversion, tag_redraw_all
 from ..common.decorators import blender_version_wrapper
-from ..common.debug import debugger
+from ..common.debug import debugger, tprint
 from ..common.drawing import Drawing, DrawCallbacks, ScissorStack
 from ..common.ui_core import UI_Document, preload_image
 
@@ -97,7 +97,6 @@ class CookieCutter_UI:
 
     def _cc_ui_start(self):
         def preview():
-            # print('***** preview')
             try: self.drawcallbacks.pre3d()
             except Exception as e:
                 self._handle_exception(e, 'draw pre3d')
