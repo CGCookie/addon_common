@@ -206,7 +206,8 @@ re_blenderop = re.compile(r'(?P<keymap>.+?) *\| *(?P<operator>.+)')
 def translate_blenderop(action, keyconfig=None):
     m_blenderop = re_blenderop.match(action)
     if not m_blenderop: return { action }
-    keymap, op = i18n_translate(m_blenderop.group('keymap')), m_blenderop.group('operator')
+    okeymap, oop = m_blenderop.group('keymap'), m_blenderop.group('operator')
+    tkeymap, top = i18n_translate(okeymap), i18n_translate(oop)
     if keyconfig:
         keyconfigs = [keyconfig]
     else:
@@ -215,13 +216,14 @@ def translate_blenderop(action, keyconfig=None):
         keyconfigs = [keyconfigs.user]  #[keyconfigs.active, keyconfigs.addon, keyconfigs.user]:
     ret = set()
     for keyconfig in keyconfigs:
-        if keymap not in keyconfig.keymaps: continue
+        keymap = okeymap if okeymap in keyconfig.keymaps else tkeymap if tkeymap in keyconfig.keymaps else None
+        if not keymap: continue
         for kmi in keyconfig.keymaps[keymap].keymap_items:
             if not kmi.active: continue
-            if kmi.idname != op: continue
+            if kmi.idname != oop and kmi.idname != top: continue
             ret.add(kmi_details(kmi))
     if not ret:
-        print('Warning: could not translate blender op "%s" to actions' % action)
+        print('Warning: could not translate blender op "%s" to actions (%s->%s, %s->%s)' % (action, okeymap, tkeymap, oop, top))
     return ret
 
 
@@ -666,6 +668,9 @@ class ActionHandler:
     def __setattr__(self, key, value):
         ActionHandler._actions.keymap2 = self._keymap
         return setattr(ActionHandler._actions, key, value)
+    def done(self):
+        ActionHandler._actions.done()
+        ActionHandler._actions = None
 
 
 

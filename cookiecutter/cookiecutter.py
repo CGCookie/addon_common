@@ -117,8 +117,6 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
             profiler.printfile()
 
         if self._done:
-            self._cc_actions_end()
-            self._cc_ui_end()
             try:
                 if self._done == 'commit':
                     self.end_commit()
@@ -127,6 +125,8 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
                 self.end()
             except Exception as e:
                 self._handle_exception(e, 'call end() with %s' % self._done)
+            self._cc_ui_end()
+            self._cc_actions_end()
             return {'FINISHED'} if self._done=='finish' else {'CANCELLED'}
 
         perform_redraw_all(only_area=context.area)
@@ -169,7 +169,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
 
     def _cc_actions_end(self):
         self._timer.done()
-        Actions.done()
+        self._cc_actions.done()
 
 
 
