@@ -37,6 +37,7 @@ class CookieCutter_Exceptions:
 
     def _callback_exception_callbacks(self, e):
         print('CookieCutter_Exceptions._callback_exception_callbacks:', e)
+        # debugger.dcallstack(0)
         for fn_name in self._exception_callbacks:
             try:
                 fn = getattr(self, fn_name)
