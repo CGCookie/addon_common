@@ -1641,6 +1641,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._fontid           = 0
         self._fontsize         = 12
         self._fontcolor        = (0,0,0,1)
+        self._textshadow       = None
         self._whitespace       = 'normal'
         self._cacheRenderBuf   = None   # GPUOffScreen buffer
         self._dirty_renderbuf  = True
