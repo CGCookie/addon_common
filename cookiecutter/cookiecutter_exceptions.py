@@ -16,7 +16,7 @@ https://github.com/CGCookie/retopoflow
 import contextlib
 
 from ..common.fsm import FSM
-from ..common.debug import debugger
+from ..common.debug import debugger, ExceptionHandler
 from ..common.utils import find_fns
 
 from .cookiecutter_fsm import CookieCutter_FSM
@@ -48,6 +48,8 @@ class CookieCutter_Exceptions:
 
     def _cc_exception_init(self):
         self._exception_callbacks = [fn.__name__ for (_,fn) in find_fns(self, '_cc_exception_callback')]
-        self.fsm.add_exception_callback(self._callback_exception_callbacks, universal=True)
+        ExceptionHandler.add_universal_callback(self._callback_exception_callbacks)
         CookieCutter_Exceptions._instance = self
 
+    def _cc_exception_done(self):
+        ExceptionHandler.remove_universal_callback(self._callback_exception_callbacks)

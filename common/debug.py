@@ -181,6 +181,14 @@ class ExceptionHandler:
     def add_universal_callback(fn):
         ExceptionHandler._universal += [fn]
 
+    @staticmethod
+    def remove_universal_callback(fn):
+        ExceptionHandler._universal = [f for f in ExceptionHandler._universal if f != fn]
+
+    @staticmethod
+    def clear_universal_callbacks():
+        ExceptionHandler._universal = []
+
     def add_callback(self, fn, universal=None):
         if universal:
             self._universal += [fn]

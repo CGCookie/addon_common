@@ -127,6 +127,7 @@ class CookieCutter(Operator, CookieCutter_UI, CookieCutter_FSM, CookieCutter_Ble
                 self._handle_exception(e, 'call end() with %s' % self._done)
             self._cc_ui_end()
             self._cc_actions_end()
+            self._cc_exception_done()
             return {'FINISHED'} if self._done=='finish' else {'CANCELLED'}
 
         ret = None
