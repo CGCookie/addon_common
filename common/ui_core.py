@@ -2551,6 +2551,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
         self._tmp_max_width = max_width
 
+        # reposition
+        self._update_position()
+
         self._dirtying_flow = False
     def layout(self, *args, **kwargs): return self._layout(*args, **kwargs)
 
@@ -2559,7 +2562,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         styles    = self._computed_styles
         style_pos = styles.get('position', 'static')
         pl,pt     = self.left_pixels,self.top_pixels
+        dpi_mult = Globals.drawing.get_dpi_mult()
 
+        # cache elements to determine if anything changed
         relative_element = self._relative_element
         relative_pos     = self._relative_pos
         relative_offset  = self._relative_offset
@@ -2571,36 +2576,29 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             relative_offset = RelPoint2D((0, 0))
 
         elif style_pos in {'fixed', 'absolute'}:
-            # pt,pr,pb,pl = self.top,self.right,self.bottom,self.left
-            # # TODO: ignoring units, which could be %!!
             relative_element = self._document_elem if style_pos == 'fixed' else self._nonstatic_elem
             if relative_element is None or relative_element == self:
                 mbp_left = mbp_top = 0
             else:
                 mbp_left = relative_element._mbp_left
                 mbp_top = relative_element._mbp_top
-            # if self._dirtying_flow: print(self,pt,pr,pb,pl)
-            if pl == 'auto':
-                # if pr != 'auto': print(self, self._relative_element._fitting_size, pr)
-                # if pr != 'auto' and self._relative_element._fitting_size:
-                #     # TODO: THIS DOES NOT WORK!! NEED TO SUBTRACT WIDTH, BUT DON'T KNOW IF, YET!
-                #     # move to set_view_size() or create separate function to set position?
-                #     pl = self._relative_element._fitting_size.max_width - pr # - self.width
-                # else: pl = 0
-                pl = 0
-            if pt == 'auto':
-                # if pb != 'auto' and self._relative_element._fitting_size:
-                #     pt = -self._relative_element._fitting_size.max_height + pb
-                # else: pt = 0
-                pt = 0
-            relative_pos = RelPoint2D((pl, pt)) # ((pl + mbp_left, pt - mbp_top))
+            if pl == 'auto': pl = 0
+            if pt == 'auto': pt = 0
+            if relative_element is not None and relative_element != self:
+                parent_width  = self._parent_size.get_width_midmaxmin()  or 0
+                parent_height = self._parent_size.get_height_midmaxmin() or 0
+                width         = self._get_style_num('width',  def_v='auto', percent_of=parent_width,  scale=dpi_mult)
+                height        = self._get_style_num('height', def_v='auto', percent_of=parent_height, scale=dpi_mult)
+                w = width  if width  != 'auto' else (self.width_pixels  if self.width_pixels  != 'auto' else 0)
+                h = height if height != 'auto' else (self.height_pixels if self.height_pixels != 'auto' else 0)
+                pl = clamp(pl, 0, relative_element.width_pixels - relative_element._mbp_width - w)
+                pt = clamp(pt, -(relative_element.height_pixels - relative_element._mbp_height - h), 0)
+            relative_pos = RelPoint2D((pl, pt))
             relative_offset = RelPoint2D((mbp_left, -mbp_top))
 
         elif style_pos == 'relative':
-            if pl == 'auto':
-                pl = 0
-            if pt == 'auto':
-                pt = 0
+            if pl == 'auto': pl = 0
+            if pt == 'auto': pt = 0
             relative_element = self._parent
             relative_pos = RelPoint2D(self._fitting_pos)
             relative_offset = RelPoint2D((pl, pt))
@@ -2610,14 +2608,16 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             relative_pos = RelPoint2D(self._fitting_pos)
             relative_offset = RelPoint2D((0, 0))
 
+        # has anything changed?
         changed = False
         changed |= relative_element != self._relative_element
-        changed |= relative_pos != self._relative_pos
-        changed |= relative_offset != self._relative_offset
-        self._relative_element = relative_element
-        self._relative_pos = relative_pos
-        self._relative_offset = relative_offset
-        if changed: self.dirty('position changed', 'renderbuf')
+        changed |= relative_pos     != self._relative_pos
+        changed |= relative_offset  != self._relative_offset
+        if changed:
+            self._relative_element = relative_element
+            self._relative_pos     = relative_pos
+            self._relative_offset  = relative_offset
+            self.dirty('position changed', 'renderbuf')
 
     def update_position(self): return self._update_position()
 
