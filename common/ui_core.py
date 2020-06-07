@@ -452,6 +452,7 @@ class UI_Element_Utils:
                 curnode['fn'](self, *args, **kwargs)
             redirtied = [d for d in self._dirty_properties if d in done]
             if redirtied:
+                # print('UI_Core.call_cleaning_callbacks:', self, current, 'dirtied', redirtied)
                 if len(restarts) < 50:
                     profiler.add_note('restarting')
                     working = set(UI_Element_Utils._cleaning_graph_roots)
@@ -1631,6 +1632,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._selector         = None   # full selector of self, built in compute_style()
         self._selector_before  = None   # full selector of ::before pseudoelement for self
         self._selector_after   = None   # full selector of ::after pseudoelement for self
+        self._styling_trimmed  = None
         self._styling_custom   = None   #
         self._styling_parent   = None
         self._styling_list     = []
@@ -1752,14 +1754,14 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         sel_parent = (None if not self._parent else self._parent._selector) or []
         if self._pseudoelement:
             # this is either a ::before or ::after pseudoelement
-            self._selector = sel_parent[:-1] + [sel_parent[-1] + '::' + self._pseudoelement]
-            self._selector_before = None
-            self._selector_after  = None
+            selector = sel_parent[:-1] + [sel_parent[-1] + '::' + self._pseudoelement]
+            selector_before = None
+            selector_after  = None
         elif self._innerTextAsIs:
             # this is a text element
-            self._selector = sel_parent + ['*text*']
-            self._selector_before = None
-            self._selector_after = None
+            selector = sel_parent + ['*text*']
+            selector_before = None
+            selector_after = None
         else:
             attribs = ['type', 'value']
             sel_tagName = self._tagName
@@ -1773,9 +1775,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             if self.checked:
                 sel_attribs += '[checked]'
                 sel_attribvals += '[checked="checked"]'
-            self._selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
-            self._selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
-            self._selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
+            selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
+            selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
+            selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
+
+        # if selector hasn't changed, don't recompute trimmed styling
+        if selector == self._selector and selector_before == self._selector_before and selector_after == self._selector_after: return
+        styling_trimmed = UI_Styling.trim_styling(selector, ui_defaultstylings, ui_draw.stylesheet)
+        self._selector = selector
+        self._selector_before = selector_before
+        self._selector_after = selector_after
+        self._styling_trimmed = styling_trimmed
+
 
     @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content', 'renderbuf'})
     @profiler.function
@@ -1824,12 +1835,14 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
 
             self._styling_list = [
-                ui_defaultstylings,
-                ui_draw.stylesheet,
+                self._styling_trimmed,
+                # ui_defaultstylings, ui_draw.stylesheet,
                 # self._styling_parent,
                 self._styling_custom
             ]
+            # self._computed_styles = UI_Styling.compute_style(self._selector, *self._styling_list)
             self._computed_styles = UI_Styling.compute_style(self._selector, *self._styling_list)
+
 
         with profiler.code('style.filling style cache'):
             if self._is_visible and not self._pseudoelement:

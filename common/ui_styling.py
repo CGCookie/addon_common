@@ -253,7 +253,7 @@ default_styling = {
 # (?:(?P<type>[ .#:[]+)(?P<name>[^\n .#:[=\]]+)(?:=\"(?P<val>[^\"]+)\")?]?)
 # (?:(?P<type>[.#:[]+)?(?P<name>[^\n .#:[=\]]+)(?:=\"(?P<val>[^\"]+)\")?]?)
 
-selector_splitter = re.compile(r"(?:(?P<type>[.#:[]+)?(?P<name>[^\n .#:[=\]]+)(?:=\"(?P<val>[^\"]+)\")?]?)")
+selector_splitter = re.compile(r"(?:(?P<type>[.#:[]+)?(?P<name>[^\n .#:\[=\]]+)(?:=\"(?P<val>[^\"]+)\")?\]?)")
 
 
 class UI_Style_Declaration:
@@ -297,7 +297,7 @@ class UI_Style_RuleSet:
     CSS RuleSets are in the form shown below.
     Note: each `property: value;` is a UI_Style_Declaration
 
-        selector {
+        selector, selector {
             property0: value;
             property1: val0 val1 val2;
             ...
@@ -371,8 +371,8 @@ class UI_Style_RuleSet:
         return rs
 
     def __init__(self):
-        self.selectors = []
-        self.decllist = []
+        self.selectors = []     # can have multiple selectors for same decllist
+        self.decllist = []      # list of style declarations that apply
         self._match_cache = {}
 
     def __str__(self):
@@ -388,31 +388,54 @@ class UI_Style_RuleSet:
         cache = UI_Style_RuleSet._split_selector._cache
         osel = str(sel)
         if osel not in cache:
-            p = {'type':'', 'class':[], 'id':'', 'pseudoelement':[], 'pseudoclass':[], 'attribs':set(), 'attribvals':{}}
+            p = {'type':'', 'class':set(), 'id':'', 'pseudoelement':set(), 'pseudoclass':set(), 'attribs':set(), 'attribvals':{}}
             for part in selector_splitter.finditer(sel):
                 t,n,v = part.group('type'),part.group('name'),part.group('val')
-                if t is None: p['type'] = n
-                elif t == '.': p['class'].append(n)
-                elif t == '#': p['id'] = n
-                elif t == ':': p['pseudoclass'].append(n)
-                elif t == '::': p['pseudoelement'].append(n)
+                if t is None:   p['type'] = n
+                elif t == '.':  p['class'].add(n)
+                elif t == '#':  p['id'] = n
+                elif t == ':':  p['pseudoclass'].add(n)
+                elif t == '::': p['pseudoelement'].add(n)
                 elif t == '[':
                     if v is None: p['attribs'].add(n)
                     else: p['attribvals'][n] = v
                 else: assert False, 'Unhandled selector type "%s" (%s, %s) in "%s"' % (str(t), str(n), str(v), str(sel))
-            p['names'] = {p['type'], p['id']} | set(p['class']) | set(p['pseudoelement']) | set(p['pseudoclass'])
-            p['names'] |= p['attribs'] | set(p['attribvals'].keys()) # | set(p['attribvals'].values())
+            p['names'] = p['class'] | p['pseudoelement'] | p['pseudoclass'] | p['attribs'] | p['attribvals'].keys() # | p['attribvals'].values()
+            if p['type'] not in {'*','>'}: p['names'].add(p['type'])
+            if p['id']: p['names'].add(p['id'])
             cache[osel] = p
-        return cache[osel]
+        return dict(cache[osel])  # NOTE: Not a deep copy!
 
     @staticmethod
-    def _match_selector_approx(parts_elem, parts_style):
-        names_elem = {n for p in parts_elem for n in p['names']} - {'*', '>'}
+    @add_cache('_cache', {})
+    def _join_selector_parts(p):
+        cache = UI_Style_RuleSet._join_selector_parts._cache
+        op = str(p)
+        if op not in cache:
+            sel = p['type'] if p['type'] else '*'
+            if p['class']:         sel += ''.join('.%s' % c for c in p['class'])
+            if p['id']:            sel += '#%s' % p['id']
+            if p['pseudoclass']:   sel += ''.join(':%s' % pc for pc in p['pseudoclass'])
+            if p['pseudoelement']: sel += ''.join(':%s' % pe for pe in p['pseudoelement'])
+            if p['attribs']:       sel += ''.join('[%s]' % a for a in p['attribs'])
+            if p['attribvals']:    sel += ''.join('[%s="%s"]' % (k,v) for (k,v) in p['attribvals'].items())
+            cache[op] = sel
+        return cache[op]
+
+    @staticmethod
+    def _match_selector_approx(parts_elem, parts_style, check_end=False):
+        if check_end:
+            if parts_style[-1]['type'] not in {'*','>'} and parts_elem[-1]['type'] != parts_style[-1]['type']:
+                return False
+            if parts_style[-1]['id'] and parts_elem[-1]['id'] != parts_style[-1]['id']:
+                return False
+        names_elem  = {n for p in parts_elem  for n in p['names']}
         names_style = {n for p in parts_style for n in p['names']} - {'*', '>'}
-        return not (names_style - names_elem)
+        if not all(n in names_elem for n in names_style): return False
+        return True
 
     @staticmethod
-    def _match_selector_matches(ap, bp):
+    def _match_selector_parts(ap, bp):
         # NOTE: ap['type'] == '' with UI_Elements that contain the innertext
         # TODO: consider giving this a special type, ex: **text**
         return all([
@@ -426,49 +449,55 @@ class UI_Style_RuleSet:
         ])
 
     @staticmethod
-    @add_cache('_cache', {})
     @profiler.function
-    def _match_selector(sel_e, pts_e, sel_l, pts_s, cont):
+    def _match_selector(sel_elem, pts_elem, sel_style, pts_style, cont=False):
+        '''
+        sel_elem/pts_elem and sel_style/pts_style are corresponding lists for element and style
+            sel_*: selector     pts_*: selector broken into parts
+        cont:
+            if False, end of sel_elem/pts_elem and sel_style/pts_style must be exactly the same
+            if True, can allow skipping end of sel_style/pts_style
+        '''
         # ex:
-        #   sel_e  = ['body:hover', 'button:hover']
-        #   sel_l = ['button:hover']
-        if not sel_l: return True       # nothing left to match (potential extra in element)
-        if not sel_e: return False       # nothing left to match, but still have extra in style
+        #   sel_elem = ['body:hover', 'button:hover']
+        #   sel_style = ['button:hover']
+        if not sel_style: return True   # nothing left to match (potential extra in element)
+        if not sel_elem:  return False  # nothing left to match, but still have extra in style
         msel = UI_Style_RuleSet._match_selector
-        matches = UI_Style_RuleSet._match_selector_matches
-        cache = msel._cache
-        key = (tuple(sel_e), tuple(sel_l), cont)
-        if key not in cache:
-            if not UI_Style_RuleSet._match_selector_approx(pts_e, pts_s):
-                r = False
-            else:
-                if sel_l[-1] == '>':
-                    # parent selector in style MUST match (> means child, not descendant)
-                    r = msel(sel_e, pts_e, sel_l[:-1], pts_s[:-1], False)
-                else:
-                    if matches(pts_e[-1], pts_s[-1]) and msel(sel_e[:-1], pts_e[:-1], sel_l[:-1], pts_s[:-1], True): r = True
-                    elif not cont: r = False
-                    else: r = msel(sel_e[:-1], pts_e[:-1], sel_l, pts_s, True)
-            cache[key] = r
-        return cache[key]
+        mparts = UI_Style_RuleSet._match_selector_parts
+        if sel_style[-1] == '>':
+            # parent selector in style MUST match (> means child, not descendant)
+            return msel(sel_elem, pts_elem, sel_style[:-1], pts_style[:-1])
+        elif not UI_Style_RuleSet._match_selector_approx(pts_elem, pts_style, check_end=not cont):
+            return False
+        elif mparts(pts_elem[-1], pts_style[-1]) and msel(sel_elem[:-1], pts_elem[:-1], sel_style[:-1], pts_style[:-1], True):
+            return True
+        elif not cont:
+            return False
+        else:
+            return msel(sel_elem[:-1], pts_elem[:-1], sel_style, pts_style, True)
 
     @staticmethod
-    def match_selector(sel_elem, sel_style):
-        # must match the final element, so pass False for cont
+    def match_selector(sel_elem, sel_style, strip=None):
         split = UI_Style_RuleSet._split_selector
-        parts_elem, parts_style = [split(p) for p in sel_elem], [split(p) for p in sel_style]
-        return UI_Style_RuleSet._match_selector(sel_elem, parts_elem, sel_style, parts_style, False)
+        # print('UI_Style_RuleSet', sel_elem, sel_style)
+        sel_elem  = UI_Styling.strip_selector_parts(sel_elem, strip)
+        sel_style = UI_Styling.strip_selector_parts(sel_style, strip)
+        parts_elem  = [split(p) for p in sel_elem]
+        parts_style = [split(p) for p in sel_style]
+        return UI_Style_RuleSet._match_selector(sel_elem, parts_elem, sel_style, parts_style)
 
     @profiler.function
-    def match(self, selector):
+    def match(self, sel_elem, strip=None):
         # returns true if passed selector matches any selector in self.selectors
-        key = tuple(selector)
-        if key not in self._match_cache:
-            self._match_cache[key] = any(UI_Style_RuleSet.match_selector(selector, sel) for sel in self.selectors)
-        return self._match_cache[key]
+        cache = self._match_cache
+        key = str((sel_elem, strip))
+        if key not in cache:
+            cache[key] = any(UI_Style_RuleSet.match_selector(sel_elem, sel_style, strip=strip) for sel_style in self.selectors)
+        return cache[key]
 
-    def get_all_matches(self, selector):
-        return [sel for sel in self.selectors if UI_Style_RuleSet.match_selector(selector, sel)]
+    def get_all_matches(self, sel_elem):
+        return [sel_style for sel_style in self.selectors if UI_Style_RuleSet.match_selector(sel_elem, sel_style)]
 
 
 class UI_Styling:
@@ -483,6 +512,7 @@ class UI_Styling:
         if not var: return UI_Styling()
         if type(var) is UI_Styling: return var
         sel = tagname + (':%s' % pseudoclass if pseudoclass else '')
+        # NOTE: do not convert below into `t = type(var)` and change `if`s below into `elif`s!
         if type(var) is dict: var = ['%s:%s' % (k,v) for (k,v) in var.items()]
         if type(var) is list: var = ';'.join(var)
         if type(var) is str:  var = UI_Styling('%s{%s;}' % (sel,var))
@@ -513,16 +543,23 @@ class UI_Styling:
     def clear_cache(self):
         # print('UI_Styling%d.clear_cache' % self._uid)
         self._decllist_cache = {}
+        UI_Styling.trim_styling._cache = {}
+        UI_Styling.strip_selector_parts._cache = {}
 
     @staticmethod
-    def from_decllist(decllist, selector=None, var=None): # tagname='*', pseudoclass=None):
+    def from_decllist(decllist, selector=None, var=None):
         if selector is None: selector = ['*']
         if var is None: var = UI_Styling()
         var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector)]
-        # var.rules = [UI_Style_RuleSet.from_decllist(decllist, tagname, pseudoclass)]
         return var
 
-    def __init__(self, lines=''):
+    @staticmethod
+    def from_selector_decllist_list(l):
+        var = UI_Styling()
+        var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector) for (selector,decllist) in l]
+        return var
+
+    def __init__(self, lines=None):
         self._uid = UI_Styling.uid
         UI_Styling.uid += 1
         self.rules = []
@@ -541,13 +578,15 @@ class UI_Styling:
 
     @profiler.function
     def get_decllist(self, selector):
+        cache = self._decllist_cache
         if not self.rules: return []
-        selector_key = tuple(selector) #'~'.join(selector)
-        if selector_key not in self._decllist_cache:
+        oselector = str(selector)
+        if oselector not in cache:
+            # print('UI_Styling.get_decllist', selector)
             with profiler.code('UI_Styling.get_decllist: creating cached value'):
-                self._decllist_cache[selector_key] = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
-                # print('UI_Styling.get_decllist', self._uid, '%d/%d' % (len(self._decllist_cache[selector_key]), len(self.rules)), selector_key)
-        return self._decllist_cache[selector_key]
+                cache[oselector] = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+                # print('UI_Styling.get_decllist', self._uid, '%d/%d' % (len(cache[selector_key]), len(self.rules)), selector_key)
+        return cache[oselector]
 
     def _has_matches(self, selector):
         if not self.rules: return False
@@ -652,6 +691,66 @@ class UI_Styling:
         full_decllist = [dl for styling in stylings if styling for dl in styling.get_decllist(selector)]
         decllist = UI_Styling._expand_declarations(full_decllist)
         return decllist
+
+    @staticmethod
+    @add_cache('_cache', {})
+    def strip_selector_parts(selector, strip):
+        if not strip: return selector
+        cache = UI_Styling.strip_selector_parts._cache
+        oselector = str((selector, strip))
+        if oselector not in cache:
+            nselector = []
+            strip_type            = 'type' in strip
+            strip_id              = 'id' in strip
+            strip_classes         = 'classes' in strip
+            strip_pseudoelements  = 'pseudoelements' in strip
+            strip_pseudoclasses   = 'pseudoclasses' in strip
+            strip_attributes      = 'attributes' in strip
+            strip_attributevalues = 'attributevalues' in strip
+            for sel in selector:
+                # p = {'type':'', 'class':set(), 'id':'', 'pseudoelement':set(), 'pseudoclass':set(), 'attribs':set(), 'attribvals':{}}
+                p = UI_Style_RuleSet._split_selector(str(sel))
+                if strip_type:            p['type'] = '*'
+                if strip_id:              p['id'] = ''
+                if strip_classes:         p['class'] = set()
+                if strip_pseudoelements:  p['pseudoelement'] = set()
+                if strip_pseudoclasses:   p['pseudoclass'] = set()
+                if strip_attributes:      p['attribs'] = set()
+                if strip_attributevalues: p['attribvals'] = dict()
+                nselector.append(UI_Style_RuleSet._join_selector_parts(p))
+            cache[oselector] = nselector
+        return cache[oselector]
+
+    @staticmethod
+    @add_cache('_cache', {})
+    def trim_styling(selector, *stylings):
+        cache = UI_Styling.trim_styling._cache
+        strip = {
+            # 'type',
+            # 'classes',
+            # 'id',
+            'pseudoelements',
+            'pseudoclasses',
+            'attributes',
+            'attributevalues',
+        }
+        nselector = UI_Styling.strip_selector_parts(selector, strip)
+        onselector = str(nselector)
+        if onselector not in cache:
+            nstyling = UI_Styling()
+            # include only the rules that _might_ apply to selector (assumes some selector parts change but others do not)
+            nstyling.rules = [rule for styling in stylings for rule in styling.rules if rule.match(nselector, strip=strip)]
+            if False:
+                # trimmed = [rule for styling in stylings for rule in styling.rules if not rule.match(nselector, strip=strip)]
+                print('trim_styling', selector, nselector, nstyling) #, trimmed)
+            cache[onselector] = nstyling
+        return cache[onselector]
+
+    @staticmethod
+    def combine_styling(*stylings):
+        nstyling = UI_Styling()
+        nstyling.rules = [rule for styling in stylings for rule in styling.rules]
+        return nstyling
 
     @staticmethod
     def has_matches(selector, *stylings):

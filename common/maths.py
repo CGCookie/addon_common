@@ -470,7 +470,8 @@ class Color(Vector):
             self.from_vector(rgba)
 
     def __str__(self):
-        return '<Color (%0.4f, %0.4f, %0.4f, %0.4f)>' % (self.r, self.g, self.b, self.a)
+        # return '<Color (%0.4f, %0.4f, %0.4f, %0.4f)>' % (self.r, self.g, self.b, self.a)
+        return 'Color(%0.2f, %0.2f, %0.2f, %0.2f)' % (self.r, self.g, self.b, self.a)
 
     def __repr__(self):
         return self.__str__()
@@ -1708,7 +1709,8 @@ class NumberUnit:
     @property
     def unit(self): return self._unit
 
-    def __str__(self): return '<NumberUnit num=%f unit=%s>' % (self._num, str(self._unit))
+    # def __str__(self): return '<NumberUnit num=%f unit=%s>' % (self._num, str(self._unit))
+    def __str__(self): return '%f%s' % (self._num, str(self._unit) or '?')
 
     def __repr__(self): return self.__str__()
 
