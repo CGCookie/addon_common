@@ -382,7 +382,7 @@ clean call order
 
 class UI_Element_Utils:
     @staticmethod
-    def defer_dirty(cause, properties=None, parent=True, children=False):
+    def defer_dirty_wrapper(cause, properties=None, parent=True, children=False):
         ''' prevents dirty propagation until the wrapped fn has finished '''
         def wrapper(fn):
             def wrapped(self, *args, **kwargs):
@@ -393,6 +393,16 @@ class UI_Element_Utils:
                 return ret
             return wrapped
         return wrapper
+
+    @contextlib.contextmanager
+    def defer_dirty(self, cause, properties=None, parent=True, children=False):
+        ''' prevents dirty propagation until the end of with has finished '''
+        self._defer_dirty = True
+        self.defer_dirty_propagation = True
+        yield
+        self.defer_dirty_propagation = False
+        self._defer_dirty = False
+        self._dirty('dirtying deferred dirtied properties now: '+cause, properties, parent=parent, children=children)
 
     _option_callbacks = {}
     @staticmethod
@@ -489,11 +499,15 @@ class UI_Element_Utils:
 
     @profiler.function
     def _get_style_trbl(self, kb, scale=None):
-        t = self._get_style_num('%s-top' % kb, def_v=NumberUnit.zero, scale=scale)
-        r = self._get_style_num('%s-right' % kb, def_v=NumberUnit.zero, scale=scale)
-        b = self._get_style_num('%s-bottom' % kb, def_v=NumberUnit.zero, scale=scale)
-        l = self._get_style_num('%s-left' % kb, def_v=NumberUnit.zero, scale=scale)
-        return (t,r,b,l)
+        cache = self._style_trbl_cache
+        key = str((kb, scale))
+        if key not in cache:
+            t = self._get_style_num('%s-top'    % kb, def_v=NumberUnit.zero, scale=scale)
+            r = self._get_style_num('%s-right'  % kb, def_v=NumberUnit.zero, scale=scale)
+            b = self._get_style_num('%s-bottom' % kb, def_v=NumberUnit.zero, scale=scale)
+            l = self._get_style_num('%s-left'   % kb, def_v=NumberUnit.zero, scale=scale)
+            cache[key] = (t,r,b,l)
+        return cache[key]
 
 
 # https://www.w3schools.com/jsref/obj_event.asp
@@ -707,7 +721,7 @@ class UI_Element_Properties:
         self._new_content = True
     def delete_child(self, child): self._delete_child(child)
 
-    @UI_Element_Utils.defer_dirty('clearing children')
+    @UI_Element_Utils.defer_dirty_wrapper('clearing children')
     def _clear_children(self):
         for child in list(self._children):
             self._delete_child(child)
@@ -815,6 +829,14 @@ class UI_Element_Properties:
             self._dirty('deleting class "%s" for %s affects parent content' % (cls, str(self)), 'content', parent=True, children=False)
             self._parent.add_dirty_callback(self, 'style')
 
+
+    @property
+    def clamp_to_parent(self):
+        return self._clamp_to_parent
+
+    @clamp_to_parent.setter
+    def clamp_to_parent(self, val):
+        self._clamp_to_parent = bool(val)
 
     ###################################
     # pseudoclasses methods
@@ -946,7 +968,7 @@ class UI_Element_Properties:
     def reposition(self, left=None, top=None, bottom=None, right=None, clamp_position=True):
         assert not bottom and not right, 'repositioning UI via bottom or right not implemented yet :('
         changed = False
-        if clamp and self._relative_element:
+        if clamp_position and self._relative_element:
             w,h = Globals.drawing.scale(self.width_pixels),self.height_pixels #Globals.drawing.scale(self.height_pixels)
             rw,rh = self._relative_element.width_pixels,self._relative_element.height_pixels
             mbpw,mbph = self._relative_element._mbp_width,self._relative_element._mbp_height
@@ -963,6 +985,7 @@ class UI_Element_Properties:
             self._update_position()
             tag_redraw_all("UI_Element reposition")
             self._dirty('repositioning', 'renderbuf')
+            self._dirty_flow()
 
     @property
     def left(self):
@@ -1528,13 +1551,14 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._uid           = UI_Element.get_uid()
 
         # attribs
-        self._type          = None
-        self._value         = None
-        self._value_bound   = False
-        self._checked       = None
-        self._checked_bound = False
-        self._name          = None
-        self._href          = None
+        self._type            = None
+        self._value           = None
+        self._value_bound     = False
+        self._checked         = None
+        self._checked_bound   = False
+        self._name            = None
+        self._href            = None
+        self._clamp_to_parent = False
 
         self._was_dirty     = False
         self._preclean      = None      # fn that's called back right before clean is started
@@ -1647,6 +1671,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._whitespace       = 'normal'
         self._cacheRenderBuf   = None   # GPUOffScreen buffer
         self._dirty_renderbuf  = True
+        self._style_trbl_cache = {}
 
         ####################################################
         # dirty properties
@@ -1687,41 +1712,40 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         ###################################################
         # start setting properties
         # NOTE: some properties require special handling
-        self._defer_clean = True
-        for (k,v) in kwargs.items():
-            if k in self._events:
-                # key is an event; set callback
-                self.add_eventListener(k, v)
-            elif k == 'atomic':
-                self._atomic = v
-            elif k == 'parent':
-                # note: parent.append_child(self) will set self._parent
-                v.append_child(self)
-            elif k == '_parent':
-                self._parent = v
-                self._do_not_dirty_parent = True
-            elif k == 'children':
-                # append each child
-                for child in kwargs['children']:
-                    self.append_child(child)
-            elif k == 'value' and isinstance(v, BoundVar):
-                self.value_bind(v)
-            elif k == 'checked' and isinstance(v, BoundVar):
-                self.checked_bind(v)
-            elif hasattr(self, k):
-                # need to test that a setter exists for the property
-                class_attr = getattr(type(self), k, None)
-                if type(class_attr) is property:
-                    # k is a property
-                    assert class_attr.fset is not None, 'Attempting to set a read-only property %s to "%s"' % (k, str(v))
-                    setattr(self, k, v)
+        with self.defer_dirty('setting initial properties'):
+            for (k,v) in kwargs.items():
+                if k in self._events:
+                    # key is an event; set callback
+                    self.add_eventListener(k, v)
+                elif k == 'atomic':
+                    self._atomic = v
+                elif k == 'parent':
+                    # note: parent.append_child(self) will set self._parent
+                    v.append_child(self)
+                elif k == '_parent':
+                    self._parent = v
+                    self._do_not_dirty_parent = True
+                elif k == 'children':
+                    # append each child
+                    for child in kwargs['children']:
+                        self.append_child(child)
+                elif k == 'value' and isinstance(v, BoundVar):
+                    self.value_bind(v)
+                elif k == 'checked' and isinstance(v, BoundVar):
+                    self.checked_bind(v)
+                elif hasattr(self, k):
+                    # need to test that a setter exists for the property
+                    class_attr = getattr(type(self), k, None)
+                    if type(class_attr) is property:
+                        # k is a property
+                        assert class_attr.fset is not None, 'Attempting to set a read-only property %s to "%s"' % (k, str(v))
+                        setattr(self, k, v)
+                    else:
+                        # k is an attribute
+                        print('Setting non-property attribute %s to "%s"' % (k, str(v)))
+                        setattr(self, k, v)
                 else:
-                    # k is an attribute
-                    print('Setting non-property attribute %s to "%s"' % (k, str(v)))
-                    setattr(self, k, v)
-            else:
-                print('Unhandled pair (%s,%s)' % (k,str(v)))
-        self._defer_clean = False
+                    print('Unhandled pair (%s,%s)' % (k,str(v)))
         self._dirty('initially dirty')
 
     def __del__(self):
@@ -1786,6 +1810,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._selector_before = selector_before
         self._selector_after = selector_after
         self._styling_trimmed = styling_trimmed
+        self._style_trbl_cache = {}
 
 
     @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content', 'renderbuf'})
@@ -1859,9 +1884,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             self._style_cache = {}
             sc = self._style_cache
             if self._innerTextAsIs is None:
-                sc['left'] = self._computed_styles.get('left', 'auto')
-                sc['right'] = self._computed_styles.get('right', 'auto')
-                sc['top'] = self._computed_styles.get('top', 'auto')
+                sc['left']   = self._computed_styles.get('left', 'auto')
+                sc['right']  = self._computed_styles.get('right', 'auto')
+                sc['top']    = self._computed_styles.get('top', 'auto')
                 sc['bottom'] = self._computed_styles.get('bottom', 'auto')
                 sc['margin-top'],  sc['margin-right'],  sc['margin-bottom'],  sc['margin-left']  = self._get_style_trbl('margin',  scale=dpi_mult)
                 sc['padding-top'], sc['padding-right'], sc['padding-bottom'], sc['padding-left'] = self._get_style_trbl('padding', scale=dpi_mult)
@@ -1872,7 +1897,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 sc['border-top-color']    = self._computed_styles.get('border-top-color',    Color.transparent)
                 sc['border-bottom-color'] = self._computed_styles.get('border-bottom-color', Color.transparent)
                 sc['background-color']    = self._computed_styles.get('background-color',    Color.transparent)
-                sc['width'] = self._computed_styles.get('width', 'auto')
+                sc['width']  = self._computed_styles.get('width', 'auto')
                 sc['height'] = self._computed_styles.get('height', 'auto')
             else:
                 sc['left'] = 'auto'
@@ -2597,7 +2622,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 mbp_top = relative_element._mbp_top
             if pl == 'auto': pl = 0
             if pt == 'auto': pt = 0
-            if relative_element is not None and relative_element != self:
+            if relative_element is not None and relative_element != self and self._clamp_to_parent:
                 parent_width  = self._parent_size.get_width_midmaxmin()  or 0
                 parent_height = self._parent_size.get_height_midmaxmin() or 0
                 width         = self._get_style_num('width',  def_v='auto', percent_of=parent_width,  scale=dpi_mult)
@@ -2606,6 +2631,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 h = height if height != 'auto' else (self.height_pixels if self.height_pixels != 'auto' else 0)
                 pl = clamp(pl, 0, relative_element.width_pixels - relative_element._mbp_width - w)
                 pt = clamp(pt, -(relative_element.height_pixels - relative_element._mbp_height - h), 0)
+                # pt = clamp(pt, h + relative_element._mbp_bottom, relative_element.height_pixels - relative_element._mbp_top)
             relative_pos = RelPoint2D((pl, pt))
             relative_offset = RelPoint2D((mbp_left, -mbp_top))
 

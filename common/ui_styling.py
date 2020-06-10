@@ -652,10 +652,10 @@ class UI_Styling:
                 decllist['border-left-color']   = vals[3]
             elif p == 'font':
                 vals = UI_Styling._font_split(v)
-                decllist['font-style'] = v[0]
-                decllist['font-weight'] = v[1]
-                decllist['font-size'] = v[2]
-                decllist['font-family'] = v[3]
+                decllist['font-style']  = vals[0]
+                decllist['font-weight'] = vals[1]
+                decllist['font-size']   = vals[2]
+                decllist['font-family'] = vals[3]
             elif p == 'background':
                 if type(v) is not tuple: v = (v,)
                 for ev in v:
@@ -668,7 +668,7 @@ class UI_Styling:
                 # decllist['min-width'] = v
                 # decllist['max-width'] = v
             elif p == 'height':
-                decllist['height'] = v
+                decllist['height']     = v
                 decllist['min-height'] = v
                 decllist['max-height'] = v
             elif p == 'overflow':

@@ -161,23 +161,24 @@ def input_radio(**kwargs):
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
     ui_input = UI_Element(tagName='input', type='radio', atomic=True, **kwargs, **kw_all)
-    ui_radio = UI_Element(tagName='img', classes='radio',  parent=ui_input, **kw_all)
-    ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label, **kw_all)
-    def mouseclick(e):
-        ui_input.checked = True
-    def on_input(e):
-        # if ui_input is checked, uncheck all others with same name
-        if not ui_input.checked: return
-        if ui_input.name is None: return
-        ui_elements = ui_input.get_root().getElementsByName(ui_input.name)
-        for ui_element in ui_elements:
-            if ui_element != ui_input: ui_element.checked = False
-    ui_input.add_eventListener('on_mouseclick', mouseclick)
-    ui_input.add_eventListener('on_input', on_input)
-    ui_proxy = UI_Proxy(ui_input)
-    ui_proxy.translate('label', 'innerText')
-    ui_proxy.map({'innerText','children','append_child','delete_child','clear_children','builder'}, ui_label)
-    ui_proxy.map_to_all({'title'})
+    with ui_input.defer_dirty('creating content'):
+        ui_radio = UI_Element(tagName='img', classes='radio',  parent=ui_input, **kw_all)
+        ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label, **kw_all)
+        def mouseclick(e):
+            ui_input.checked = True
+        def on_input(e):
+            # if ui_input is checked, uncheck all others with same name
+            if not ui_input.checked: return
+            if ui_input.name is None: return
+            ui_elements = ui_input.get_root().getElementsByName(ui_input.name)
+            for ui_element in ui_elements:
+                if ui_element != ui_input: ui_element.checked = False
+        ui_input.add_eventListener('on_mouseclick', mouseclick)
+        ui_input.add_eventListener('on_input', on_input)
+        ui_proxy = UI_Proxy(ui_input)
+        ui_proxy.translate('label', 'innerText')
+        ui_proxy.map({'innerText','children','append_child','delete_child','clear_children','builder'}, ui_label)
+        ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 def input_checkbox(**kwargs):
@@ -187,31 +188,33 @@ def input_checkbox(**kwargs):
 
     # https://www.w3schools.com/howto/howto_css_custom_checkbox.asp
     ui_input = UI_Element(tagName='input', type='checkbox', atomic=True, **kwargs, **kw_all)
-    ui_checkmark = UI_Element(tagName='img', classes='checkbox',  parent=ui_input, **kw_all)
-    ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label, **kw_all)
-    def mouseclick(e):
-        ui_input.checked = not bool(ui_input.checked)
-    ui_input.add_eventListener('on_mouseclick', mouseclick)
-    ui_proxy = UI_Proxy(ui_input)
-    ui_proxy.translate('label', 'innerText')
-    ui_proxy.translate('value', 'checked')
-    ui_proxy.map({'innerText','children','append_child','delete_child','clear_children', 'builder'}, ui_label)
-    ui_proxy.map_to_all({'title'})
+    with ui_input.defer_dirty('creating content'):
+        ui_checkmark = UI_Element(tagName='img', classes='checkbox',  parent=ui_input, **kw_all)
+        ui_label = UI_Element(tagName='label', parent=ui_input, **kw_label, **kw_all)
+        def mouseclick(e):
+            ui_input.checked = not bool(ui_input.checked)
+        ui_input.add_eventListener('on_mouseclick', mouseclick)
+        ui_proxy = UI_Proxy(ui_input)
+        ui_proxy.translate('label', 'innerText')
+        ui_proxy.translate('value', 'checked')
+        ui_proxy.map({'innerText','children','append_child','delete_child','clear_children', 'builder'}, ui_label)
+        ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 def labeled_input_text(label, **kwargs):
     kw_container = kwargs_splitter({'parent', 'id'}, kwargs)
     kw_all = kwargs_splitter({'title'}, kwargs)
     ui_container = UI_Element(tagName='div', classes='labeledinputtext-container', **kw_container, **kw_all)
-    ui_left  = UI_Element(tagName='div',   classes='labeledinputtext-label-container', parent=ui_container, **kw_all)
-    ui_label = UI_Element(tagName='label', classes='labeledinputtext-label', innerText=label, parent=ui_left, **kw_all)
-    ui_right = UI_Element(tagName='div',   classes='labeledinputtext-input-container', parent=ui_container, **kw_all)
-    ui_input = input_text(parent=ui_right, **kwargs, **kw_all)
+    with ui_container.defer_dirty('creating content'):
+        ui_left  = UI_Element(tagName='div',   classes='labeledinputtext-label-container', parent=ui_container, **kw_all)
+        ui_label = UI_Element(tagName='label', classes='labeledinputtext-label', innerText=label, parent=ui_left, **kw_all)
+        ui_right = UI_Element(tagName='div',   classes='labeledinputtext-input-container', parent=ui_container, **kw_all)
+        ui_input = input_text(parent=ui_right, **kwargs, **kw_all)
 
-    ui_proxy = UI_Proxy(ui_container)
-    ui_proxy.translate_map('label', 'innerText', ui_label)
-    ui_proxy.map('value', ui_input)
-    ui_proxy.map_to_all({'title'})
+        ui_proxy = UI_Proxy(ui_container)
+        ui_proxy.translate_map('label', 'innerText', ui_label)
+        ui_proxy.map('value', ui_input)
+        ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 def input_text(**kwargs):
@@ -221,7 +224,7 @@ def input_text(**kwargs):
     kw_container = kwargs_splitter({'parent'}, kwargs)
     ui_container = UI_Element(tagName='span', classes='inputtext-container', **kw_container)
     ui_input  = UI_Element(tagName='input', classes='inputtext-input', type='text', can_focus=True, atomic=True, parent=ui_container, **kwargs)
-    ui_cursor = UI_Element(tagName='span', classes='inputtext-cursor', parent=ui_input, innerText='|')
+    ui_cursor = UI_Element(tagName='span', classes='inputtext-cursor', parent=ui_input, innerText='|') # │
 
     data = {'orig': None, 'text': None, 'idx': 0, 'pos': None}
     def preclean():
@@ -236,8 +239,14 @@ def input_text(**kwargs):
     def postflow():
         if data['text'] is None: return
         data['pos'] = ui_input.get_text_pos(data['idx'])
-        ui_cursor.left = data['pos'].x - ui_input._mbp_left - ui_cursor._absolute_size.width / 2
-        ui_cursor.top  = data['pos'].y + ui_input._mbp_top
+        ui_cursor.reposition(
+            left=data['pos'].x - ui_input._mbp_left - ui_cursor._absolute_size.width / 2,
+            top=data['pos'].y + ui_input._mbp_top,
+            clamp_position=False,
+        )
+        # ui_cursor.left = data['pos'].x - ui_input._mbp_left - ui_cursor._absolute_size.width / 2
+        # ui_cursor.top  = data['pos'].y + ui_input._mbp_top
+        # print('input_text.postflow', ui_cursor.left, ui_cursor.top, ui_cursor.left_pixels, ui_cursor.top_pixels)
     def cursor_postflow():
         if data['text'] is None: return
         ui_input._setup_ltwh()
@@ -332,10 +341,11 @@ def input_text(**kwargs):
 def collection(label, **kwargs):
     kw_inside = kwargs_splitter({'children'}, kwargs)
     ui_container = UI_Element(tagName='div', classes='collection', **kwargs)
-    ui_label = div(innerText=label, classes='header', parent=ui_container)
-    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside)
-    ui_proxy = UI_Proxy(ui_container)
-    ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
+    with ui_container.defer_dirty('creating content'):
+        ui_label = div(innerText=label, classes='header', parent=ui_container)
+        ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside)
+        ui_proxy = UI_Proxy(ui_container)
+        ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
     return ui_proxy
 
 
@@ -348,22 +358,23 @@ def collapsible(label, **kwargs):
 
     kwargs['classes'] = 'collapsible %s' % kwargs.get('classes', '')
     ui_container = UI_Element(tagName='div', **kwargs, **kw_all)
-    ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id', get_unique_ui_id('collapsible-'))), classes='header', parent=ui_container, **kw_input, **kw_all)
-    # ui_label = UI_Element(tagName='input', classes='header', innerText=label, type="checkbox", parent=ui_container, **kw_input)
-    ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside, **kw_all)
+    with ui_container.defer_dirty('creating content'):
+        ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id', get_unique_ui_id('collapsible-'))), classes='header', parent=ui_container, **kw_input, **kw_all)
+        # ui_label = UI_Element(tagName='input', classes='header', innerText=label, type="checkbox", parent=ui_container, **kw_input)
+        ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside, **kw_all)
 
-    def toggle():
-        if ui_label.checked: ui_inside.add_class('collapsed')
-        else:                ui_inside.del_class('collapsed')
-        ui_inside.dirty(parent=False, children=True)
-    ui_label.add_eventListener('on_input', toggle)
-    toggle()
+        def toggle():
+            if ui_label.checked: ui_inside.add_class('collapsed')
+            else:                ui_inside.del_class('collapsed')
+            ui_inside.dirty(parent=False, children=True)
+        ui_label.add_eventListener('on_input', toggle)
+        toggle()
 
-    ui_proxy = UI_Proxy(ui_container)
-    ui_proxy.translate_map('collapsed', 'checked', ui_label)
-    ui_proxy.map({'label', 'innerText'}, ui_label)
-    ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
-    ui_proxy.map_to_all({'title'})
+        ui_proxy = UI_Proxy(ui_container)
+        ui_proxy.translate_map('collapsed', 'checked', ui_label)
+        ui_proxy.map({'label', 'innerText'}, ui_label)
+        ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
+        ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 
@@ -413,135 +424,132 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_gl
             word_fn(word)
 
     def process_para(container, para, **kwargs):
-        container.defer_dirty_propagation = True
-        opts = kwargopts(kwargs, classes='')
+        with container.defer_dirty('creating new children'):
+            opts = kwargopts(kwargs, classes='')
 
-        # break each ui_item onto it's own line
-        para = re.sub(r'\n', ' ', para)     # join sentences of paragraph
-        para = re.sub(r'  *', ' ', para)    # 1+ spaces => 1 space
+            # break each ui_item onto it's own line
+            para = re.sub(r'\n', ' ', para)     # join sentences of paragraph
+            para = re.sub(r'  *', ' ', para)    # 1+ spaces => 1 space
 
-        # TODO: revisit this, and create an actual parser
-        para = para.lstrip()
-        while para:
-            t,m = Markdown.match_inline(para)
-            if t is None:
-                word,para = Markdown.split_word(para)
-                container.append_child(span(innerText=word))
-            else:
-                if t == 'br':
-                    container.append_child(br())
-                elif t == 'img':
-                    style = m.group('style').strip() or None
-                    UI_Element(tagName='img', classes='inline', style=style, src=m.group('filename'), title=m.group('caption'), parent=container)
-                elif t == 'code':
-                    container.append_child(code(innerText=m.group('text')))
-                elif t == 'link':
-                    text,link = m.group('text'),m.group('link')
-                    title = 'Click to open URL in default web browser' if Markdown.is_url(link) else 'Click to open help'
-                    def mouseclick():
-                        if Markdown.is_url(link):
-                            bpy.ops.wm.url_open(url=link)
-                        else:
-                            set_markdown(ui_mdown, mdown_path=link, preprocess_fn=preprocess_fn, f_globals=f_globals, f_locals=f_locals)
-                    process_words(text, lambda word: a(innerText=word, href=link, title=title, on_mouseclick=mouseclick, parent=container))
-                elif t == 'bold':
-                    process_words(m.group('text'), lambda word: b(innerText=word, parent=container))
-                elif t == 'italic':
-                    process_words(m.group('text'), lambda word: i(innerText=word, parent=container))
-                elif t == 'checkbox':
-                    params = m.group('params')
-                    innertext = m.group('innertext')
-                    value = None
-                    for param in re.finditer(r'(?P<key>[a-zA-Z]+)(="(?P<val>.*?)")?', params):
-                        key = param.group('key')
-                        val = param.group('val')
-                        if key == 'type':
-                            pass
-                        elif key == 'value':
-                            value = val
-                        else:
-                            assert False, 'Unhandled checkbox parameter key="%s", val="%s" (%s)' % (key,val,param)
-                    assert value is not None, 'Unhandled checkbox parameters: expected value (%s)' % (params)
-                    # print('CREATING input_checkbox(label="%s", checked=BoundVar("%s", ...)' % (innertext, value))
-                    container.append_child(input_checkbox(label=innertext, checked=BoundVar(value, f_globals=f_globals, f_locals=f_locals)))
+            # TODO: revisit this, and create an actual parser
+            para = para.lstrip()
+            while para:
+                t,m = Markdown.match_inline(para)
+                if t is None:
+                    word,para = Markdown.split_word(para)
+                    container.append_child(span(innerText=word))
                 else:
-                    assert False, 'Unhandled inline markdown type "%s" ("%s") with "%s"' % (str(t), str(m), line)
-                para = para[m.end():]
-        container.defer_dirty_propagation = False
+                    if t == 'br':
+                        container.append_child(br())
+                    elif t == 'img':
+                        style = m.group('style').strip() or None
+                        UI_Element(tagName='img', classes='inline', style=style, src=m.group('filename'), title=m.group('caption'), parent=container)
+                    elif t == 'code':
+                        container.append_child(code(innerText=m.group('text')))
+                    elif t == 'link':
+                        text,link = m.group('text'),m.group('link')
+                        title = 'Click to open URL in default web browser' if Markdown.is_url(link) else 'Click to open help'
+                        def mouseclick():
+                            if Markdown.is_url(link):
+                                bpy.ops.wm.url_open(url=link)
+                            else:
+                                set_markdown(ui_mdown, mdown_path=link, preprocess_fn=preprocess_fn, f_globals=f_globals, f_locals=f_locals)
+                        process_words(text, lambda word: a(innerText=word, href=link, title=title, on_mouseclick=mouseclick, parent=container))
+                    elif t == 'bold':
+                        process_words(m.group('text'), lambda word: b(innerText=word, parent=container))
+                    elif t == 'italic':
+                        process_words(m.group('text'), lambda word: i(innerText=word, parent=container))
+                    elif t == 'checkbox':
+                        params = m.group('params')
+                        innertext = m.group('innertext')
+                        value = None
+                        for param in re.finditer(r'(?P<key>[a-zA-Z]+)(="(?P<val>.*?)")?', params):
+                            key = param.group('key')
+                            val = param.group('val')
+                            if key == 'type':
+                                pass
+                            elif key == 'value':
+                                value = val
+                            else:
+                                assert False, 'Unhandled checkbox parameter key="%s", val="%s" (%s)' % (key,val,param)
+                        assert value is not None, 'Unhandled checkbox parameters: expected value (%s)' % (params)
+                        # print('CREATING input_checkbox(label="%s", checked=BoundVar("%s", ...)' % (innertext, value))
+                        container.append_child(input_checkbox(label=innertext, checked=BoundVar(value, f_globals=f_globals, f_locals=f_locals)))
+                    else:
+                        assert False, 'Unhandled inline markdown type "%s" ("%s") with "%s"' % (str(t), str(m), line)
+                    para = para[m.end():]
 
-    ui_mdown.defer_dirty_propagation = True
-    ui_mdown.clear_children()
-    ui_mdown.scrollToTop(force=True)
-    if ui_mdown.parent: ui_mdown.parent.scrollToTop(force=True)
+    with ui_mdown.defer_dirty('creating new children'):
+        ui_mdown.clear_children()
+        ui_mdown.scrollToTop(force=True)
+        if ui_mdown.parent: ui_mdown.parent.scrollToTop(force=True)
 
-    paras = mdown.split('\n\n')         # split into paragraphs
-    for para in paras:
-        t,m = Markdown.match_line(para)
+        paras = mdown.split('\n\n')         # split into paragraphs
+        for para in paras:
+            t,m = Markdown.match_line(para)
 
-        if t is None:
-            p_element = ui_mdown.append_child(p())
-            process_para(p_element, para)
+            if t is None:
+                p_element = ui_mdown.append_child(p())
+                process_para(p_element, para)
 
-        elif t in ['h1','h2','h3']:
-            hn = {'h1':h1, 'h2':h2, 'h3':h3}[t]
-            #hn(innerText=m.group('text'), parent=ui_mdown)
-            ui_hn = hn(parent=ui_mdown)
-            process_para(ui_hn, m.group('text'))
+            elif t in ['h1','h2','h3']:
+                hn = {'h1':h1, 'h2':h2, 'h3':h3}[t]
+                #hn(innerText=m.group('text'), parent=ui_mdown)
+                ui_hn = hn(parent=ui_mdown)
+                process_para(ui_hn, m.group('text'))
 
-        elif t == 'ul':
-            ui_ul = UI_Element(tagName='ul', parent=ui_mdown)
-            ui_ul.defer_dirty_propagation = True
-            para = para[2:]
-            for litext in re.split(r'\n- ', para):
-                ui_li = UI_Element(tagName='li', parent=ui_ul)
-                UI_Element(tagName='img', classes='dot', src='radio.png', parent=ui_li)
-                span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
-                process_para(span_element, litext)
-            ui_ul.defer_dirty_propagation = False
+            elif t == 'ul':
+                ui_ul = UI_Element(tagName='ul', parent=ui_mdown)
+                ui_ul.defer_dirty_propagation = True
+                para = para[2:]
+                for litext in re.split(r'\n- ', para):
+                    ui_li = UI_Element(tagName='li', parent=ui_ul)
+                    UI_Element(tagName='img', classes='dot', src='radio.png', parent=ui_li)
+                    span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
+                    process_para(span_element, litext)
+                ui_ul.defer_dirty_propagation = False
 
-        elif t == 'ol':
-            ui_ol = UI_Element(tagName='ol', parent=ui_mdown)
-            ui_ol.defer_dirty_propagation = True
-            para = para[2:]
-            for ili,litext in enumerate(re.split(r'\n\d+\. ', para)):
-                ui_li = UI_Element(tagName='li', parent=ui_ol)
-                UI_Element(tagName='span', classes='number', innerText='%d.'%(ili+1), parent=ui_li)
-                span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
-                process_para(span_element, litext)
-            ui_ol.defer_dirty_propagation = False
+            elif t == 'ol':
+                ui_ol = UI_Element(tagName='ol', parent=ui_mdown)
+                ui_ol.defer_dirty_propagation = True
+                para = para[2:]
+                for ili,litext in enumerate(re.split(r'\n\d+\. ', para)):
+                    ui_li = UI_Element(tagName='li', parent=ui_ol)
+                    UI_Element(tagName='span', classes='number', innerText='%d.'%(ili+1), parent=ui_li)
+                    span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
+                    process_para(span_element, litext)
+                ui_ol.defer_dirty_propagation = False
 
-        elif t == 'img':
-            style = m.group('style').strip() or None
-            UI_Element(tagName='img', style=style, src=m.group('filename'), title=m.group('caption'), parent=ui_mdown)
+            elif t == 'img':
+                style = m.group('style').strip() or None
+                UI_Element(tagName='img', style=style, src=m.group('filename'), title=m.group('caption'), parent=ui_mdown)
 
-        elif t == 'table':
-            # table!
-            def split_row(row):
-                row = re.sub(r'^\| ', r'', row)
-                row = re.sub(r' \|$', r'', row)
-                return [col.strip() for col in row.split(' | ')]
-            data = [l for l in para.split('\n')]
-            header = split_row(data[0])
-            add_header = any(header)
-            align = data[1]
-            data = [split_row(row) for row in data[2:]]
-            rows,cols = len(data),len(data[0])
-            table_element = table(parent=ui_mdown)
-            if add_header:
-                tr_element = tr(parent=table_element)
-                for c in range(cols):
-                    th(innerText=header[c], parent=tr_element)
-            for r in range(rows):
-                tr_element = tr(parent=table_element)
-                for c in range(cols):
-                    td_element = td(parent=tr_element)
-                    process_para(td_element, data[r][c])
-            pass
+            elif t == 'table':
+                # table!
+                def split_row(row):
+                    row = re.sub(r'^\| ', r'', row)
+                    row = re.sub(r' \|$', r'', row)
+                    return [col.strip() for col in row.split(' | ')]
+                data = [l for l in para.split('\n')]
+                header = split_row(data[0])
+                add_header = any(header)
+                align = data[1]
+                data = [split_row(row) for row in data[2:]]
+                rows,cols = len(data),len(data[0])
+                table_element = table(parent=ui_mdown)
+                if add_header:
+                    tr_element = tr(parent=table_element)
+                    for c in range(cols):
+                        th(innerText=header[c], parent=tr_element)
+                for r in range(rows):
+                    tr_element = tr(parent=table_element)
+                    for c in range(cols):
+                        td_element = td(parent=tr_element)
+                        process_para(td_element, data[r][c])
+                pass
 
-        else:
-            assert False, 'Unhandled markdown line type "%s" ("%s") with "%s"' % (str(t), str(m), para)
-
-    ui_mdown.defer_dirty_propagation = False
+            else:
+                assert False, 'Unhandled markdown line type "%s" ("%s") with "%s"' % (str(t), str(m), para)
 
 
 def markdown(mdown=None, mdown_path=None, preprocess_fn=None, f_globals=None, f_locals=None, **kwargs):
@@ -556,11 +564,12 @@ def markdown(mdown=None, mdown_path=None, preprocess_fn=None, f_globals=None, f_
 
 
 
-def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, closeable=True, moveable=True, hide_on_close=False, close_callback=None, **kwargs):
+def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=False, closeable=True, moveable=True, hide_on_close=False, close_callback=None, clamp_to_parent=True, **kwargs):
     # TODO: always add header, and use UI_Proxy translate+map "label" to change header
     kw_inside = kwargs_splitter({'children'}, kwargs)
     ui_document = Globals.ui_document
     kwargs['classes'] = 'framed %s %s' % (kwargs.get('classes', ''), 'moveable' if moveable else '')
+    kwargs['clamp_to_parent'] = clamp_to_parent
     ui_dialog = UI_Element(tagName='dialog', **kwargs)
 
     ui_header = UI_Element(tagName='div', classes='dialog-header', parent=ui_dialog)
