@@ -36,6 +36,8 @@ import bgl
 import blf
 import gpu
 
+from .ui_proxy import UI_Proxy
+
 from gpu.types import GPUOffScreen
 from gpu_extras.presets import draw_texture_2d
 from mathutils import Vector, Matrix
@@ -636,9 +638,10 @@ class UI_Element_Properties:
         return c
 
     def is_descendant_of(self, ancestor):
-        if self == ancestor: return True
-        if not self._parent: return False
-        return self._parent.is_descendant_of(ancestor)
+        ui_element = self
+        while ui_element != ancestor and ui_element is not None:
+            ui_element = ui_element._parent
+        return ui_element == ancestor
 
 
     def getElementById(self, element_id):
@@ -667,6 +670,16 @@ class UI_Element_Properties:
         ret.extend(e for child in self.children for e in child.getElementsByTagName(tag_name))
         return ret
 
+    @property
+    def document(self):
+        return self._document
+    @document.setter
+    def document(self, value):
+        if self._document == value: return
+        self._document = value
+        for c in self._children:
+            c.document = value
+
 
     ######################################3
     # children methods
@@ -685,6 +698,7 @@ class UI_Element_Properties:
             child._parent.delete_child(child)
         self._children.append(child)
         child._parent = self
+        child.document = self.document
         child._dirty('appending child to parent', parent=True, children=True)
         self._dirty('copying dirtiness from child', properties=child._dirty_properties, parent=True, children=False)
         self._dirty('appending new child changes content', 'content')
@@ -714,8 +728,10 @@ class UI_Element_Properties:
             assert len(pchildren) != 0, 'attempting to delete child that does not exist?'
             assert len(pchildren) == 1, 'attempting to delete child that is wrapped twice?'
             child = pchildren[0]
+        self.document.removed_element(child)
         self._children.remove(child)
         child._parent = None
+        child.document = None
         child._dirty('deleting child from parent')
         self._dirty('deleting child changes content', 'content')
         self._new_content = True
@@ -929,7 +945,7 @@ class UI_Element_Properties:
 
     def _blur(self):
         if 'focus' not in self._pseudoclasses: return
-        ui_document.blur()
+        self._document.blur()
     def blur(self): self._blur()
 
     @property
@@ -1549,6 +1565,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._title         = None      # tooltip
         self._forId         = None      # used for labels
         self._uid           = UI_Element.get_uid()
+        self._document      = None
 
         # attribs
         self._type            = None
@@ -1583,7 +1600,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._style_height  = None
         self._style_z_index = None
 
-        self._document_elem = None
+        self._document_elem = None      # this is actually the document.body.  TODO: rename?
         self._nonstatic_elem = None
 
 
@@ -1713,27 +1730,22 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         # start setting properties
         # NOTE: some properties require special handling
         with self.defer_dirty('setting initial properties'):
-            for (k,v) in kwargs.items():
+            # NOTE: handle attribs in multiple passes, so that debug prints are more informative
+
+            # first pass: handling events, value, checked, attribs...
+            working_keys, unhandled_keys = kwargs.keys(), set()
+            for k in working_keys:
+                v = kwargs[k]
                 if k in self._events:
                     # key is an event; set callback
                     self.add_eventListener(k, v)
                 elif k == 'atomic':
                     self._atomic = v
-                elif k == 'parent':
-                    # note: parent.append_child(self) will set self._parent
-                    v.append_child(self)
-                elif k == '_parent':
-                    self._parent = v
-                    self._do_not_dirty_parent = True
-                elif k == 'children':
-                    # append each child
-                    for child in kwargs['children']:
-                        self.append_child(child)
                 elif k == 'value' and isinstance(v, BoundVar):
                     self.value_bind(v)
                 elif k == 'checked' and isinstance(v, BoundVar):
                     self.checked_bind(v)
-                elif hasattr(self, k):
+                elif hasattr(self, k) and k not in {'parent', '_parent', 'children'}:
                     # need to test that a setter exists for the property
                     class_attr = getattr(type(self), k, None)
                     if type(class_attr) is property:
@@ -1745,7 +1757,37 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                         print('Setting non-property attribute %s to "%s"' % (k, str(v)))
                         setattr(self, k, v)
                 else:
-                    print('Unhandled pair (%s,%s)' % (k,str(v)))
+                    unhandled_keys.add(k)
+
+            # second pass: handling parent...
+            working_keys, unhandled_keys = unhandled_keys, set()
+            for k in working_keys:
+                v = kwargs[k]
+                if k == 'parent':
+                    # note: parent.append_child(self) will set self._parent
+                    v.append_child(self)
+                elif k == '_parent':
+                    self._parent = v
+                    self._document = v.document
+                    self._do_not_dirty_parent = True
+                else:
+                    unhandled_keys.add(k)
+
+            # third pass: handling children...
+            working_keys, unhandled_keys = unhandled_keys, set()
+            for k in working_keys:
+                v = kwargs[k]
+                if k == 'children':
+                    # append each child
+                    for child in kwargs['children']:
+                        self.append_child(child)
+                else:
+                    unhandled_keys.add(k)
+
+            # report unhandled attribs
+            for k in unhandled_keys:
+                print('Unhandled pair:', (k, kwargs[k]))
+
         self._dirty('initially dirty')
 
     def __del__(self):
@@ -3046,8 +3088,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
     @profiler.function
     def _dispatch_event(self, event, mouse=None, button=None, key=None, ui_event=None, stop_at=None):
-        if mouse is None: mouse = ui_document.actions.mouse
-        if button is None: button = (ui_document.actions.using('LEFTMOUSE'),ui_document.actions.using('MIDDLEMOUSE'),ui_document.actions.using('RIGHTMOUSE'))
+        if self._document:
+            if mouse is None:
+                mouse = self._document.actions.mouse
+            if button is None:
+                button = (
+                    self._document.actions.using('LEFTMOUSE'),
+                    self._document.actions.using('MIDDLEMOUSE'),
+                    self._document.actions.using('RIGHTMOUSE')
+                )
+        # else:
+        #     if mouse is None or button is None:
+        #         print(f'UI_Element._dispatch_event: {event} dispatched on {self}, but self.document = {self.document}  (root={self.get_root()}')
         if ui_event is None: ui_event = UI_Event(target=self, mouse=mouse, button=button, key=key)
         path = self.get_pathToRoot()[1:] # skipping first item, which is self
         if stop_at is not None and stop_at in path:
@@ -3075,625 +3127,4 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     def compute_preferred_size(self): pass
 
 
-
-class UI_Proxy:
-    def __init__(self, default_element, other_elements=None):
-        # NOTE: use self.__dict__ here!!!
-        self.__dict__['_default_element'] = default_element
-        self.__dict__['_mapping'] = {}
-        self.__dict__['_translate'] = {}
-        self.__dict__['_mapall'] = set()
-        self.__dict__['_all_elements'] = { default_element }
-        self.__dict__['_other_elements'] = set()
-        if other_elements:
-            self._all_elements.update(other_elements)
-            self._other_elements.update(other_elements)
-    def __str__(self):
-        l = self._all_elements
-        return '<UI_Proxy def=%s others=%s>' % (str(self._default_element), str(self._other_elements))
-    def __repr__(self):
-        return self.__str__()
-    def map_to_all(self, attribs):
-        if type(attribs) is str: self._mapall.add(attribs)
-        else: self._mapall.update(attribs)
-    def map(self, attribs, ui_element):
-        if type(attribs) is str: attribs = [attribs]
-        t = self._translate
-        attribs = [t.get(a, a) for a in attribs]
-        for attrib in attribs: self._mapping[attrib] = ui_element
-        self._all_elements.add(ui_element)
-        self._other_elements.add(ui_element)
-    def translate(self, attrib_from, attrib_to):
-        self._translate[attrib_from] = attrib_to
-    def translate_map(self, attrib_from, attrib_to, ui_element):
-        self.translate(attrib_from, attrib_to)
-        self.map([attrib_to], ui_element)
-        self._all_elements.add(ui_element)
-        self._other_elements.add(ui_element)
-    def unmap(self, attribs):
-        if type(attribs) is str: attribs = [attribs]
-        for attrib in attribs: self._mapping[attrib] = None
-    def __dir__(self):
-        return dir(self._default_element)
-    def __getattr__(self, attrib):
-        # ignore mapping for attribs with _ prefix
-        if attrib.startswith('_'):
-            return getattr(self._default_element, attrib)
-        if attrib in self._mapall:
-            return getattr(self._default_element, attrib)
-        if attrib in self._translate:
-            attrib = self._translate[attrib]
-        ui_element = self._mapping.get(attrib, None)
-        if ui_element is None: ui_element = self._default_element
-        return getattr(ui_element, attrib)
-    def __setattr__(self, attrib, val):
-        # ignore mapping for attribs with _ prefix
-        if attrib.startswith('_'):
-            return setattr(self._default_element, attrib, val)
-        if attrib in self._mapall:
-            #print('ui_proxy: mapping %s,%s to %s' % (str(attrib), str(val), str(self._all_elements)))
-            for ui_element in self._other_elements:
-                setattr(ui_element, attrib, val)
-            return setattr(self._default_element, attrib, val)
-        if attrib in self.__dict__:
-            self.__dict__[attrib] = val
-            return val
-        ui_element = self._mapping.get(attrib, None)
-        if ui_element is None: ui_element = self._default_element
-        return setattr(ui_element, attrib, val)
-    def debug_print(self, d, already_printed):
-        sp0 = '    '*d
-        sp1 = '    '*(d+1)
-        if self in already_printed:
-            print('%s<proxy>...</proxy>' % (sp))
-            return
-        already_printed.add(self)
-        print('%s<proxy>' % sp0)
-        print('%s<default>' % sp1)
-        self._default_element.debug_print(d+2, already_printed)
-        print('%s</default>' % sp1)
-        print('%s<other>' % sp1)
-        for c in self._other_elements:
-            c.debug_print(d+2, already_printed)
-        print('%s</other>' % sp1)
-        print('%s</proxy>' % sp0)
-
-
-class UI_Document_FSM:
-    fsm = FSM()
-    FSM_State = fsm.wrapper
-
-class UI_Document(UI_Document_FSM):
-    default_keymap = {
-        'commit': {'RET',},
-        'cancel': {'ESC',},
-        'keypress':
-            {c for c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'} |
-            {'NUMPAD_%d'%i for i in range(10)} | {'NUMPAD_PERIOD','NUMPAD_MINUS','NUMPAD_PLUS','NUMPAD_SLASH','NUMPAD_ASTERIX'} |
-            {'ZERO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'} |
-            {'PERIOD', 'MINUS', 'SPACE', 'SEMI_COLON', 'COMMA', 'QUOTE', 'ACCENT_GRAVE', 'PLUS', 'SLASH', 'BACK_SLASH', 'EQUAL', 'LEFT_BRACKET', 'RIGHT_BRACKET'},
-        'scroll top': {'HOME'},
-        'scroll bottom': {'END'},
-        'scroll up': {'WHEELUPMOUSE', 'PAGE_UP', 'UP_ARROW', },
-        'scroll down': {'WHEELDOWNMOUSE', 'PAGE_DOWN', 'DOWN_ARROW', },
-        'scroll': {'TRACKPADPAN'},
-    }
-
-    doubleclick_time = bpy.context.preferences.inputs.mouse_double_click_time / 1000 # 0.25
-    wheel_scroll_lines = bpy.context.preferences.inputs.wheel_scroll_lines
-    allow_disabled_to_blur = False
-    key_repeat_delay = 0.25
-    key_repeat_pause = 0.10
-    show_tooltips = True
-    tooltip_delay = 0.50
-    max_click_dist = 10         # allows mouse to travel off element and still register a click event
-    allow_click_time = 0.50     # allows for very fast clicking. ignore max_click_dist if time(mouseup-mousedown) is at most allow_click_time
-
-    def __init__(self):
-        self._context = None
-        self._area = None
-        self._exception_callbacks = []
-        self._ui_scale = Globals.drawing.get_dpi_mult()
-        self._draw_count = 0
-        self._draw_time = 0
-        self._draw_fps = 0
-
-    def add_exception_callback(self, fn):
-        self._exception_callbacks += [fn]
-
-    def _callback_exception_callbacks(self, e):
-        for fn in self._exception_callbacks:
-            try:
-                fn(e)
-            except Exception as e2:
-                print('Caught exception while callback exception callbacks: %s' % fn.__name__)
-                print('original: %s' % str(e))
-                print('additional: %s' % str(e2))
-                debugger.print_exception()
-
-    @profiler.function
-    def init(self, context, **kwargs):
-        self._context = context
-        self._area = context.area
-        self.actions = ActionHandler(bpy.context, UI_Document.default_keymap)
-        self._body = UI_Element(tagName='body')
-        self._tooltip = UI_Element(tagName='dialog', classes='tooltip', can_hover=False, parent=self._body)
-        self._tooltip.is_visible = False
-        self._tooltip_message = None
-        self._tooltip_wait = None
-        self._tooltip_mouse = None
-        self._reposition_tooltip_before_draw = False
-        self.fsm.init(self, start='main')
-
-        self.ignore_hover_change = False
-
-        self._sticky_dist = 20
-        self._sticky_element = None # allows the mouse to drift a few pixels off before handling mouseleave
-
-        self._under_mouse = None
-        self._under_down = None
-        self._focus = None
-
-        self._last_mx = -1
-        self._last_my = -1
-        self._last_mouse = None
-        self._last_under_mouse = None
-        self._last_under_click = None
-        self._last_click_time = 0
-        self._last_sz = None
-        self._last_w = -1
-        self._last_h = -1
-
-    @property
-    def body(self):
-        return self._body
-
-    def center_on_mouse(self, element):
-        if element is None: return
-        element._relative_pos = None
-        mx,my = self.actions.mouse
-        w = element.width_pixels
-        h = element.height_pixels
-        element.reposition(left=mx-w/2, top=-self._body.height_pixels + my + h/2)
-
-    def _reposition_tooltip(self, force=False):
-        if self._tooltip_mouse == self.actions.mouse and not force: return
-        self._tooltip_mouse = self.actions.mouse
-        if self._tooltip.width_pixels is None or type(self._tooltip.width_pixels) is str or self._tooltip._mbp_width is None or self._tooltip.height_pixels is None or type(self._tooltip.height_pixels) is str or self._tooltip._mbp_height is None:
-            ttl,ttt = self.actions.mouse
-        else:
-            ttl = self.actions.mouse.x if self.actions.mouse.x < self._body.width_pixels/2  else self.actions.mouse.x - (self._tooltip.width_pixels + (self._tooltip._mbp_width or 0))
-            ttt = self.actions.mouse.y if self.actions.mouse.y > self._body.height_pixels/2 else self.actions.mouse.y + (self._tooltip.height_pixels + (self._tooltip._mbp_height or 0))
-        hp = self._body.height_pixels if type(self._body.height_pixels) is not str else 0.0
-        self._tooltip.reposition(left=ttl, top=ttt - hp)
-
-    @profiler.function
-    def update(self, context, event):
-        if context.area != self._area: return
-        self._ui_scale = Globals.drawing.get_dpi_mult()
-
-        UI_Element_PreventMultiCalls.reset_multicalls()
-
-        w,h = context.region.width, context.region.height
-        if self._last_w != w or self._last_h != h:
-            # print('Document:', (self._last_w, self._last_h), (w,h))
-            self._last_w,self._last_h = w,h
-            self._body.dirty('changed document size', children=True)
-            self._body.dirty_flow()
-            tag_redraw_all("UI_Element update: w,h change")
-
-        if DEBUG_COLOR_CLEAN: tag_redraw_all("UI_Element DEBUG_COLOR_CLEAN")
-
-        #self.actions.update(context, event, self._timer, print_actions=False)
-        # self.actions.update(context, event, print_actions=False)
-
-        if self._sticky_element and not self._sticky_element.is_visible:
-            self._sticky_element = None
-
-        self._mx,self._my = self.actions.mouse if self.actions.mouse else (-1,-1)
-        if not self.ignore_hover_change:
-            self._under_mouse = self._body.get_under_mouse(self.actions.mouse)
-            if self._sticky_element:
-                if self._sticky_element.get_mouse_distance(self.actions.mouse) < self._sticky_dist * self._ui_scale:
-                    if self._under_mouse is None or not self._under_mouse.is_descendant_of(self._sticky_element):
-                        self._under_mouse = self._sticky_element
-
-        next_message = None
-        if self._under_mouse and self._under_mouse.title:
-            next_message = self._under_mouse.title
-        if self._tooltip_message != next_message:
-            self._tooltip_message = next_message
-            self._tooltip_mouse = None
-            self._tooltip_wait = time.time() + self.tooltip_delay
-            self._tooltip.is_visible = False
-        if self._tooltip_message and time.time() > self._tooltip_wait:
-            # TODO: markdown support??
-            self._tooltip.innerText = self._tooltip_message
-            self._tooltip.is_visible = True and self.show_tooltips
-            self._reposition_tooltip_before_draw = True
-
-        self.fsm.update()
-
-        self._last_mx = self._mx
-        self._last_my = self._my
-        self._last_mouse = self.actions.mouse
-        if not self.ignore_hover_change: self._last_under_mouse = self._under_mouse
-
-        uictrld = False
-        uictrld |= self._under_mouse is not None and self._under_mouse != self._body
-        uictrld |= self.fsm.state != 'main'
-        # uictrld |= self._focus is not None
-
-        return {'hover'} if uictrld else None
-
-
-    def _addrem_pseudoclass(self, pseudoclass, remove_from=None, add_to=None):
-        rem = remove_from.get_pathToRoot() if remove_from else []
-        add = add_to.get_pathToRoot() if add_to else []
-        rem.reverse()
-        add.reverse()
-        while rem and add and rem[0] == add[0]:
-            rem = rem[1:]
-            add = add[1:]
-        for e in rem: e._del_pseudoclass(pseudoclass)
-        for e in add: e._add_pseudoclass(pseudoclass)
-
-    def debug_print(self):
-        print('')
-        print('UI_Document.debug_print')
-        self._body.debug_print(0, set())
-    def _debug_print(self, ui_from):
-        # debug print!
-        path = ui_from.get_pathToRoot()
-        for i,ui_elem in enumerate(reversed(path)):
-            def tprint(*args, extra=0, **kwargs):
-                print('  '*(i+extra), end='')
-                print(*args, **kwargs)
-            tprint(str(ui_elem))
-            tprint(ui_elem._selector, extra=1)
-            tprint(ui_elem._l, ui_elem._t, ui_elem._w, ui_elem._h, extra=1)
-
-    @property
-    def sticky_element(self):
-        return self._stick_element
-    @sticky_element.setter
-    def sticky_element(self, element):
-        if type(element) is UI_Proxy:
-            element = element._default_element
-        self._sticky_element = element
-
-    def clear_last_under(self):
-        self._last_under_mouse = None
-
-    @profiler.function
-    def handle_hover(self, change_cursor=True):
-        # handle :hover, on_mouseenter, on_mouseleave
-        if self.ignore_hover_change: return
-
-        if change_cursor and self._under_mouse and self._under_mouse._tagName != 'body':
-            cursor = self._under_mouse._computed_styles.get('cursor', 'default')
-            Globals.cursors.set(convert_token_to_cursor(cursor))
-
-        if self._under_mouse == self._last_under_mouse: return
-        if self._under_mouse and not self._under_mouse.can_hover: return
-
-        self._addrem_pseudoclass('hover', remove_from=self._last_under_mouse, add_to=self._under_mouse)
-        if self._last_under_mouse: self._last_under_mouse._dispatch_event('on_mouseleave')
-        if self._under_mouse: self._under_mouse._dispatch_event('on_mouseenter')
-
-    @profiler.function
-    def handle_mousemove(self, ui_element=None):
-        ui_element = ui_element or self._under_mouse
-        if ui_element is None: return
-        if self._last_mouse == self.actions.mouse: return
-        ui_element._dispatch_event('on_mousemove')
-
-
-    @UI_Document_FSM.FSM_State('main', 'enter')
-    def modal_main_enter(self):
-        Globals.cursors.set('DEFAULT')
-
-    @UI_Document_FSM.FSM_State('main')
-    def modal_main(self):
-        # print('UI_Document.main', self.actions.event_type, time.time())
-
-        if self.actions.pressed('MIDDEMOUSE'):
-            return 'scroll'
-
-        if self.actions.pressed('LEFTMOUSE', unpress=False, ignoremods=True, ignoremulti=True):
-            return 'mousedown'
-
-        # if self.actions.pressed('RIGHTMOUSE') and self._under_mouse:
-        #     self._debug_print(self._under_mouse)
-        #     #print('focus:', self._focus)
-
-        if self.actions.pressed({'scroll top', 'scroll bottom'}, unpress=False):
-            move = 100000 * (-1 if self.actions.pressed({'scroll top'}) else 1)
-            self.actions.unpress()
-            if self._get_scrollable():
-                self._scroll_element.scrollTop = self._scroll_last.y + move
-                self._scroll_element._setup_ltwh(recurse_children=False)
-
-        if self.actions.pressed({'scroll', 'scroll up', 'scroll down'}, unpress=False):
-            if self.actions.event_type == 'TRACKPADPAN':
-                move = self.actions.mouse.y - self.actions.mouse_prev.y
-            else:
-                d = self.wheel_scroll_lines * 8
-                move = Globals.drawing.scale(d) * (-1 if self.actions.pressed({'scroll up'}) else 1)
-            self.actions.unpress()
-            if self._get_scrollable():
-                self._scroll_element.scrollTop = self._scroll_last.y + move
-                self._scroll_element._setup_ltwh(recurse_children=False)
-
-        if self._under_mouse and self.actions.just_pressed:
-            pressed = self.actions.just_pressed
-            # self.actions.unpress()
-            self._under_mouse._dispatch_event('on_keypress', key=pressed)
-
-        self.handle_hover()
-        self.handle_mousemove()
-
-        if False:
-            print('---------------------------')
-            if self._focus:      print('FOCUS', self._focus, self._focus.pseudoclasses)
-            else: print('FOCUS', None)
-            if self._under_down: print('DOWN',  self._under_down, self._under_down.pseudoclasses)
-            else: print('DOWN', None)
-            if under_mouse:      print('UNDER', under_mouse, under_mouse.pseudoclasses)
-            else: print('UNDER', None)
-
-    def _get_scrollable(self):
-        # find first along root to path that can scroll
-        if not self._under_mouse: return None
-        self._scroll_element = next((e for e in self._under_mouse.get_pathToRoot() if e.is_scrollable), None)
-        if self._scroll_element:
-            self._scroll_last = RelPoint2D((self._scroll_element.scrollLeft, self._scroll_element.scrollTop))
-        return self._scroll_element
-
-    @UI_Document_FSM.FSM_State('scroll', 'can enter')
-    def scroll_canenter(self):
-        if not self._get_scrollable(): return False
-
-    @UI_Document_FSM.FSM_State('scroll', 'enter')
-    def scroll_enter(self):
-        self._scroll_point = self.actions.mouse
-        self.ignore_hover_change = True
-        Globals.cursors.set('SCROLL_Y')
-
-    @UI_Document_FSM.FSM_State('scroll')
-    def scroll_main(self):
-        if self.actions.released('MIDDLEMOUSE', ignoremods=True, ignoremulti=True):
-            # done scrolling
-            return 'main'
-        nx = self._scroll_element.scrollLeft + (self._scroll_point.x - self._mx)
-        ny = self._scroll_element.scrollTop  - (self._scroll_point.y - self._my)
-        self._scroll_element.scrollLeft = nx
-        self._scroll_element.scrollTop = ny
-        self._scroll_point = self.actions.mouse
-        self._scroll_element._setup_ltwh(recurse_children=False)
-
-    @UI_Document_FSM.FSM_State('scroll', 'exit')
-    def scroll_exit(self):
-        self.ignore_hover_change = False
-
-
-    @UI_Document_FSM.FSM_State('mousedown', 'can enter')
-    def mousedown_canenter(self):
-        disabled_under = self._under_mouse and self._under_mouse.is_disabled
-        if UI_Document.allow_disabled_to_blur and disabled_under:
-            # user clicked on disabled element, so blur current focused element
-            self.blur()
-        if self._under_mouse == self._body:
-            # clicking body always blurs focus
-            self.blur()
-        return self._under_mouse is not None and self._under_mouse != self._body and not self._under_mouse.is_disabled
-
-    @UI_Document_FSM.FSM_State('mousedown', 'enter')
-    def mousedown_enter(self):
-        change_focus = self._focus != self._under_mouse
-        if change_focus:
-            if self._under_mouse.can_focus:
-                # element under mouse takes focus
-                self.focus(self._under_mouse)
-            elif self._focus and self._is_ancestor(self._focus, self._under_mouse):
-                # current focus is an ancestor of new element, so don't blur!
-                pass
-            else:
-                self.blur()
-
-        self._mousedown_time = time.time()
-        self._under_mousedown = self._under_mouse
-        self._addrem_pseudoclass('active', add_to=self._under_mousedown)
-        # self._under_mousedown.add_pseudoclass('active')
-        self._under_mousedown._dispatch_event('on_mousedown')
-        # print(self._under_mouse.get_pathToRoot())
-
-    @UI_Document_FSM.FSM_State('mousedown')
-    def mousedown_main(self):
-        if self.actions.released('LEFTMOUSE', ignoremods=True, ignoremulti=True):
-            # done with mousedown
-            return 'focus' if self._under_mousedown.can_focus else 'main'
-        self.handle_hover(change_cursor=False)
-        self.handle_mousemove(ui_element=self._under_mousedown)
-
-    @UI_Document_FSM.FSM_State('mousedown', 'exit')
-    def mousedown_exit(self):
-        self._under_mousedown._dispatch_event('on_mouseup')
-        click = False
-        click |= time.time() - self._mousedown_time < self.allow_click_time
-        click |= self._under_mousedown.get_mouse_distance(self.actions.mouse) <= self.max_click_dist * self._ui_scale
-        # print('mousedown_exit', time.time()-self._mousedown_time, self.allow_click_time, self.actions.mouse, self._under_mousedown.get_mouse_distance(self.actions.mouse), self.max_click_dist)
-        if click:
-            # old/simple: self._under_mouse == self._under_mousedown:
-            dblclick = True
-            dblclick &= self._under_mousedown == self._last_under_click
-            dblclick &= time.time() < self._last_click_time + self.doubleclick_time
-            self._under_mousedown._dispatch_event('on_mouseclick')
-            self._last_under_click = self._under_mousedown
-            if dblclick:
-                self._under_mousedown._dispatch_event('on_mousedblclick')
-                # self._last_under_click = None
-            if self._under_mousedown.forId:
-                # send mouseclick events to ui_element indicated by forId!
-                ui_for = self._under_mousedown.get_root().getElementById(self._under_mousedown.forId)
-                if ui_for is None: return
-                ui_for._dispatch_event('mouseclick', ui_event=e)
-            self._last_click_time = time.time()
-        else:
-            self._last_under_click = None
-            self._last_click_time = 0
-        self._addrem_pseudoclass('active', remove_from=self._under_mousedown)
-        # self._under_mousedown.del_pseudoclass('active')
-
-    def _is_ancestor(self, ancestor, descendant):
-        if type(ancestor) is UI_Proxy:
-            ancestors = set(ancestor._all_elements)
-        else:
-            ancestors = { ancestor }
-        descendant_ancestors = set(descendant.get_pathToRoot())
-        common = ancestors & descendant_ancestors
-        return len(common)>0
-
-    def blur(self, stop_at=None):
-        if self._focus is None: return
-        self._focus._del_pseudoclass('focus')
-        self._focus._dispatch_event('on_blur')
-        self._focus._dispatch_event('on_focusout', stop_at=stop_at)
-        self._addrem_pseudoclass('active', remove_from=self._focus)
-        self._focus = None
-
-    def focus(self, ui_element):
-        if ui_element is None: return
-        if type(ui_element) is UI_Proxy:
-            ui_element = ui_element._default_element
-        if self._focus == ui_element: return
-
-        stop_focus_at = None
-        if self._focus:
-            stop_blur_at = None
-            p_focus = ui_element.get_pathFromRoot()
-            p_blur = self._focus.get_pathFromRoot()
-            for i in range(min(len(p_focus), len(p_blur))):
-                if p_focus[i] != p_blur[i]:
-                    stop_focus_at = p_focus[i]
-                    stop_blur_at = p_blur[i]
-                    break
-            self.blur(stop_at=stop_blur_at)
-            #print('focusout to', p_blur, stop_blur_at)
-            #print('focusin from', p_focus, stop_focus_at)
-        self._focus = ui_element
-        self._focus._add_pseudoclass('focus')
-        self._focus._dispatch_event('on_focus')
-        self._focus._dispatch_event('on_focusin', stop_at=stop_focus_at)
-
-    @UI_Document_FSM.FSM_State('focus', 'enter')
-    def focus_enter(self):
-        self._last_pressed = None
-        self._last_press_time = 0
-        self._last_press_start = 0
-
-    @UI_Document_FSM.FSM_State('focus')
-    def focus_main(self):
-        if self.actions.pressed('LEFTMOUSE', unpress=False):
-            return 'mousedown'
-        # if self.actions.pressed('RIGHTMOUSE'):
-        #     self._debug_print(self._focus)
-        # if self.actions.pressed('ESC'):
-        #     self.blur()
-        #     return 'main'
-        self.handle_hover()
-        self.handle_mousemove()
-
-        pressed = None
-        if self.actions.using('keypress', ignoreshift=True):
-            pressed = self.actions.as_char(self.actions.last_pressed)
-        # WHAT IS HAPPENING HERE?
-        for k,v in kmi_to_keycode.items():
-            if self.actions.using(k, ignoreshift=True): pressed = v
-        if pressed:
-            cur = time.time()
-            # print('focus_main', pressed, self.actions.last_pressed, self.actions.get_last_press_time(self.actions.last_pressed))
-            if self._last_pressed != pressed:
-                self._last_press_start = cur
-                self._last_press_time = 0
-                # self._last_press_time2 = self.actions.get_last_press_time(pressed)[1]
-                if self._focus:
-                    self._focus._dispatch_event('on_keypress', key=pressed)
-            # elif self.actions.get_last_press_time(self.actions.last_pressed)[1] != self._last_press_time2:
-            #     self._last_press_time2 = self.actions.get_last_press_time(self.actions.last_pressed)[1]
-            #     if self._focus:
-            #         self._focus._dispatch_event('on_keypress', key=pressed)
-            elif cur >= self._last_press_start + UI_Document.key_repeat_delay and cur >= self._last_press_time + UI_Document.key_repeat_pause:
-                self._last_press_time = cur
-                if self._focus:
-                    self._focus._dispatch_event('on_keypress', key=pressed)
-        else:
-            self._last_press_time2 = 0
-        self._last_pressed = pressed
-
-        if not self._focus: return 'main'
-
-    def force_clean(self, context):
-        time_start = time.time()
-
-        w,h = context.region.width, context.region.height
-        sz = Size2D(width=w, max_width=w, height=h, max_height=h)
-
-        UI_Element_PreventMultiCalls.reset_multicalls()
-
-        Globals.ui_draw.update()
-        if Globals.drawing.get_dpi_mult() != self._ui_scale:
-            self._ui_scale = Globals.drawing.get_dpi_mult()
-            self._body.dirty('DPI changed', children=True)
-            self._body.dirty_styling()
-            self._body.dirty_flow()
-        if (w,h) != self._last_sz:
-            self._last_sz = (w,h)
-            self._body._dirty_flow()
-            # self._body.dirty('region size changed', 'style', children=True)
-
-        # UI_Element_PreventMultiCalls.reset_multicalls()
-        self._body._clean()
-        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
-        self._body._set_view_size(sz)
-        self._body._call_postflow()
-
-        # UI_Element_PreventMultiCalls.reset_multicalls()
-        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
-        self._body._set_view_size(sz)
-        if self._reposition_tooltip_before_draw:
-            self._reposition_tooltip_before_draw = False
-            self._reposition_tooltip()
-
-    @profiler.function
-    def draw(self, context):
-        if self._area != context.area: return
-        Globals.drawing.glCheckError('UI_Document.draw: start')
-
-        time_start = time.time()
-
-        self.force_clean(context)
-
-        Globals.drawing.glCheckError('UI_Document.draw: options')
-        ScissorStack.start(context)
-        bgl.glClearColor(0, 0, 0, 0)
-        bgl.glBlendColor(0, 0, 0, 0)
-        # bgl.glBlendFunc(bgl.GL_SRC_ALPHA, bgl.GL_ONE_MINUS_SRC_ALPHA)
-        bgl.glEnable(bgl.GL_BLEND)
-        bgl.glEnable(bgl.GL_SCISSOR_TEST)
-        bgl.glDisable(bgl.GL_DEPTH_TEST)
-        Globals.drawing.glCheckError('UI_Document.draw: draw')
-        self._body.draw()
-        ScissorStack.end()
-
-        self._draw_count += 1
-        self._draw_time += time.time() - time_start
-        if self._draw_count % 100 == 0:
-            self._draw_fps = (self._draw_count / self._draw_time) if self._draw_time>0 else float('inf')
-            # print('~%f fps  (%f / %d = %f)' % (self._draw_fps, self._draw_time, self._draw_count, self._draw_time / self._draw_count))
-            self._draw_count = 0
-            self._draw_time = 0
-        Globals.drawing.glCheckError('UI_Document.draw: done')
-
-ui_document = Globals.set(UI_Document())
 

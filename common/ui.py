@@ -37,7 +37,8 @@ from concurrent.futures import ThreadPoolExecutor
 import bpy
 import bgl
 
-from .ui_core import UI_Element, UI_Proxy
+from .ui_core import UI_Element
+from .ui_proxy import UI_Proxy
 from .ui_utilities import UIRender_Block, UIRender_Inline, get_unique_ui_id
 from .utils import kwargopts, kwargs_translate, kwargs_splitter, iter_head
 from .ui_styling import UI_Styling
@@ -175,10 +176,12 @@ def input_radio(**kwargs):
                 if ui_element != ui_input: ui_element.checked = False
         ui_input.add_eventListener('on_mouseclick', mouseclick)
         ui_input.add_eventListener('on_input', on_input)
-        ui_proxy = UI_Proxy(ui_input)
-        ui_proxy.translate('label', 'innerText')
-        ui_proxy.map({'innerText','children','append_child','delete_child','clear_children','builder'}, ui_label)
-        ui_proxy.map_to_all({'title'})
+
+    ui_proxy = UI_Proxy('input_radio', ui_input)
+    ui_proxy.translate('label', 'innerText')
+    ui_proxy.map_children_to(ui_label)
+    ui_proxy.map('innerText', ui_label)
+    ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 def input_checkbox(**kwargs):
@@ -194,11 +197,13 @@ def input_checkbox(**kwargs):
         def mouseclick(e):
             ui_input.checked = not bool(ui_input.checked)
         ui_input.add_eventListener('on_mouseclick', mouseclick)
-        ui_proxy = UI_Proxy(ui_input)
-        ui_proxy.translate('label', 'innerText')
-        ui_proxy.translate('value', 'checked')
-        ui_proxy.map({'innerText','children','append_child','delete_child','clear_children', 'builder'}, ui_label)
-        ui_proxy.map_to_all({'title'})
+
+    ui_proxy = UI_Proxy('input_checkbox', ui_input)
+    ui_proxy.translate('label', 'innerText')
+    ui_proxy.translate('value', 'checked')
+    ui_proxy.map_children_to(ui_label)
+    ui_proxy.map('innerText', ui_label)
+    ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 def labeled_input_text(label, **kwargs):
@@ -207,14 +212,14 @@ def labeled_input_text(label, **kwargs):
     ui_container = UI_Element(tagName='div', classes='labeledinputtext-container', **kw_container, **kw_all)
     with ui_container.defer_dirty('creating content'):
         ui_left  = UI_Element(tagName='div',   classes='labeledinputtext-label-container', parent=ui_container, **kw_all)
-        ui_label = UI_Element(tagName='label', classes='labeledinputtext-label', innerText=label, parent=ui_left, **kw_all)
         ui_right = UI_Element(tagName='div',   classes='labeledinputtext-input-container', parent=ui_container, **kw_all)
+        ui_label = UI_Element(tagName='label', classes='labeledinputtext-label', innerText=label, parent=ui_left, **kw_all)
         ui_input = input_text(parent=ui_right, **kwargs, **kw_all)
 
-        ui_proxy = UI_Proxy(ui_container)
-        ui_proxy.translate_map('label', 'innerText', ui_label)
-        ui_proxy.map('value', ui_input)
-        ui_proxy.map_to_all({'title'})
+    ui_proxy = UI_Proxy('labeled_input_text', ui_container)
+    ui_proxy.translate_map('label', 'innerText', ui_label)
+    ui_proxy.map('value', ui_input)
+    ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 def input_text(**kwargs):
@@ -330,9 +335,9 @@ def input_text(**kwargs):
     ui_input.add_eventListener('on_mousemove', mousemove)
     ui_input.add_eventListener('on_mousedown', mousedown)
 
-    ui_proxy = UI_Proxy(ui_container)
-    ui_proxy.map('value', ui_input)
-    ui_proxy.map('innerText', ui_input)
+    ui_proxy = UI_Proxy('input_text', ui_container)
+    ui_proxy.map(['value', 'innerText'], ui_input)
+    ui_proxy.map_to_all({'title'})
 
     preclean()
 
@@ -344,37 +349,34 @@ def collection(label, **kwargs):
     with ui_container.defer_dirty('creating content'):
         ui_label = div(innerText=label, classes='header', parent=ui_container)
         ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside)
-        ui_proxy = UI_Proxy(ui_container)
-        ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
+        ui_proxy = UI_Proxy('collection', ui_container)
+        ui_proxy.map_children_to(ui_inside)
     return ui_proxy
 
 
 def collapsible(label, **kwargs):
     kwargs_translate('collapsed', 'checked', kwargs)
     kwargs.setdefault('checked', True)
-    kw_input = kwargs_splitter({'checked'}, kwargs)
+    kw_input  = kwargs_splitter({'checked'}, kwargs)
     kw_inside = kwargs_splitter({'children'}, kwargs)
-    kw_all = kwargs_splitter({'title'}, kwargs)
+    kw_all    = kwargs_splitter({'title'}, kwargs)
 
-    kwargs['classes'] = 'collapsible %s' % kwargs.get('classes', '')
+    kwargs['classes'] = f"collapsible {kwargs.get('classes', '')}"
     ui_container = UI_Element(tagName='div', **kwargs, **kw_all)
     with ui_container.defer_dirty('creating content'):
         ui_label = input_checkbox(label=label, id='%s_check'%(kwargs.get('id', get_unique_ui_id('collapsible-'))), classes='header', parent=ui_container, **kw_input, **kw_all)
-        # ui_label = UI_Element(tagName='input', classes='header', innerText=label, type="checkbox", parent=ui_container, **kw_input)
         ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside, **kw_all)
-
         def toggle():
             if ui_label.checked: ui_inside.add_class('collapsed')
             else:                ui_inside.del_class('collapsed')
-            ui_inside.dirty(parent=False, children=True)
         ui_label.add_eventListener('on_input', toggle)
         toggle()
 
-        ui_proxy = UI_Proxy(ui_container)
-        ui_proxy.translate_map('collapsed', 'checked', ui_label)
-        ui_proxy.map({'label', 'innerText'}, ui_label)
-        ui_proxy.map(['children','append_child','delete_child','clear_children', 'builder'], ui_inside)
-        ui_proxy.map_to_all({'title'})
+    ui_proxy = UI_Proxy('collapsible', ui_container)
+    ui_proxy.translate_map('collapsed', 'checked', ui_label)
+    ui_proxy.map(['label', 'innerText'], ui_label)
+    ui_proxy.map_children_to(ui_inside)
+    ui_proxy.map_to_all({'title'})
     return ui_proxy
 
 
@@ -677,9 +679,10 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
     # ui_footer = UI_Element(tagName='div', classes='dialog-footer', parent=ui_dialog)
     # ui_footer_label = UI_Element(tagName='span', innerText='footer', parent=ui_footer)
 
-    ui_proxy = UI_Proxy(ui_dialog)
+    ui_proxy = UI_Proxy('framed_dialog', ui_dialog)
     ui_proxy.translate_map('label', 'innerText', ui_label)
-    ui_proxy.map(['children','append_child','delete_child','clear_children','builder', 'getElementById', 'scrollToTop', 'scrollTop', 'scrollLeft'], ui_inside)
+    ui_proxy.map_children_to(ui_inside)
+    ui_proxy.map_scroll_to(ui_inside)
     return ui_proxy
 
 

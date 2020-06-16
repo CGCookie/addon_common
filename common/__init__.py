@@ -43,6 +43,8 @@ __all__ = [
     'shaders',
     'ui',
     'ui_core',
+    'ui_document',
+    'ui_proxy',
     'ui_styling',
     'ui_utilities',
     'updater_core',

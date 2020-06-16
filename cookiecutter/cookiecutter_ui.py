@@ -30,7 +30,8 @@ from ..common.blender import bversion, tag_redraw_all
 from ..common.decorators import blender_version_wrapper
 from ..common.debug import debugger, tprint
 from ..common.drawing import Drawing, DrawCallbacks, ScissorStack
-from ..common.ui_core import UI_Document, preload_image
+from ..common.ui_core import preload_image
+from ..common.ui_document import UI_Document
 
 
 if bversion() >= "2.80":

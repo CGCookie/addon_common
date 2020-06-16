@@ -61,7 +61,7 @@ class Debugger:
         if Debugger._error_level < l: return
         sobjects = sep.join(str(o) for o in objects)
         print(
-            'DEBUG(%i): %s' % (l, sobjects),
+            f'DEBUG({l}): {sobjects}',
             end=end, file=file, flush=flush
         )
 
