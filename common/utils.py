@@ -272,6 +272,8 @@ def kwargs_splitter(keys, kwargs):
     return kw
 
 
+def any_args(*args):
+    return any(bool(a) for a in args)
 
 
 

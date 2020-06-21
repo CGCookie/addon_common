@@ -251,8 +251,8 @@ class UI_Document(UI_Document_FSM):
         while rem and add and rem[0] == add[0]:
             rem = rem[1:]
             add = add[1:]
-        for e in rem: e._del_pseudoclass(pseudoclass)
-        for e in add: e._add_pseudoclass(pseudoclass)
+        for e in rem: e.del_pseudoclass(pseudoclass)
+        for e in add: e.add_pseudoclass(pseudoclass)
 
     def debug_print(self):
         print('')
@@ -458,7 +458,7 @@ class UI_Document(UI_Document_FSM):
             if dblclick:
                 self._under_mousedown._dispatch_event('on_mousedblclick')
                 # self._last_under_click = None
-            if self._under_mousedown.forId:
+            if self._under_mousedown and self._under_mousedown.forId:
                 # send mouseclick events to ui_element indicated by forId!
                 ui_for = self._under_mousedown.get_root().getElementById(self._under_mousedown.forId)
                 if ui_for is None: return
@@ -481,7 +481,7 @@ class UI_Document(UI_Document_FSM):
 
     def blur(self, stop_at=None):
         if self._focus is None: return
-        self._focus._del_pseudoclass('focus')
+        self._focus.del_pseudoclass('focus')
         self._focus._dispatch_event('on_blur')
         self._focus._dispatch_event('on_focusout', stop_at=stop_at)
         self._addrem_pseudoclass('active', remove_from=self._focus)
@@ -507,7 +507,7 @@ class UI_Document(UI_Document_FSM):
             #print('focusout to', p_blur, stop_blur_at)
             #print('focusin from', p_focus, stop_focus_at)
         self._focus = ui_element
-        self._focus._add_pseudoclass('focus')
+        self._focus.add_pseudoclass('focus')
         self._focus._dispatch_event('on_focus')
         self._focus._dispatch_event('on_focusin', stop_at=stop_focus_at)
 
@@ -576,11 +576,11 @@ class UI_Document(UI_Document_FSM):
             self._body.dirty_flow()
         if (w,h) != self._last_sz:
             self._last_sz = (w,h)
-            self._body._dirty_flow()
+            self._body.dirty_flow()
             # self._body.dirty('region size changed', 'style', children=True)
 
         # UI_Element_PreventMultiCalls.reset_multicalls()
-        self._body._clean()
+        self._body.clean()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
         self._body._set_view_size(sz)
         self._body._call_postflow()

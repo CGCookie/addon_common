@@ -491,7 +491,7 @@ class UI_Style_RuleSet:
     def match(self, sel_elem, strip=None):
         # returns true if passed selector matches any selector in self.selectors
         cache = self._match_cache
-        key = str((sel_elem, strip))
+        key = f'{sel_elem} {strip}'
         if key not in cache:
             cache[key] = any(UI_Style_RuleSet.match_selector(sel_elem, sel_style, strip=strip) for sel_style in self.selectors)
         return cache[key]
