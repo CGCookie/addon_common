@@ -21,6 +21,7 @@ Created by Jonathan Denning, Jonathan Williamson
 
 import os
 import re
+import copy
 import math
 import time
 import struct
@@ -48,7 +49,7 @@ from .decorators import blender_version_wrapper, debug_test_call, add_cache
 from .maths import Point2D, Vec2D, clamp, mid, Color, NumberUnit
 from .profiler import profiler
 from .drawing import Drawing, ScissorStack
-from .utils import iter_head
+from .utils import iter_head, UniqueCounter
 from .shaders import Shader
 from .fontmanager import FontManager
 
@@ -294,7 +295,7 @@ class UI_Style_Declaration:
 
 class UI_Style_RuleSet:
     '''
-    CSS RuleSets are in the form shown below.
+    CSS RuleSets are in the form shown below, where there is a single list of selectors followed by block set of styling rules
     Note: each `property: value;` is a UI_Style_Declaration
 
         selector, selector {
@@ -304,6 +305,8 @@ class UI_Style_RuleSet:
         }
 
     '''
+
+    uid_generator = UniqueCounter()
 
     @staticmethod
     def from_lexer(lexer):
@@ -371,6 +374,7 @@ class UI_Style_RuleSet:
         return rs
 
     def __init__(self):
+        self._uid = UI_Style_RuleSet.uid_generator.next()
         self.selectors = []     # can have multiple selectors for same decllist
         self.decllist = []      # list of style declarations that apply
         self._match_cache = {}
@@ -389,6 +393,7 @@ class UI_Style_RuleSet:
         osel = str(sel)
         if osel not in cache:
             p = {'type':'', 'class':set(), 'id':'', 'pseudoelement':set(), 'pseudoclass':set(), 'attribs':set(), 'attribvals':{}}
+
             for part in selector_splitter.finditer(sel):
                 t,n,v = part.group('type'),part.group('name'),part.group('val')
                 if t is None:   p['type'] = n
@@ -400,11 +405,15 @@ class UI_Style_RuleSet:
                     if v is None: p['attribs'].add(n)
                     else: p['attribvals'][n] = v
                 else: assert False, 'Unhandled selector type "%s" (%s, %s) in "%s"' % (str(t), str(n), str(v), str(sel))
+
+            # p['names'] is a set of all identifying elements in selector
+            # useful for quickly and conservatively deciding that selector does NOT match
             p['names'] = p['class'] | p['pseudoelement'] | p['pseudoclass'] | p['attribs'] | p['attribvals'].keys() # | p['attribvals'].values()
             if p['type'] not in {'*','>'}: p['names'].add(p['type'])
             if p['id']: p['names'].add(p['id'])
+
             cache[osel] = p
-        return dict(cache[osel])  # NOTE: Not a deep copy!
+        return dict(cache[osel])  # NOTE: _not_ a deep copy!
 
     @staticmethod
     @add_cache('_cache', {})
@@ -499,31 +508,51 @@ class UI_Style_RuleSet:
     def get_all_matches(self, sel_elem):
         return [sel_style for sel_style in self.selectors if UI_Style_RuleSet.match_selector(sel_elem, sel_style)]
 
+    @staticmethod
+    @add_cache('_cache', {})
+    def selector_specificity(selector, uid, inline=False):
+        k = f'{selector} {inline}'
+        cache = UI_Style_RuleSet.selector_specificity._cache
+        if k not in cache:
+            split = UI_Style_RuleSet._split_selector
+            a = 1 if inline else 0  # inline
+            b = 0                   # id
+            c = 0                   # class, pseudoclass, attrib, attribval
+            d = 0                   # type, pseudoelement
+            e = uid                 # uid (used for ordering)
+            parts = [split(sel) for sel in selector]
+            for part in parts:
+                b += 1 if part['id'] else 0
+                c += len(part['class']) + len(part['pseudoclass']) + len(part['attribs']) + len(part['attribvals'])
+                if part['type'] not in {'', '*', '>'}: d += 1
+            cache[k] = (a, b, c, d, e)
+        return cache[k]
+
 
 class UI_Styling:
     '''
     Parses input to a CSSOM-like object
     '''
-    uid = 0
+    uid_generator = UniqueCounter()
 
     @staticmethod
     @profiler.function
-    def from_var(var, tagname='*', pseudoclass=None):
-        if not var: return UI_Styling()
+    def from_var(var, tagname='*', pseudoclass=None, inline=False):
+        if not var: return UI_Styling(inline=inline)
         if type(var) is UI_Styling: return var
         sel = tagname + (':%s' % pseudoclass if pseudoclass else '')
         # NOTE: do not convert below into `t = type(var)` and change `if`s below into `elif`s!
         if type(var) is dict: var = ['%s:%s' % (k,v) for (k,v) in var.items()]
         if type(var) is list: var = ';'.join(var)
-        if type(var) is str:  var = UI_Styling('%s{%s;}' % (sel,var))
+        if type(var) is str:  var = UI_Styling(lines=f'{sel}{{{var};}}', inline=inline)
         assert type(var) is UI_Styling
         return var
 
     @staticmethod
     @profiler.function
-    def from_file(filename):
+    def from_file(filename, inline=False):
         lines = open(filename, 'rt').read()
-        return UI_Styling(lines)
+        return UI_Styling(lines=lines, inline=inline)
 
     def load_from_file(self, filename):
         text = open(filename, 'rt').read()
@@ -546,22 +575,191 @@ class UI_Styling:
         UI_Styling.trim_styling._cache = {}
         UI_Styling.strip_selector_parts._cache = {}
 
+
+    def _print_trie_to_node(self, node):
+        # find path from node to root
+        path = set()
+        node_root = node
+        while True:
+            path.add(node_root['__uid'])
+            if node_root['__parent'] is None: break
+            node_root = node_root['__parent']
+        print(path)
+        def p(node_cur, depth):
+            for k in node_cur:
+                k2 = str(k).replace('"', '\\"')
+                spc = "  " * depth
+                if   k == '__rulesets':
+                    print(f'{spc}"{k2}":["... ({len(node_cur[k])})"],')
+                elif k == '__selectors':
+                    v = str(node_cur[k]).replace('"', '\\"')
+                    print(f'{spc}"{k2}":"{v}",')
+                elif k == '__parent':
+                    pass
+                elif k == '__uid':
+                    print(f'{spc}"__uid":{node_cur[k]},')
+                else:
+                    node_next = node_cur[k]
+                    if node_next['__uid'] in path:
+                        print(f'{spc}"{k2}":{{')
+                        p(node_next, depth+1)
+                        print(f'{spc}}},')
+                    else:
+                        print(f'{spc}"{k2}":{{ }},')
+        print('{')
+        p(node_root, 1)
+        print('}')
+
+    def _print_trie(self):
+        def p(node_cur, depth):
+            for k in node_cur:
+                k2 = str(k).replace('"', '\\"')
+                spc = "  " * depth
+                if   k == '__rulesets':
+                    print(f'{spc}"{k2}":["... ({len(node_cur[k])})"],')
+                elif k == '__selectors':
+                    v = str(node_cur[k]).replace('"', '\\"')
+                    print(f'{spc}"{k2}":"{v}",')
+                elif k == '__parent':
+                    pass
+                elif k == '__uid':
+                    pass
+                else:
+                    print(f'{spc}"{k2}":{{')
+                    p(node_cur[k], depth+1)
+                    print(f'{spc}}},')
+        print('{')
+        p(self._trie, 1)
+        print('}')
+
+    def optimize(self):
+        '''
+        build a trie of selectors for faster matching
+        the trie consists of
+            selector parts: type (str, t), class (set, .c), id (str, #i), pseudoelement (set, ::pe), pseudoclass (set, :pc), attribs (set, [k]), attribvals (dict, [k=v])
+            and >
+        '''
+
+        if self._trie: return  # already optimized!
+
+        split = UI_Style_RuleSet._split_selector
+        node_uid_generator = UniqueCounter()
+        def new_node(node_parent):
+            return {'__parent':node_parent, '__uid': node_uid_generator.next()}
+        def get_node(cur, key):
+            if key not in cur: cur[key] = new_node(cur)
+            return cur[key]
+        self._trie = new_node(None)
+
+        # insert all items into trie
+        for rule in self.rules:
+            for selector in rule.selectors:
+                specificity = UI_Style_RuleSet.selector_specificity(selector, rule._uid, inline=self._inline)
+                # print(f'selector specificity: {selector} => {specificity}')
+                parts = [split(p) for p in selector]
+                part = {'type':'', 'id':'', 'class': set(), 'pseudoelement':set(), 'pseudoclass':set(), 'attribs':set(), 'attribvals':dict()}
+                node_cur = self._trie
+                while True:
+                    if part['type']:
+                        # NOTE: type can be '>', but this _should_ get handled in final `else`
+                        assert part['type'] != '>', f'type can be `>` but not here. check if style has `> >`\nselector: {selector}\npart: {part}\nparts: {parts}\n{self._trie}'
+                        node_cur = get_node(node_cur, f"{part['type']}")
+                        part['type'] = ''
+                    elif part['id']:
+                        node_cur = get_node(node_cur, f"#{part['id']}")
+                        part['id'] = ''
+                    elif part['class']:
+                        c = part['class'].pop()
+                        node_cur = get_node(node_cur, f".{c}")
+                    elif part['pseudoelement']:
+                        pe = part['pseudoelement'].pop()
+                        node_cur = get_node(node_cur, f"::{pe}")
+                    elif part['pseudoclass']:
+                        pc = part['pseudoclass'].pop()
+                        node_cur = get_node(node_cur, f":{pc}")
+                    elif part['attribs']:
+                        a = part['attribs'].pop()
+                        node_cur = get_node(node_cur, f"[{a}]")
+                    elif part['attribvals']:
+                        k,v = part['attribvals'].popitem()
+                        node_cur = get_node(node_cur, f'[{k}="{v}"]')
+                    elif not parts:
+                        break
+                    else:
+                        skip = 1
+                        if node_cur != self._trie:
+                            if parts[-1]['type'] == '>':
+                                node_cur = get_node(node_cur, '>')
+                                skip = 2
+                            else:
+                                node_cur = get_node(node_cur, ' ')
+                        part, parts = copy.deepcopy(parts[-skip]), parts[:-skip]
+                node_cur.setdefault('__rulesets', list()).append((specificity, rule))
+                node_cur.setdefault('__selectors', list()).append(selector)
+
+        # print_trie()
+        # print(sum(len(rule.selectors) for rule in self.rules), len(self._trie))
+
+    def get_matching_rules(self, selector):
+        self.optimize()
+        rules = []
+        def m(node_cur, part, parts, depth):
+            nonlocal rules
+            for (edge_label, node_next) in node_cur.items():
+                if   edge_label == ' ':
+                    ps = parts
+                    while ps:
+                        p,ps = ps[-1],ps[:-1]
+                        m(node_next, p, ps, depth+1)
+                elif edge_label == '>': m(node_next, parts[-1], parts[:-1], depth+1)
+                elif edge_label == '*': m(node_next, part, parts, depth+1)
+                elif edge_label[0] == '#':
+                    if edge_label[1:] == part['id']: m(node_next, part, parts, depth+1)
+                elif edge_label[0] == '.':
+                    if edge_label[1:] in part['class']: m(node_next, part, parts, depth+1)
+                elif len(edge_label) > 2 and edge_label[1] == ':':
+                    if edge_label[2:] in part['pseudoelement']: m(node_next, part, parts, depth+1)
+                elif edge_label[0] == ':':
+                    if edge_label[1:] in part['pseudoclass']: m(node_next, part, parts, depth+1)
+                elif edge_label[0] == '[':
+                    attrib_parts = edge_label[1:-1].split('=')      # remove square brackets and split on `=`
+                    attrib_key = attrib_parts[0]
+                    if len(attrib_parts) == 1:
+                        if attrib_key in part['attribs']: m(node_next, part, parts, depth+1)
+                    else:
+                        attrib_val = attrib_parts[1][1:-1]          # remove quotes from attribute value
+                        if part['attribvals'].get(attrib_key) == attrib_val: m(node_next, part, parts, depth+1)
+                elif edge_label in {'__selectors', '__parent', '__uid'}:
+                    pass
+                elif edge_label == '__rulesets':
+                    rules.extend(node_cur['__rulesets'])
+                else:
+                    # assuming type
+                    if edge_label == part['type']: m(node_next, part, parts, depth+1)
+        split = UI_Style_RuleSet._split_selector
+        parts = [split(p) for p in selector]
+        m(self._trie, parts[-1], parts[:-1], 0)
+        rules.sort(key=lambda sr:sr[0])
+        return [r for (s,r) in rules]
+
+
     @staticmethod
-    def from_decllist(decllist, selector=None, var=None):
+    def from_decllist(decllist, selector=None, var=None, inline=False):
         if selector is None: selector = ['*']
-        if var is None: var = UI_Styling()
+        if var is None: var = UI_Styling(inline=inline)
         var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector)]
         return var
 
     @staticmethod
-    def from_selector_decllist_list(l):
-        var = UI_Styling()
+    def from_selector_decllist_list(l, inline=False):
+        var = UI_Styling(inline=inline)
         var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector) for (selector,decllist) in l]
         return var
 
-    def __init__(self, lines=None):
-        self._uid = UI_Styling.uid
-        UI_Styling.uid += 1
+    def __init__(self, lines=None, inline=False):
+        self._uid = UI_Styling.uid_generator.next()
+        self._trie = None
+        self._inline = inline
         self.rules = []
         self._decllist_cache = {}
         self._matches_cache = {}
@@ -584,7 +782,9 @@ class UI_Styling:
         if oselector not in cache:
             # print('UI_Styling.get_decllist', selector)
             with profiler.code('UI_Styling.get_decllist: creating cached value'):
-                cache[oselector] = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+                decllist = [d for rule in self.get_matching_rules(selector) for d in rule.decllist]
+                # decllist = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+                cache[oselector] = decllist
                 # print('UI_Styling.get_decllist', self._uid, '%d/%d' % (len(cache[selector_key]), len(self.rules)), selector_key)
         return cache[oselector]
 
@@ -747,8 +947,8 @@ class UI_Styling:
         return cache[onselector]
 
     @staticmethod
-    def combine_styling(*stylings):
-        nstyling = UI_Styling()
+    def combine_styling(*stylings, inline=False):
+        nstyling = UI_Styling(inline=inline)
         nstyling.rules = [rule for styling in stylings for rule in styling.rules]
         return nstyling
 

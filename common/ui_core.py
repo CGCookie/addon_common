@@ -1863,7 +1863,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             selector = sel_parent[:-1] + [sel_parent[-1] + '::' + self._pseudoelement]
             selector_before = None
             selector_after  = None
-        elif self._innerTextAsIs:
+        elif self._innerTextAsIs is not None:
             # this is a text element
             selector = sel_parent + ['*text*']
             selector_before = None
@@ -1881,7 +1881,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             if self.checked:
                 sel_attribs += '[checked]'
                 sel_attribvals += '[checked="checked"]'
-            selector = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals]
+            self_selector = sel_tagName + sel_id + sel_cls + sel_pseudo + sel_attribs + sel_attribvals
+            selector = sel_parent + [self_selector]
             selector_before = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::before']
             selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
 
@@ -1939,7 +1940,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
             # compute custom styles
             if self._styling_custom is None and self._style_str:
-                self._styling_custom = UI_Styling('*{%s;}' % self._style_str)
+                self._styling_custom = UI_Styling(f'*{{{self._style_str};}}', inline=True)
 
             self._styling_list = [
                 self._styling_trimmed,
@@ -2480,16 +2481,17 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             dh = self._static_content_size.height
 
             if self._src == 'image':
-                def scale_dw_dh(sc):
+                def scale_dw_dh(num, den):
                     nonlocal dw,dh
+                    sc = 0 if den == 0 else num / den
                     dw,dh = dw*sc,dh*sc
                 # image will scale based on inside_size
-                if inside_size.max_width  is not None and dw > inside_size.max_width:  scale_dw_dh(inside_size.max_width  / dw)
-                if inside_size.width      is not None:                                 scale_dw_dh(inside_size.width      / dw)
-                if inside_size.min_width  is not None and dw < inside_size.min_width:  scale_dw_dh(inside_size.min_width  / dw)
-                if inside_size.max_height is not None and dw > inside_size.max_height: scale_dw_dh(inside_size.max_height / dh)
-                if inside_size.height     is not None:                                 scale_dw_dh(inside_size.height     / dh)
-                if inside_size.min_height is not None and dw < inside_size.min_height: scale_dw_dh(inside_size.min_height / dh)
+                if inside_size.max_width  is not None and dw > inside_size.max_width:  scale_dw_dh(inside_size.max_width,  dw)
+                if inside_size.width      is not None:                                 scale_dw_dh(inside_size.width,      dw)
+                if inside_size.min_width  is not None and dw < inside_size.min_width:  scale_dw_dh(inside_size.min_width,  dw)
+                if inside_size.max_height is not None and dw > inside_size.max_height: scale_dw_dh(inside_size.max_height, dh)
+                if inside_size.height     is not None:                                 scale_dw_dh(inside_size.height,     dh)
+                if inside_size.min_height is not None and dw < inside_size.min_height: scale_dw_dh(inside_size.min_height, dh)
 
         else:
             # self has no static content, so flow and size is determined from children

@@ -575,8 +575,7 @@ div.collapsible > div.inside.collapsed {
 
 
 /**********************/
-/*   INPUT TEXT   */
-
+/* TEXT INPUT         */
 
 *.inputtext-container {
     margin: 0px;
@@ -635,6 +634,9 @@ div.collapsible > div.inside.collapsed {
 }
 
 
+
+/***********************/
+/* LABELED TEXT INPUT  */
 
 *.labeledinputtext-container {
     margin: 2px;
