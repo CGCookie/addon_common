@@ -59,6 +59,10 @@ from .fontmanager import FontManager
 
 CookieCutter UI Styling
 
+IMPORTANT: SOME OF THE INFORMATION BELOW NO LONGER APPLIES!
+XXX TODO: UPDATE!
+
+
 This styling file is formatted _very_ similarly to CSS, but below is a list of a few important notes/differences:
 
 - rules are applied top-down, so any later conflicting rule will override an earlier rule
@@ -338,7 +342,7 @@ class UI_Style_RuleSet:
         # get selector
         rs.selectors = [[]]
         while lexer.peek_v() != '{':
-            if lexer.peek_v() == '*' or 'id' in lexer.peek_t():
+            if lexer.peek_v() == '*' or 'id' in lexer.peek_t() or lexer.peek_v() in {'.','#',':','::'}:
                 rs.selectors[-1].append(match_identifier())
             elif 'combinator' in lexer.peek_t():
                 # TODO: handle + and ~ combinators?
@@ -392,7 +396,7 @@ class UI_Style_RuleSet:
         cache = UI_Style_RuleSet._split_selector._cache
         osel = str(sel)
         if osel not in cache:
-            p = {'type':'', 'class':set(), 'id':'', 'pseudoelement':set(), 'pseudoclass':set(), 'attribs':set(), 'attribvals':{}}
+            p = {'type':'*', 'class':set(), 'id':'', 'pseudoelement':set(), 'pseudoclass':set(), 'attribs':set(), 'attribvals':{}}
 
             for part in selector_splitter.finditer(sel):
                 t,n,v = part.group('type'),part.group('name'),part.group('val')
@@ -510,12 +514,12 @@ class UI_Style_RuleSet:
 
     @staticmethod
     @add_cache('_cache', {})
-    def selector_specificity(selector, uid, inline=False):
-        k = f'{selector} {inline}'
+    def selector_specificity(selector, uid, inline=False, defaults=False):
+        k = f'{selector} {inline} {defaults}'
         cache = UI_Style_RuleSet.selector_specificity._cache
         if k not in cache:
             split = UI_Style_RuleSet._split_selector
-            a = 1 if inline else 0  # inline
+            a = 1 if inline else -1 if defaults else 0  # inline/defaults
             b = 0                   # id
             c = 0                   # class, pseudoclass, attrib, attribval
             d = 0                   # type, pseudoelement
@@ -537,22 +541,22 @@ class UI_Styling:
 
     @staticmethod
     @profiler.function
-    def from_var(var, tagname='*', pseudoclass=None, inline=False):
-        if not var: return UI_Styling(inline=inline)
+    def from_var(var, tagname='*', pseudoclass=None, inline=False, defaults=False):
+        if not var: return UI_Styling(inline=inline, defaults=defaults)
         if type(var) is UI_Styling: return var
         sel = tagname + (':%s' % pseudoclass if pseudoclass else '')
         # NOTE: do not convert below into `t = type(var)` and change `if`s below into `elif`s!
         if type(var) is dict: var = ['%s:%s' % (k,v) for (k,v) in var.items()]
         if type(var) is list: var = ';'.join(var)
-        if type(var) is str:  var = UI_Styling(lines=f'{sel}{{{var};}}', inline=inline)
+        if type(var) is str:  var = UI_Styling(lines=f'{sel}{{{var};}}', inline=inline, defaults=defaults)
         assert type(var) is UI_Styling
         return var
 
     @staticmethod
     @profiler.function
-    def from_file(filename, inline=False):
+    def from_file(filename, inline=False, defaults=False):
         lines = open(filename, 'rt').read()
-        return UI_Styling(lines=lines, inline=inline)
+        return UI_Styling(lines=lines, inline=inline, defaults=defaults)
 
     def load_from_file(self, filename):
         text = open(filename, 'rt').read()
@@ -610,7 +614,7 @@ class UI_Styling:
         p(node_root, 1)
         print('}')
 
-    def _print_trie(self):
+    def _print_trie(self, full_trie=True):
         def p(node_cur, depth):
             for k in node_cur:
                 k2 = str(k).replace('"', '\\"')
@@ -629,7 +633,7 @@ class UI_Styling:
                     p(node_cur[k], depth+1)
                     print(f'{spc}}},')
         print('{')
-        p(self._trie, 1)
+        p(self._trie_full if full_trie else self._trie_stripped, 1)
         print('}')
 
     def optimize(self):
@@ -640,67 +644,82 @@ class UI_Styling:
             and >
         '''
 
-        if self._trie: return  # already optimized!
-
-        split = UI_Style_RuleSet._split_selector
         node_uid_generator = UniqueCounter()
         def new_node(node_parent):
-            return {'__parent':node_parent, '__uid': node_uid_generator.next()}
+            return {
+                '__uid': node_uid_generator.next(),    # allowing for hashing in set
+                '__parent':node_parent,                # parent node (debugging)
+            }
         def get_node(cur, key):
             if key not in cur: cur[key] = new_node(cur)
             return cur[key]
-        self._trie = new_node(None)
 
-        # insert all items into trie
-        for rule in self.rules:
-            for selector in rule.selectors:
-                specificity = UI_Style_RuleSet.selector_specificity(selector, rule._uid, inline=self._inline)
-                # print(f'selector specificity: {selector} => {specificity}')
-                parts = [split(p) for p in selector]
-                part = {'type':'', 'id':'', 'class': set(), 'pseudoelement':set(), 'pseudoclass':set(), 'attribs':set(), 'attribvals':dict()}
-                node_cur = self._trie
-                while True:
-                    if part['type']:
-                        # NOTE: type can be '>', but this _should_ get handled in final `else`
-                        assert part['type'] != '>', f'type can be `>` but not here. check if style has `> >`\nselector: {selector}\npart: {part}\nparts: {parts}\n{self._trie}'
-                        node_cur = get_node(node_cur, f"{part['type']}")
-                        part['type'] = ''
-                    elif part['id']:
-                        node_cur = get_node(node_cur, f"#{part['id']}")
-                        part['id'] = ''
-                    elif part['class']:
-                        c = part['class'].pop()
-                        node_cur = get_node(node_cur, f".{c}")
-                    elif part['pseudoelement']:
-                        pe = part['pseudoelement'].pop()
-                        node_cur = get_node(node_cur, f"::{pe}")
-                    elif part['pseudoclass']:
-                        pc = part['pseudoclass'].pop()
-                        node_cur = get_node(node_cur, f":{pc}")
-                    elif part['attribs']:
-                        a = part['attribs'].pop()
-                        node_cur = get_node(node_cur, f"[{a}]")
-                    elif part['attribvals']:
-                        k,v = part['attribvals'].popitem()
-                        node_cur = get_node(node_cur, f'[{k}="{v}"]')
-                    elif not parts:
-                        break
-                    else:
-                        skip = 1
-                        if node_cur != self._trie:
-                            if parts[-1]['type'] == '>':
-                                node_cur = get_node(node_cur, '>')
-                                skip = 2
-                            else:
-                                node_cur = get_node(node_cur, ' ')
-                        part, parts = copy.deepcopy(parts[-skip]), parts[:-skip]
-                node_cur.setdefault('__rulesets', list()).append((specificity, rule))
-                node_cur.setdefault('__selectors', list()).append(selector)
+        def build_trie(strip=None):
+            split = UI_Style_RuleSet._split_selector
+            trie = new_node(None)
+            # insert all items into trie
+            for rule in self.rules:
+                for selector in rule.selectors:
+                    specificity = UI_Style_RuleSet.selector_specificity(selector, rule._uid, inline=self._inline, defaults=self._defaults)
+                    nselector = UI_Styling.strip_selector_parts(selector, strip)
+                    # print(f'selector specificity: {selector} => {specificity}')
+                    parts = [split(p) for p in nselector]
+                    part = {'type':'', 'id':'', 'class': set(), 'pseudoelement':set(), 'pseudoclass':set(), 'attribs':set(), 'attribvals':dict()}
+                    node_cur = trie
+                    while True:
+                        if part['type']:
+                            # NOTE: type can be '>', but this _should_ get handled in final `else`
+                            assert part['type'] != '>', f'type can be `>` but not here. check if style has `> >`\nselector: {selector}\nstrip: {strip}\nnselector: {nselector}\npart: {part}\nparts: {parts}\n{self._trie}'
+                            node_cur = get_node(node_cur, f"{part['type']}")
+                            part['type'] = ''
+                        elif part['id']:
+                            node_cur = get_node(node_cur, f"#{part['id']}")
+                            part['id'] = ''
+                        elif part['class']:
+                            c = part['class'].pop()
+                            node_cur = get_node(node_cur, f".{c}")
+                        elif part['pseudoelement']:
+                            pe = part['pseudoelement'].pop()
+                            node_cur = get_node(node_cur, f"::{pe}")
+                        elif part['pseudoclass']:
+                            pc = part['pseudoclass'].pop()
+                            node_cur = get_node(node_cur, f":{pc}")
+                        elif part['attribs']:
+                            a = part['attribs'].pop()
+                            node_cur = get_node(node_cur, f"[{a}]")
+                        elif part['attribvals']:
+                            k,v = part['attribvals'].popitem()
+                            node_cur = get_node(node_cur, f'[{k}="{v}"]')
+                        elif not parts:
+                            break
+                        else:
+                            skip = 1
+                            if node_cur != trie:
+                                if parts[-1]['type'] == '>':
+                                    node_cur = get_node(node_cur, '>')
+                                    skip = 2
+                                else:
+                                    node_cur = get_node(node_cur, ' ')
+                            part, parts = copy.deepcopy(parts[-skip]), parts[:-skip]
+                    node_cur.setdefault('__rulesets', list()).append((specificity, rule))   # styling rules to apply along with specificity (sorting)
+                    node_cur.setdefault('__selectors', list()).append(nselector)            # only informational (debugging)
+            return trie
 
-        # print_trie()
-        # print(sum(len(rule.selectors) for rule in self.rules), len(self._trie))
+        if not self._trie_full:
+            self._trie_full = build_trie()
+        if not self._trie_stripped:
+            self._trie_stripped = build_trie(strip={
+                # 'type',
+                # 'classes',
+                # 'id',
+                'pseudoelements',
+                'pseudoclasses',
+                'attributes',
+                'attributevalues',
+            })
+        # self._print_trie(full_trie=False)
 
-    def get_matching_rules(self, selector):
+    def get_matching_rules(self, selector, full_trie=True):
         self.optimize()
         rules = []
         def m(node_cur, part, parts, depth):
@@ -711,8 +730,10 @@ class UI_Styling:
                     while ps:
                         p,ps = ps[-1],ps[:-1]
                         m(node_next, p, ps, depth+1)
-                elif edge_label == '>': m(node_next, parts[-1], parts[:-1], depth+1)
-                elif edge_label == '*': m(node_next, part, parts, depth+1)
+                elif edge_label == '>':
+                    if parts: m(node_next, parts[-1], parts[:-1], depth+1)
+                elif edge_label == '*':
+                    m(node_next, part, parts, depth+1)
                 elif edge_label[0] == '#':
                     if edge_label[1:] == part['id']: m(node_next, part, parts, depth+1)
                 elif edge_label[0] == '.':
@@ -738,28 +759,30 @@ class UI_Styling:
                     if edge_label == part['type']: m(node_next, part, parts, depth+1)
         split = UI_Style_RuleSet._split_selector
         parts = [split(p) for p in selector]
-        m(self._trie, parts[-1], parts[:-1], 0)
+        if parts: m(self._trie_full if full_trie else self._trie_stripped, parts[-1], parts[:-1], 0)
         rules.sort(key=lambda sr:sr[0])
         return [r for (s,r) in rules]
 
 
     @staticmethod
-    def from_decllist(decllist, selector=None, var=None, inline=False):
+    def from_decllist(decllist, selector=None, var=None, inline=False, defaults=False):
         if selector is None: selector = ['*']
-        if var is None: var = UI_Styling(inline=inline)
+        if var is None: var = UI_Styling(inline=inline, defaults=defaults)
         var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector)]
         return var
 
     @staticmethod
-    def from_selector_decllist_list(l, inline=False):
-        var = UI_Styling(inline=inline)
+    def from_selector_decllist_list(l, inline=False, defaults=False):
+        var = UI_Styling(inline=inline, defaults=defaults)
         var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector) for (selector,decllist) in l]
         return var
 
-    def __init__(self, lines=None, inline=False):
+    def __init__(self, lines=None, inline=False, defaults=False):
         self._uid = UI_Styling.uid_generator.next()
-        self._trie = None
+        self._trie_full = None
+        self._trie_stripped = None
         self._inline = inline
+        self._defaults = defaults
         self.rules = []
         self._decllist_cache = {}
         self._matches_cache = {}
@@ -785,7 +808,6 @@ class UI_Styling:
                 decllist = [d for rule in self.get_matching_rules(selector) for d in rule.decllist]
                 # decllist = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
                 cache[oselector] = decllist
-                # print('UI_Styling.get_decllist', self._uid, '%d/%d' % (len(cache[selector_key]), len(self.rules)), selector_key)
         return cache[oselector]
 
     def _has_matches(self, selector):
@@ -939,16 +961,14 @@ class UI_Styling:
         if onselector not in cache:
             nstyling = UI_Styling()
             # include only the rules that _might_ apply to selector (assumes some selector parts change but others do not)
-            nstyling.rules = [rule for styling in stylings for rule in styling.rules if rule.match(nselector, strip=strip)]
-            if False:
-                # trimmed = [rule for styling in stylings for rule in styling.rules if not rule.match(nselector, strip=strip)]
-                print('trim_styling', selector, nselector, nstyling) #, trimmed)
+            nstyling.rules = [rule for styling in stylings for rule in styling.get_matching_rules(nselector, full_trie=False)]
+            # nstyling.rules = [rule for styling in stylings for rule in styling.rules if rule.match(nselector, strip=strip)]
             cache[onselector] = nstyling
         return cache[onselector]
 
     @staticmethod
-    def combine_styling(*stylings, inline=False):
-        nstyling = UI_Styling(inline=inline)
+    def combine_styling(*stylings, inline=False, defaults=False):
+        nstyling = UI_Styling(inline=inline, defaults=defaults)
         nstyling.rules = [rule for styling in stylings for rule in styling.rules]
         return nstyling
 
@@ -964,7 +984,7 @@ class UI_Styling:
         return styling
 
 
-ui_defaultstylings = UI_Styling()
+ui_defaultstylings = UI_Styling(defaults=True)
 def load_defaultstylings():
     global ui_defaultstylings
     path = os.path.join(os.path.dirname(__file__), 'config', 'ui_defaultstyles.css')

@@ -145,7 +145,7 @@ span {
 
 /* make sure we handle cases correctly! */
 input {
-    background: red;
+    background: pink;
 }
 
 dialog {
@@ -239,7 +239,7 @@ div.dialog-footer > * {
 
 
 /*******************/
-/*    MARKDOWN     */
+/* MARKDOWN        */
 
 
 div.mdown {
@@ -261,7 +261,7 @@ div.mdown span {
     border: 0;
 }
 
-table {
+div.mdown table {
     width: 100%;
     display: table;
     background: rgba(0,0,0,0.2);
@@ -269,20 +269,20 @@ table {
     margin: 0px 10px;
     padding: 4px;
 }
-tr {
+div.mdown tr {
     width: 100%;
     display: table-row;
     margin: 0px 0px;
     border: 0px;
     padding: 0px 2px;
 }
-th {
+div.mdown th {
     display: table-cell;
     margin: 0px;
     border: 0px;
     padding: 2px;
 }
-td {
+div.mdown td {
     display: table-cell;
     margin: 0px;
     border: 0px;
@@ -459,7 +459,7 @@ div.mdown img.inline {
 
 
 /**********************/
-/*   INPUT CHECKBOX   */
+/* CHECKBOX INPUT     */
 
 input[type="checkbox"] {
     background-color: transparent;
@@ -507,7 +507,7 @@ input[type="checkbox"][checked] > label {
 
 
 /*******************/
-/*   INPUT RADIO   */
+/* RADIO INPUT     */
 
 input[type="radio"] {
     background-color: transparent;
@@ -552,6 +552,10 @@ input[type="radio"][checked] > label {
 }
 
 
+
+/**************************/
+/* COLLAPSIBLE COLLECTION */
+
 div.collapsible > input.header {
     display: block;
     width: 100%;
@@ -577,7 +581,7 @@ div.collapsible > div.inside.collapsed {
 /**********************/
 /* TEXT INPUT         */
 
-*.inputtext-container {
+.inputtext-container {
     margin: 0px;
     /*position: relative;*/
     left: 0px;
@@ -685,7 +689,7 @@ div.collapsible > div.inside.collapsed {
 
 
 
-body > dialog.tooltip {
+dialog.tooltip {
     z-index: 100000;
     position: fixed;
     /*display: block;*/
