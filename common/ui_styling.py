@@ -636,7 +636,7 @@ class UI_Styling:
         p(self._trie_full if full_trie else self._trie_stripped, 1)
         print('}')
 
-    def optimize(self):
+    def optimize(self, force=False):
         '''
         build a trie of selectors for faster matching
         the trie consists of
@@ -705,9 +705,9 @@ class UI_Styling:
                     node_cur.setdefault('__selectors', list()).append(nselector)            # only informational (debugging)
             return trie
 
-        if not self._trie_full:
+        if force or not self._trie_full:
             self._trie_full = build_trie()
-        if not self._trie_stripped:
+        if force or not self._trie_stripped:
             self._trie_stripped = build_trie(strip={
                 # 'type',
                 # 'classes',
@@ -717,7 +717,6 @@ class UI_Styling:
                 'attributes',
                 'attributevalues',
             })
-        # self._print_trie(full_trie=False)
 
     def get_matching_rules(self, selector, full_trie=True):
         self.optimize()
@@ -763,18 +762,64 @@ class UI_Styling:
         rules.sort(key=lambda sr:sr[0])
         return [r for (s,r) in rules]
 
+    def has_matches_trie(self, selector, full_trie=True):
+        self.optimize()
+        rules = []
+        def m(node_cur, part, parts, depth):
+            nonlocal rules
+            for (edge_label, node_next) in node_cur.items():
+                if   edge_label == ' ':
+                    ps = parts
+                    while ps:
+                        p,ps = ps[-1],ps[:-1]
+                        if m(node_next, p, ps, depth+1): return True
+                elif edge_label == '>':
+                    if parts and m(node_next, parts[-1], parts[:-1], depth+1): return True
+                elif edge_label == '*':
+                    if m(node_next, part, parts, depth+1): return True
+                elif edge_label[0] == '#':
+                    if edge_label[1:] == part['id'] and m(node_next, part, parts, depth+1): return True
+                elif edge_label[0] == '.':
+                    if edge_label[1:] in part['class'] and m(node_next, part, parts, depth+1): return True
+                elif len(edge_label) > 2 and edge_label[1] == ':':
+                    if edge_label[2:] in part['pseudoelement'] and m(node_next, part, parts, depth+1): return True
+                elif edge_label[0] == ':':
+                    if edge_label[1:] in part['pseudoclass'] and m(node_next, part, parts, depth+1): return True
+                elif edge_label[0] == '[':
+                    attrib_parts = edge_label[1:-1].split('=')      # remove square brackets and split on `=`
+                    attrib_key = attrib_parts[0]
+                    if len(attrib_parts) == 1:
+                        if attrib_key in part['attribs'] and m(node_next, part, parts, depth+1): return True
+                    else:
+                        attrib_val = attrib_parts[1][1:-1]          # remove quotes from attribute value
+                        if part['attribvals'].get(attrib_key) == attrib_val and m(node_next, part, parts, depth+1): return True
+                elif edge_label in {'__selectors', '__parent', '__uid'}:
+                    pass
+                elif edge_label == '__rulesets':
+                    return True
+                else:
+                    # assuming type
+                    if edge_label == part['type'] and m(node_next, part, parts, depth+1): return True
+            return False
+        split = UI_Style_RuleSet._split_selector
+        parts = [split(p) for p in selector]
+        if not parts: return False
+        return m(self._trie_full if full_trie else self._trie_stripped, parts[-1], parts[:-1], 0)
+
 
     @staticmethod
     def from_decllist(decllist, selector=None, var=None, inline=False, defaults=False):
         if selector is None: selector = ['*']
         if var is None: var = UI_Styling(inline=inline, defaults=defaults)
         var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector)]
+        var.optimize(force=True)
         return var
 
     @staticmethod
     def from_selector_decllist_list(l, inline=False, defaults=False):
         var = UI_Styling(inline=inline, defaults=defaults)
         var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector) for (selector,decllist) in l]
+        var.optimize(force=True)
         return var
 
     def __init__(self, lines=None, inline=False, defaults=False):
@@ -814,7 +859,8 @@ class UI_Styling:
         if not self.rules: return False
         selector_key = tuple(selector)
         if selector_key not in self._matches_cache:
-            self._matches_cache[selector_key] = any(rule.match(selector) for rule in self.rules)
+            self._matches_cache[selector_key] = self.has_matches_trie(selector)
+            # self._matches_cache[selector_key] = any(rule.match(selector) for rule in self.rules)
         return self._matches_cache[selector_key]
 
     def get_all_stylings(self, selector):
@@ -823,6 +869,7 @@ class UI_Styling:
     def append(self, other_styling):
         self.clear_cache()
         self.rules += other_styling.rules
+        self.optimize(force=True)
         return self
 
 
@@ -962,6 +1009,7 @@ class UI_Styling:
             nstyling = UI_Styling()
             # include only the rules that _might_ apply to selector (assumes some selector parts change but others do not)
             nstyling.rules = [rule for styling in stylings for rule in styling.get_matching_rules(nselector, full_trie=False)]
+            nstyling.optimize(force=True)
             # nstyling.rules = [rule for styling in stylings for rule in styling.rules if rule.match(nselector, strip=strip)]
             cache[onselector] = nstyling
         return cache[onselector]
@@ -970,6 +1018,7 @@ class UI_Styling:
     def combine_styling(*stylings, inline=False, defaults=False):
         nstyling = UI_Styling(inline=inline, defaults=defaults)
         nstyling.rules = [rule for styling in stylings for rule in styling.rules]
+        nstyling.optimize(force=True)
         return nstyling
 
     @staticmethod
