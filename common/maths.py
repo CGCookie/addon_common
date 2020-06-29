@@ -390,6 +390,11 @@ class Direction2D(Vector, Entity2D):
     def __rmul__(self, other):
         return self.__mul__(other)
 
+    def reverse(self):
+        self.x *= -1
+        self.y *= -1
+        return self
+
     def normalize(self):
         super().normalize()
         return self

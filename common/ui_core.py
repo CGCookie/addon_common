@@ -183,7 +183,7 @@ def load_image_png(path):
 
 def load_image_apng(path):
     im_apng = APNG.open(path)
-    print(path, im_apng, im_apng.frames, im_apng.num_plays)
+    print('load_image_apng', path, im_apng, im_apng.frames, im_apng.num_plays)
     im,control = im_apng.frames[0]
     w,h = control.width,control.height
     img = [[r[i:i+4] for i in range(0,w*4,4)] for r in d]
@@ -196,14 +196,18 @@ def load_image(fn):
         # have not seen this image before
         path = get_image_path(fn)
         _,ext = os.path.splitext(fn)
-        dprint('Loading image "%s" (path=%s)' % (str(fn), str(path)))
+        dprint(f'Loading image "{fn}" (path={path})')
         if   ext == '.png':  img = load_image_png(path)
         elif ext == '.apng': img = load_image_apng(path)
         load_image._cache[fn] = img
     return load_image._cache[fn]
 
+def set_image_cache(fn, img):
+    if fn in load_image._cache: return
+    load_image._cache[fn] = img
+
 def preload_image(*fns):
-    for fn in fns: load_image(fn)
+    return [ (fn, load_image(fn)) for fn in fns ]
 
 @add_cache('_cache', {})
 def load_texture(fn_image, mag_filter=bgl.GL_NEAREST, min_filter=bgl.GL_LINEAR):
