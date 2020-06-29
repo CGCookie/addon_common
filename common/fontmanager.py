@@ -55,7 +55,7 @@ class FontManager:
                 # note: loading the same file multiple times is not a problem.
                 #       blender is smart enough to cache
                 fontid = blf.load(val)
-                print('Loaded font "%s" as id %d' % (val, fontid))
+                print(f'Addon Common: Loaded font "{val}" as id {fontid}')
                 FontManager._cache[val] = fontid
                 FontManager._cache[fontid] = fontid
                 if load_callback: load_callback(fontid)

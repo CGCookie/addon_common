@@ -70,7 +70,7 @@ from .decorators import blender_version_wrapper, add_cache
 #      3.2    150      4.4    440
 #      3.3    330      4.5    450
 #                      4.6    460
-print('(bmesh_render) GLSL Version:', bgl.glGetString(bgl.GL_SHADING_LANGUAGE_VERSION))
+print('Addon Common: (bmesh_render) GLSL Version:', bgl.glGetString(bgl.GL_SHADING_LANGUAGE_VERSION))
 
 
 @blender_version_wrapper('<', '2.80')

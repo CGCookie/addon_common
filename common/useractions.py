@@ -223,7 +223,7 @@ def translate_blenderop(action, keyconfig=None):
             if kmi.idname != oop and kmi.idname != top: continue
             ret.add(kmi_details(kmi))
     if not ret:
-        print('Warning: could not translate blender op "%s" to actions (%s->%s, %s->%s)' % (action, okeymap, tkeymap, oop, top))
+        print(f'Addon Common Warning: could not translate blender op "{action}" to actions ({okeymap}->{tkeymap}, {oop}->{top})')
     return ret
 
 
