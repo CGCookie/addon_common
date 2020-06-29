@@ -239,6 +239,40 @@ div.dialog-footer > * {
 
 
 /*******************/
+/* TABLES          */
+
+table {
+    width: 100%;
+    display: table;
+    background: rgba(0,0,0,0.2);
+    border: 1px rgba(0,0,0,1);
+    margin: 0px 10px;
+    padding: 4px;
+}
+tr {
+    width: 100%;
+    display: table-row;
+    margin: 0px 0px;
+    border: 0px;
+    padding: 0px 2px;
+}
+th {
+    display: table-cell;
+    margin: 0px;
+    border: 0px;
+    padding: 2px;
+}
+td {
+    display: table-cell;
+    margin: 0px;
+    border: 0px;
+    padding: 2px;
+}
+
+
+
+
+/*******************/
 /* MARKDOWN        */
 
 
@@ -259,34 +293,6 @@ div.mdown span {
     margin: 0;
     padding: 0;
     border: 0;
-}
-
-div.mdown table {
-    width: 100%;
-    display: table;
-    background: rgba(0,0,0,0.2);
-    border: 1px rgba(0,0,0,1);
-    margin: 0px 10px;
-    padding: 4px;
-}
-div.mdown tr {
-    width: 100%;
-    display: table-row;
-    margin: 0px 0px;
-    border: 0px;
-    padding: 0px 2px;
-}
-div.mdown th {
-    display: table-cell;
-    margin: 0px;
-    border: 0px;
-    padding: 2px;
-}
-div.mdown td {
-    display: table-cell;
-    margin: 0px;
-    border: 0px;
-    padding: 2px;
 }
 
 div.mdown h1 {

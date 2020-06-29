@@ -1701,6 +1701,13 @@ class Accel2D:
 
 
 class NumberUnit:
+    val_fn = {
+        '%':  lambda num,base,_base: (num / 100.0) * float(base if base is not None else _base if _base is not None else 1),
+        'px': lambda num,base,_base: num,
+        'pt': lambda num,base,_base: num,
+        '':   lambda num,base,_base: num,
+    }
+
     def __init__(self, num, unit, base=None):
         self._num = float(num)
         self._unit = unit
@@ -1710,19 +1717,16 @@ class NumberUnit:
     def unit(self): return self._unit
 
     # def __str__(self): return '<NumberUnit num=%f unit=%s>' % (self._num, str(self._unit))
-    def __str__(self): return '%f%s' % (self._num, str(self._unit) or '?')
+    def __str__(self): return f'{self._num}{self._unit or "?"}'
 
     def __repr__(self): return self.__str__()
 
     def __float__(self): return self.val()
 
     def val(self, base=None):
-        if base is None:
-            base = 1 if self._base is None else self._base
-        if self._unit == '%':       return (self._num / 100.0) * float(base)
-        if self._unit == 'pt':       return self._num
-        if self._unit in {'px', ''}: return self._num
-        assert False, 'Unhandled unit "%s"' % self._unit
+        fn = NumberUnit.val_fn.get(self._unit, None)
+        assert fn, f'Unhandled unit "{self._unit}"'
+        return fn(self._num, base, self._base)
 NumberUnit.zero = NumberUnit(0, 'px')
 
 

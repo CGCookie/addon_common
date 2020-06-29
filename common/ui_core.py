@@ -134,12 +134,26 @@ def get_font(fontfamily, fontstyle=None, fontweight=None):
 
 
 def get_image_path(fn, ext=None, subfolders=None):
-    # if no subfolders are given, assuming image path is <root>/icons
-    # or <root>/images where <root> is the 2 levels above this file
+    '''
+    If subfolders is not given, this function will look in folders shown below
+        <addon_root>
+            addon_common/
+                common/
+                    ui_core.py      <- this file
+                    <...>
+                <...>
+            icons/                  <- will look here (if exists)
+                <...>
+            images/                 <- will look here (if exists)
+                <...>
+            help/                   <- will look here (if exists)
+                <...>
+            <...>
+    '''
     if subfolders is None:
         subfolders = ['icons', 'images', 'help']
     if ext:
-        fn = '%s.%s' % (fn,ext)
+        fn = f'{fn}.{ext}'
     path_here = os.path.dirname(__file__)
     path_root = os.path.join(path_here, '..', '..')
     paths = [os.path.join(path_root, p, fn) for p in subfolders]
@@ -463,32 +477,30 @@ class UI_Element_Utils:
     # MUST BE CALLED AFTER `compute_style()` METHOD IS CALLED!
 
     @profiler.function
-    def _get_style_num(self, k, def_v=None, percent_of=None, min_v=None, max_v=None, scale=None):
+    def _get_style_num(self, k, def_v=None, percent_of=None, scale=None):
         v = self._computed_styles.get(k, 'auto')
         if v == 'auto': v = def_v or 'auto'
         if v == 'auto': return 'auto'
         # v must be NumberUnit here!
         try:
             if v.unit == '%': scale = None
-            v = v.val(base=(percent_of if percent_of is not None else float(def_v)))
+            v = v.val(base=(float(def_v) if percent_of is None else percent_of))
             v = float(v)
+            if scale is not None: v *= scale
         except:
             v = 0
-        if min_v is not None: v = max(float(min_v), v)
-        if max_v is not None: v = min(float(max_v), v)
-        if scale is not None: v *= scale
         return floor_if_finite(v)
 
     @profiler.function
     def _get_style_trbl(self, kb, scale=None):
         cache = self._style_trbl_cache
-        key = str((kb, scale))
+        key = f'{kb} {scale}'
         if key not in cache:
-            t = self._get_style_num('%s-top'    % kb, def_v=NumberUnit.zero, scale=scale)
-            r = self._get_style_num('%s-right'  % kb, def_v=NumberUnit.zero, scale=scale)
-            b = self._get_style_num('%s-bottom' % kb, def_v=NumberUnit.zero, scale=scale)
-            l = self._get_style_num('%s-left'   % kb, def_v=NumberUnit.zero, scale=scale)
-            cache[key] = (t,r,b,l)
+            t = self._get_style_num(f'{kb}-top',    def_v=NumberUnit.zero, scale=scale)
+            r = self._get_style_num(f'{kb}-right',  def_v=NumberUnit.zero, scale=scale)
+            b = self._get_style_num(f'{kb}-bottom', def_v=NumberUnit.zero, scale=scale)
+            l = self._get_style_num(f'{kb}-left',   def_v=NumberUnit.zero, scale=scale)
+            cache[key] = (t, r, b, l)
         return cache[key]
 
 

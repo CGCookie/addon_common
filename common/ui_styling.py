@@ -313,8 +313,8 @@ class UI_Style_RuleSet:
     uid_generator = UniqueCounter()
 
     @staticmethod
-    def from_lexer(lexer):
-        rs = UI_Style_RuleSet()
+    def from_lexer(lexer, inline=False, defaults=False):
+        rs = UI_Style_RuleSet(inline=inline, defaults=defaults)
 
         def match_identifier():
             if lexer.peek_v() in {'.','#',':','::'}:
@@ -367,21 +367,23 @@ class UI_Style_RuleSet:
         return rs
 
     @staticmethod
-    def from_decllist(decllist, selector): # tagname, pseudoclass=None):
+    def from_decllist(decllist, selector, inline=False, defaults=False): # tagname, pseudoclass=None):
         # t = type(pseudoclass)
         # if t is list or t is set: pseudoclass = ':'.join(pseudoclass)
-        rs = UI_Style_RuleSet()
+        rs = UI_Style_RuleSet(inline=inline, defaults=defaults)
         # rs.selectors = [[tagname + (':%s'%pseudoclass if pseudoclass else '')]]
         rs.selectors = [selector]
         for k,v in decllist.items():
             rs.decllist.append(UI_Style_Declaration(k,v))
         return rs
 
-    def __init__(self):
+    def __init__(self, inline=False, defaults=False):
         self._uid = UI_Style_RuleSet.uid_generator.next()
         self.selectors = []     # can have multiple selectors for same decllist
         self.decllist = []      # list of style declarations that apply
         self._match_cache = {}
+        self._inline = inline
+        self._defaults = defaults
 
     def __str__(self):
         s = ', '.join(' '.join(selector) for selector in self.selectors)
@@ -500,22 +502,25 @@ class UI_Style_RuleSet:
         parts_style = [split(p) for p in sel_style]
         return UI_Style_RuleSet._match_selector(sel_elem, parts_elem, sel_style, parts_style)
 
-    @profiler.function
-    def match(self, sel_elem, strip=None):
-        # returns true if passed selector matches any selector in self.selectors
-        cache = self._match_cache
-        key = f'{sel_elem} {strip}'
-        if key not in cache:
-            cache[key] = any(UI_Style_RuleSet.match_selector(sel_elem, sel_style, strip=strip) for sel_style in self.selectors)
-        return cache[key]
+    # @profiler.function
+    # def match(self, sel_elem, strip=None):
+    #     # returns true if passed selector matches any selector in self.selectors
+    #     cache = self._match_cache
+    #     key = f'{sel_elem} {strip}'
+    #     if key not in cache:
+    #         cache[key] = any(UI_Style_RuleSet.match_selector(sel_elem, sel_style, strip=strip) for sel_style in self.selectors)
+    #     return cache[key]
 
     def get_all_matches(self, sel_elem):
         return [sel_style for sel_style in self.selectors if UI_Style_RuleSet.match_selector(sel_elem, sel_style)]
 
     @staticmethod
     @add_cache('_cache', {})
-    def selector_specificity(selector, uid, inline=False, defaults=False):
-        k = f'{selector} {inline} {defaults}'
+    def selector_specificity(selector, ruleset): #, uid, inline=False, defaults=False):
+        uid = ruleset._uid
+        inline = ruleset._inline
+        defaults = ruleset._defaults
+        k = f'{uid} {selector}'
         cache = UI_Style_RuleSet.selector_specificity._cache
         if k not in cache:
             split = UI_Style_RuleSet._split_selector
@@ -565,13 +570,14 @@ class UI_Styling:
     @profiler.function
     def load_from_text(self, text):
         self.clear_cache()
-        self.rules = []
+        self.dirty_optimization()
+        self._rules = []
         if not text: return
         charstream = Parse_CharStream(text)             # convert input into character stream
         lexer = Parse_Lexer(charstream, token_rules)    # tokenize the character stream
         while lexer.peek_t() != 'eof':
-            self.rules.append(UI_Style_RuleSet.from_lexer(lexer))
-        # print('UI_Styling.load_from_text: Loaded %d rules' % len(self.rules))
+            self._rules.append(UI_Style_RuleSet.from_lexer(lexer, self._inline, self._defaults))
+        # print('UI_Styling.load_from_text: Loaded %d rules' % len(self._rules))
 
     def clear_cache(self):
         # print('UI_Styling%d.clear_cache' % self._uid)
@@ -636,7 +642,7 @@ class UI_Styling:
         p(self._trie_full if full_trie else self._trie_stripped, 1)
         print('}')
 
-    def optimize(self, force=False):
+    def optimize(self):
         '''
         build a trie of selectors for faster matching
         the trie consists of
@@ -655,12 +661,13 @@ class UI_Styling:
             return cur[key]
 
         def build_trie(strip=None):
+            # print(f'UI_Styling.optimize! {self._uid}')
             split = UI_Style_RuleSet._split_selector
             trie = new_node(None)
             # insert all items into trie
-            for rule in self.rules:
+            for rule in self._rules:
                 for selector in rule.selectors:
-                    specificity = UI_Style_RuleSet.selector_specificity(selector, rule._uid, inline=self._inline, defaults=self._defaults)
+                    specificity = UI_Style_RuleSet.selector_specificity(selector, rule)
                     nselector = UI_Styling.strip_selector_parts(selector, strip)
                     # print(f'selector specificity: {selector} => {specificity}')
                     parts = [split(p) for p in nselector]
@@ -705,9 +712,9 @@ class UI_Styling:
                     node_cur.setdefault('__selectors', list()).append(nselector)            # only informational (debugging)
             return trie
 
-        if force or not self._trie_full:
+        if not self._trie_full:
             self._trie_full = build_trie()
-        if force or not self._trie_stripped:
+        if not self._trie_stripped:
             self._trie_stripped = build_trie(strip={
                 # 'type',
                 # 'classes',
@@ -781,7 +788,7 @@ class UI_Styling:
                     if edge_label[1:] == part['id'] and m(node_next, part, parts, depth+1): return True
                 elif edge_label[0] == '.':
                     if edge_label[1:] in part['class'] and m(node_next, part, parts, depth+1): return True
-                elif len(edge_label) > 2 and edge_label[1] == ':':
+                elif edge_label[:2] == '::':
                     if edge_label[2:] in part['pseudoelement'] and m(node_next, part, parts, depth+1): return True
                 elif edge_label[0] == ':':
                     if edge_label[1:] in part['pseudoclass'] and m(node_next, part, parts, depth+1): return True
@@ -811,33 +818,44 @@ class UI_Styling:
     def from_decllist(decllist, selector=None, var=None, inline=False, defaults=False):
         if selector is None: selector = ['*']
         if var is None: var = UI_Styling(inline=inline, defaults=defaults)
-        var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector)]
-        var.optimize(force=True)
+        var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector, inline=inline, defaults=defaults)]
         return var
 
     @staticmethod
     def from_selector_decllist_list(l, inline=False, defaults=False):
         var = UI_Styling(inline=inline, defaults=defaults)
-        var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector) for (selector,decllist) in l]
-        var.optimize(force=True)
+        var.rules = [UI_Style_RuleSet.from_decllist(decllist, selector, inline=inline, defaults=defaults) for (selector,decllist) in l]
         return var
 
     def __init__(self, lines=None, inline=False, defaults=False):
         self._uid = UI_Styling.uid_generator.next()
-        self._trie_full = None
-        self._trie_stripped = None
         self._inline = inline
         self._defaults = defaults
-        self.rules = []
+        self._rules = []
         self._decllist_cache = {}
         self._matches_cache = {}
-        if lines: self.load_from_text(lines)
+        if lines:
+            self.load_from_text(lines)
+        self.dirty_optimization()
 
     def __str__(self):
-        if not self.rules: return '<UI_Styling%d>' % self._uid
-        return '<UI_Styling%d\n%s\n>' % (self._uid, '\n'.join('  '+l for r in self.rules for l in str(r).splitlines()))
+        if not self._rules: return '<UI_Styling%d>' % self._uid
+        return '<UI_Styling%d\n%s\n>' % (self._uid, '\n'.join('  '+l for r in self._rules for l in str(r).splitlines()))
 
     def __repr__(self): return self.__str__()
+
+
+    @property
+    def rules(self):
+        return list(self._rules)
+    @rules.setter
+    def rules(self, v):
+        self._rules = v
+        self.dirty_optimization()
+
+    def dirty_optimization(self):
+        self._trie_full = None
+        self._trie_stripped = None
 
     @property
     def simple_str(self): return '<UI_Styling%d>' % self._uid
@@ -845,31 +863,28 @@ class UI_Styling:
     @profiler.function
     def get_decllist(self, selector):
         cache = self._decllist_cache
-        if not self.rules: return []
+        if not self._rules: return []
         oselector = str(selector)
         if oselector not in cache:
             # print('UI_Styling.get_decllist', selector)
             with profiler.code('UI_Styling.get_decllist: creating cached value'):
                 decllist = [d for rule in self.get_matching_rules(selector) for d in rule.decllist]
-                # decllist = [d for rule in self.rules if rule.match(selector) for d in rule.decllist]
+                # decllist = [d for rule in self._rules if rule.match(selector) for d in rule.decllist]
                 cache[oselector] = decllist
         return cache[oselector]
 
     def _has_matches(self, selector):
-        if not self.rules: return False
+        if not self._rules: return False
         selector_key = tuple(selector)
         if selector_key not in self._matches_cache:
             self._matches_cache[selector_key] = self.has_matches_trie(selector)
-            # self._matches_cache[selector_key] = any(rule.match(selector) for rule in self.rules)
+            # self._matches_cache[selector_key] = any(rule.match(selector) for rule in self._rules)
         return self._matches_cache[selector_key]
-
-    def get_all_stylings(self, selector):
-        return [sel for rule in self.rules for sel in rule.get_all_matches(selector)]
 
     def append(self, other_styling):
         self.clear_cache()
-        self.rules += other_styling.rules
-        self.optimize(force=True)
+        self._rules += other_styling.rules
+        self.dirty_optimization()
         return self
 
 
@@ -1009,7 +1024,6 @@ class UI_Styling:
             nstyling = UI_Styling()
             # include only the rules that _might_ apply to selector (assumes some selector parts change but others do not)
             nstyling.rules = [rule for styling in stylings for rule in styling.get_matching_rules(nselector, full_trie=False)]
-            nstyling.optimize(force=True)
             # nstyling.rules = [rule for styling in stylings for rule in styling.rules if rule.match(nselector, strip=strip)]
             cache[onselector] = nstyling
         return cache[onselector]
@@ -1018,7 +1032,6 @@ class UI_Styling:
     def combine_styling(*stylings, inline=False, defaults=False):
         nstyling = UI_Styling(inline=inline, defaults=defaults)
         nstyling.rules = [rule for styling in stylings for rule in styling.rules]
-        nstyling.optimize(force=True)
         return nstyling
 
     @staticmethod
