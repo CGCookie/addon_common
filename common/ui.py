@@ -199,7 +199,7 @@ def input_checkbox(**kwargs):
         ui_input.add_eventListener('on_mouseclick', mouseclick)
 
     ui_proxy = UI_Proxy('input_checkbox', ui_input)
-    ui_proxy.translate('label', 'innerText')
+    ui_proxy.translate_map('label', 'innerText', ui_label)
     ui_proxy.translate('value', 'checked')
     ui_proxy.map_children_to(ui_label)
     ui_proxy.map('innerText', ui_label)
@@ -349,8 +349,11 @@ def collection(label, **kwargs):
     with ui_container.defer_dirty('creating content'):
         ui_label = div(innerText=label, classes='header', parent=ui_container)
         ui_inside = UI_Element(tagName='div', classes='inside', parent=ui_container, **kw_inside)
-        ui_proxy = UI_Proxy('collection', ui_container)
-        ui_proxy.map_children_to(ui_inside)
+
+    ui_proxy = UI_Proxy('collection', ui_container)
+    ui_proxy.map('innerText', ui_label)
+    ui_proxy.translate_map('label', 'innerText', ui_label)
+    ui_proxy.map_children_to(ui_inside)
     return ui_proxy
 
 
@@ -374,7 +377,7 @@ def collapsible(label, **kwargs):
 
     ui_proxy = UI_Proxy('collapsible', ui_container)
     ui_proxy.translate_map('collapsed', 'checked', ui_label)
-    ui_proxy.map(['label', 'innerText'], ui_label)
+    ui_proxy.map(['innerText', 'label'], ui_label)
     ui_proxy.map_children_to(ui_inside)
     ui_proxy.map_to_all({'title'})
     return ui_proxy

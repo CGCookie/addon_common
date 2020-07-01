@@ -133,6 +133,7 @@ class UI_Proxy:
         # ignore mapping for attribs with _ prefix
         if attrib.startswith('_'):
             return setattr(self._proxy_default_element, attrib, val)
+        attrib = self._proxy_translate.get(attrib, attrib)                                      # translate attrib key (if applicable)
         if attrib in self._proxy_mapall:
             for ui_element in self._proxy_other_elements:
                 setattr(ui_element, attrib, val)
