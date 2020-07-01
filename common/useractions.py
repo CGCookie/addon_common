@@ -562,14 +562,16 @@ class Actions:
             ret |= (self.keymap.get(action, set()) | self.keymap2.get(action, set())) or { action }
         return ret
 
-    def to_human_readable(self, actions, join=','):
+    def to_human_readable(self, actions, join=',', onlyfirst=None):
         ret = set()
         for action in self.convert(actions):
             for kmi2hr in kmi_to_humanreadable:
                 for k,v in kmi2hr.items():
                     action = action.replace(k, v)
             ret.add(action)
-        return join.join(sorted(ret))
+        ret = sorted(ret)
+        if onlyfirst is not None: ret = ret[:onlyfirst]
+        return join.join(ret)
 
 
     def unuse(self, actions):

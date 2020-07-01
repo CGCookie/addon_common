@@ -140,6 +140,7 @@ class CookieCutter_UI:
         self._space.draw_handler_remove(self._handle_postview,  'WINDOW')
         self._space.draw_handler_remove(self._handle_postpixel, 'WINDOW')
         self.region_restore()
+        self.context.workspace.status_text_set(None)
         tag_redraw_all('CC ui_end', only_tag=False)
 
 
