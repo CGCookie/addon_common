@@ -3053,6 +3053,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     @profiler.function
     def get_under_mouse(self, p:Point2D):
         if not self.is_visible: return None
+        if not self.can_hover: return None
         if self._w < 1 or self._h < 1: return None
         if not (self._l <= p.x <= self._r and self._b <= p.y <= self._t): return None
         if not self._atomic:

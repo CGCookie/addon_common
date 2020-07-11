@@ -1732,6 +1732,25 @@ class NumberUnit:
         fn = NumberUnit.val_fn.get(self._unit, None)
         assert fn, f'Unhandled unit "{self._unit}"'
         return fn(self._num, base, self._base)
+
+    def __add__(self, other):
+        assert type(other) is NumberUnit, f'Unhandled type for add: {other} ({type(other)})'
+        assert self._unit == other._unit, f'Unhandled unit for add: {self} ({self._unit}) != {other} ({other._unit})'
+        return NumberUnit(self._num + other_num, self._unit, self._base)
+
+    def __radd__(self, other):
+        assert type(other) is NumberUnit, f'Unhandled type for add: {other} ({type(other)})'
+        assert self._unit == other._unit, f'Unhandled unit for add: {self} ({self._unit}) != {other} ({other._unit})'
+        return NumberUnit(self._num + other_num, self._unit, self._base)
+
+    def __mul__(self, other):
+        assert type(other) in {float, int}
+        return NumberUnit(self._num * other, self._unit, self._base)
+
+    def __div__(self, other):
+        assert type(other) in {float, int}
+        return NumberUnit(self._num / other, self._unit, self._base)
+
 NumberUnit.zero = NumberUnit(0, 'px')
 
 

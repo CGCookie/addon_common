@@ -223,7 +223,7 @@ class Drawing:
             1.0
             * Drawing._custom_dpi_mult
             * Drawing._prefs.view.ui_scale
-            * math.floor(Drawing._prefs.system.ui_scale)
+            * max(1, math.floor(Drawing._prefs.system.ui_scale))
             * Drawing._prefs.system.dpi / 72
             # * Drawing._prefs.system.pixel_size
         )
