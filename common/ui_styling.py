@@ -59,19 +59,14 @@ from .fontmanager import FontManager
 
 CookieCutter UI Styling
 
-IMPORTANT: SOME OF THE INFORMATION BELOW NO LONGER APPLIES!
-XXX TODO: UPDATE!
-
-
 This styling file is formatted _very_ similarly to CSS, but below is a list of a few important notes/differences:
 
-- rules are applied top-down, so any later conflicting rule will override an earlier rule
-    - in other words, specificity is ignored here (https://developer.mozilla.org/en-US/docs/Web/CSS/Specificity)
-    - if you want to override a setting, place it lower in the styling input.
-    - there is no `!important` keyword
+- rules have specificity and are applied top-down (later conflicting rules override earlier rules)
+    - specificity: https://developer.mozilla.org/en-US/docs/Web/CSS/Specificity
+    - there is no `!important` keyword, so if you want to override a setting, place it lower in the styling input.
 
-- all units are in pixels; do not specify units (ex: `px`, `in`, `em`, `%`)
-    - TODO: change to allow for %?
+- several units are supported: `px`, `%`, `pt` (handled same as `px`)
+    - `vw` and `vh` are recognized, but they are not implemented yet
 
 - colors can come in various formats
     - `rgb(<r>,<g>,<b>)` or `rgba(<r>,<g>,<b>,<a>)`, where r,g,b values in 0--255; a in 0.0--1.0
@@ -79,17 +74,14 @@ This styling file is formatted _very_ similarly to CSS, but below is a list of a
     - `#RRGGBB`, where r,g,b in 00--FF
     - or by colorname
 
+- spaces,tabs,newlines are completely ignored except to separate tokens
+
 - selectors
     - all element types must be explicitly specified, except at beginning or when following a `>`; use `*` to match any type
         - ex: `elem1 .class` is the same as `elem1.class` and `elem1 . class`, but never `elem1 *.class`
     - only `>` and ` ` combinators are implemented
 
-- spaces,tabs,newlines are completely ignored except to separate tokens
-
-- numbers cannot begin with a decimal. instead, start with `0.` (ex: use `0.014` not `.014`)
-
-- background has only color (no images)
-    - `background: <background-color>`
+- background has only solid color or image
 
 - border has no style (such as dotted or dashed) and has uniform width (no left, right, top, bottom widths)
     - `border: <border-width> <border-color>`
@@ -98,15 +90,15 @@ This styling file is formatted _very_ similarly to CSS, but below is a list of a
 
 - `min-*` and `max-*` are used as suggestions to the UI system; they will not be strictly followed
 
+- flex rules are recognized, but are not implemented yet
+
 
 Things to think about:
 
 - `:scrolling` pseudoclass, for when we're scrolling through content
 - `:focus` pseudoclass, for when textbox has focus, or changing a number input
 - add drop shadow (draws in the margins?) and outline (for focus viz)
-- allow for absolute, fixed, relative positioning?
 - allow for float boxes?
-- z-index (how is this done?  nodes of render tree get placed in rendering list?)
 - ability to be drag-able?
 
 
@@ -149,6 +141,7 @@ token_rules = [
         r'content',
         r'object-fit',
         r'text-shadow',
+        r'text-align(-last)?',
         r'z-index',
     ]),
     ('value', convert_token_to_string, [
@@ -166,6 +159,7 @@ token_rules = [
         r'normal|none',                                     # content (more in url and string below)
         r'fill|contain|cover|none|scale-down',              # object-fit
         r'none',                                            # text-shadow
+        r'left|center|justify|right',                       # text-align, text-align-last
     ]),
     ('url', get_converter_to_string('url'), [
         r'url\([\'"]?(?P<url>[^)]*?)[\'"]?\)',

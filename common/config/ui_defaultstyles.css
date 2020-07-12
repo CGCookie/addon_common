@@ -24,6 +24,7 @@ https://bulma.io/documentation/elements/button/
 
     overflow: hidden;
     font: normal normal 12pt sans-serif;
+    text-align: left;
 }
 
 body {

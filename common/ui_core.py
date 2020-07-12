@@ -950,7 +950,7 @@ class UI_Element_Properties:
             changed = True
         if changed:
             self._absolute_pos = None
-            self._update_position()
+            self.update_position()
             tag_redraw_all("UI_Element reposition")
             self.dirty('repositioning', 'renderbuf')
             self.dirty_flow()
@@ -1671,12 +1671,14 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._relative_element     = None
         self._relative_pos         = None
         self._relative_offset      = None
+        self._alignment_offset     = None
         self._scroll_offset        = Vec2D((0,0))
         self._absolute_pos         = None       # abs pos of element from relative info; cached in draw
         self._absolute_size        = None       # viewing size of element; set by parent
         self._tablecell_table      = None       # table that this cell belongs to
         self._tablecell_pos        = None       # overriding position if table-cell
         self._tablecell_size       = None       # overriding size if table-cell
+        self._all_lines            = None       # all children elements broken up into lines (for horizontal alignment)
 
         self._viewing_box = Box2D(topleft=(0,0), size=(-1,-1))  # topleft+size: set by parent element
         self._inside_box  = Box2D(topleft=(0,0), size=(-1,-1))  # inside area of viewing box (less margins, paddings, borders)
@@ -2423,10 +2425,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._tablecell_pos = None
         self._tablecell_size = None
 
-        self._update_position()
+        self.update_position()
 
         if not self._dirtying_flow:
             return
+
+        self._all_lines = None
 
         self._clean_debugging['layout'] = time.time()
 
@@ -2522,6 +2526,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 table_cells = {}
                 table_data = { 'elem': table_elem, 'index2D': table_index2D, 'cells': table_cells }
 
+            all_lines = []
             accum_width  = 0    # max width for all lines
             accum_height = 0    # sum heights for all lines
             for block in self._blocks:
@@ -2572,8 +2577,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             # clamp width and height only if scrolling (respectively)
                             if sx == 'scroll': w = remaining.clamp_width(w)
                             if sy == 'scroll': h = remaining.clamp_height(h)
-                            w = math.ceil(w)
-                            h = math.ceil(h)
+                            w, h = math.ceil(w), math.ceil(h)
                             sz = Size2D(width=w, height=h)
                             element._set_view_size(sz)
                             if position != 'fixed':
@@ -2582,13 +2586,16 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             processed = True
                         else:
                             # element does not fit!  finish of current line, then reprocess current element
+                            all_lines.append((cur_line, line_width))
                             accum_height += line_height
                             accum_width = max(accum_width, line_width)
                             new_line = True
                             element.dirty_flow(parent=False, children=True)
                 if cur_line:
+                    all_lines.append((cur_line, line_width))
                     accum_height += line_height
                     accum_width = max(accum_width, line_width)
+                self._all_lines = all_lines
             dw = accum_width
             dh = accum_height
 
@@ -2613,6 +2620,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._dynamic_full_size = Size2D(width=math.ceil(dw), height=math.ceil(dh))
         # if self._tagName == 'body': print(self._dynamic_content_size, self._dynamic_full_size)
 
+        # handle table elements
         if display == 'table-row':
             table_index2D.update(i=0, j_off=1)
         elif display == 'table-cell':
@@ -2646,12 +2654,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._tmp_max_width = max_width
 
         # reposition
-        self._update_position()
+        self.update_position()
 
         self._dirtying_flow = False
 
     @profiler.function
-    def _update_position(self):
+    def update_position(self):
         styles    = self._computed_styles
         style_pos = styles.get('position', 'static')
         pl,pt     = self.left_pixels,self.top_pixels
@@ -2711,9 +2719,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             self._relative_element = relative_element
             self._relative_pos     = relative_pos
             self._relative_offset  = relative_offset
+            self._alignment_offset = None
             self.dirty('position changed', 'renderbuf')
-
-    def update_position(self): return self._update_position()
 
     @profiler.function
     def _set_view_size(self, size:Size2D):
@@ -2724,6 +2731,29 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._absolute_size = size
         self.scrollLeft = self.scrollLeft
         self.scrollTop = self.scrollTop
+
+        if self._all_lines:
+            w = size.width - self._mbp_width
+            lines = len(self._all_lines)
+            align = self._computed_styles.get("text-align", "left")
+            for i_line, (line, line_width) in enumerate(self._all_lines):
+                if i_line == lines - 1:
+                    # override justify text alignment, unless CSS explicitly specifies
+                    align = self._computed_styles.get("text-align-last", 'left' if align == 'justify' else align)
+                offset_x = 0
+                offset_between = 0
+                if align == 'right':
+                    offset_x = w - line_width
+                elif align == 'center':
+                    offset_x = (w - line_width) / 2
+                elif align == 'justify':
+                    offset_between = (w - line_width) / len(line)
+                if offset_x <= 0 and offset_between <= 0: continue
+                offset_x = Vec2D((offset_x, 0))
+                offset_between = Vec2D((offset_between, 0))
+                for i,el in enumerate(line):
+                    el._alignment_offset = offset_x + offset_between * i
+                
         #if self._src_str:
         #    print(self._src_str, self._dynamic_full_size, self._dynamic_content_size, self._absolute_size)
     def set_view_size(self, *args, **kwargs): return self._set_view_size(*args, **kwargs)
@@ -2820,7 +2850,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             if not parent_pos: parent_pos = RelPoint2D.ZERO
             rel_pos = self._relative_pos or RelPoint2D.ZERO
             rel_offset = self._relative_offset or RelPoint2D.ZERO
-            abs_pos = parent_pos + rel_pos + rel_offset
+            align_offset = self._alignment_offset or RelPoint2D.ZERO
+            abs_pos = parent_pos + rel_pos + rel_offset + align_offset
             abs_size = self._absolute_size
 
         self._absolute_pos = abs_pos + self._scroll_offset
