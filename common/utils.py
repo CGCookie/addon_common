@@ -24,6 +24,8 @@ import re
 import sys
 import glob
 import inspect
+import operator
+import itertools
 import importlib
 
 import bpy
@@ -280,7 +282,13 @@ def any_args(*args):
 #################################################
 
 
-
+def accumulate_last(iterable, *args, **kwargs):
+    # returns last result when accumulating
+    # https://docs.python.org/3.7/library/itertools.html#itertools.accumulate
+    final = None
+    for step in itertools.accumulate(iterable, *args, **kwargs):
+        final = step
+    return final
 
 def selection_mouse():
     select_type = get_preferences().inputs.select_mouse
