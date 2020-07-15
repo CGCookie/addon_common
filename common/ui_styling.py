@@ -1017,7 +1017,7 @@ class UI_Styling:
         if onselector not in cache:
             nstyling = UI_Styling()
             # include only the rules that _might_ apply to selector (assumes some selector parts change but others do not)
-            nstyling.rules = [rule for styling in stylings for rule in styling.get_matching_rules(nselector, full_trie=False)]
+            nstyling.rules = [rule for styling in stylings if styling for rule in styling.get_matching_rules(nselector, full_trie=False)]
             # nstyling.rules = [rule for styling in stylings for rule in styling.rules if rule.match(nselector, strip=strip)]
             cache[onselector] = nstyling
         return cache[onselector]
