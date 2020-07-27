@@ -43,7 +43,7 @@ from .ui_utilities import UIRender_Block, UIRender_Inline, get_unique_ui_id
 from .utils import kwargopts, kwargs_translate, kwargs_splitter, iter_head
 from .ui_styling import UI_Styling
 
-from .boundvar import BoundVar
+from .boundvar import BoundVar, BoundFloat, BoundInt
 from .decorators import blender_version_wrapper
 from .drawing import Drawing, ScissorStack
 from .fontmanager import FontManager
@@ -206,7 +206,91 @@ def input_checkbox(**kwargs):
     ui_proxy.map_to_all({'title'})
     return ui_proxy
 
-def labeled_input_text(label, **kwargs):
+def setup_scrub(ui_element, value):
+    if not type(value) in {BoundInt, BoundFloat}: return
+    if not value.is_bounded and not value.step_size: return
+
+    state = {}
+    def reset_state():
+        nonlocal state
+        state = {
+            'can scrub': True,
+            'pressed': False,
+            'scrubbing': False,
+            'down': None,
+            'inival': None,
+            'cancelled': False,
+        }
+    reset_state()
+
+    def cancel():
+        nonlocal state
+        if not state['scrubbing']: return
+        value.value = state['initval']
+        state['cancelled'] = True
+
+    def mousedown(e):
+        nonlocal state
+        if not ui_element.document: return
+        if ui_element.document.activeElement and ui_element.document.activeElement.is_descendant_of(ui_element):
+            # do not scrub if descendant of ui_element has focus
+            return
+        if e.button[2] and state['scrubbing']:
+            # right mouse button cancels
+            value.value = state['initval']
+            state['cancelled'] = True
+            e.stop_propagation()
+        elif e.button[0]:
+            state['pressed'] = True
+            state['down'] = e.mouse
+            state['initval'] = value.value
+    def mouseup(e):
+        nonlocal state
+        if e.button[0]: return
+        if state['scrubbing']: e.stop_propagation()
+        reset_state()
+    def mousemove(e):
+        nonlocal state
+        if not state['pressed']: return
+        if e.button[2]:
+            cancel()
+            e.stop_propagation()
+        if state['cancelled']: return
+        state['scrubbing'] |= (e.mouse - state['down']).length > Globals.drawing.scale(5)
+        if not state['scrubbing']: return
+
+        if ui_element._document:
+            ui_element._document.blur()
+
+        if value.is_bounded:
+            m, M = value.min_value, value.max_value
+            p = (e.mouse.x - state['down'].x) / ui_element.width_pixels
+            v = clamp(state['initval'] + (M - m) * p, m, M)
+            value.value = v
+        else:
+            delta = Globals.drawing.unscale(e.mouse.x - state['down'].x)
+            value.value = state['initval'] + delta * value.step_size
+        e.stop_propagation()
+    def keypress(e):
+        nonlocal state
+        if not state['pressed']: return
+        if state['cancelled']: return
+        if type(e.key) is int and is_keycode(e.key, 'ESC'):
+            cancel()
+            e.stop_propagation()
+
+    ui_element.add_eventListener('on_mousemove', mousemove, useCapture=True)
+    ui_element.add_eventListener('on_mousedown', mousedown, useCapture=True)
+    ui_element.add_eventListener('on_mouseup',   mouseup,   useCapture=True)
+    ui_element.add_eventListener('on_keypress',  keypress,  useCapture=True)
+
+def labeled_input_text(label, value='', scrub=False, **kwargs):
+    '''
+    this wraps input_text with a few divs to add a label on the left.
+    use for text input, but can also restrict to numbers
+    if scrub == True, value must be a BoundInt or BoundFloat with min_value and max_value set!
+    '''
+
     kw_container = kwargs_splitter({'parent', 'id'}, kwargs)
     kw_all = kwargs_splitter({'title'}, kwargs)
     ui_container = UI_Element(tagName='div', classes='labeledinputtext-container', **kw_container, **kw_all)
@@ -214,7 +298,9 @@ def labeled_input_text(label, **kwargs):
         ui_left  = UI_Element(tagName='div',   classes='labeledinputtext-label-container', parent=ui_container, **kw_all)
         ui_right = UI_Element(tagName='div',   classes='labeledinputtext-input-container', parent=ui_container, **kw_all)
         ui_label = UI_Element(tagName='label', classes='labeledinputtext-label', innerText=label, parent=ui_left, **kw_all)
-        ui_input = input_text(parent=ui_right, **kwargs, **kw_all)
+        ui_input = input_text(parent=ui_right, value=value, **kwargs, **kw_all)
+
+    if scrub: setup_scrub(ui_container, value)
 
     ui_proxy = UI_Proxy('labeled_input_text', ui_container)
     ui_proxy.translate_map('label', 'innerText', ui_label)
@@ -222,13 +308,15 @@ def labeled_input_text(label, **kwargs):
     ui_proxy.map_to_all({'title'})
     return ui_proxy
 
-def input_text(**kwargs):
-    # TODO: find a better structure for input text boxes!
-    #       can we get by with just input and inner span (cursor)?
-    kwargs.setdefault('value', '')
+def input_text(value='', scrub=False, **kwargs):
+    '''
+    use for text input, but can also restrict to numbers
+    if scrub == True, value must be a BoundInt or BoundFloat with min_value and max_value set!
+    '''
+
     kw_container = kwargs_splitter({'parent'}, kwargs)
     ui_container = UI_Element(tagName='span', classes='inputtext-container', **kw_container)
-    ui_input  = UI_Element(tagName='input', classes='inputtext-input', type='text', can_focus=True, atomic=True, parent=ui_container, **kwargs)
+    ui_input  = UI_Element(tagName='input', classes='inputtext-input', type='text', can_focus=True, atomic=True, parent=ui_container, value=value, **kwargs)
     ui_cursor = UI_Element(tagName='span', classes='inputtext-cursor', parent=ui_input, innerText='|') # │
 
     data = {'orig': None, 'text': None, 'idx': 0, 'pos': None}
@@ -274,6 +362,9 @@ def input_text(**kwargs):
         data['pos'] = None
         ui_input.dirty_flow()
     def focus(e):
+        set_cursor(e)
+    def mouseup(e):
+        if not ui_input.is_focused: return
         if type(ui_input.value) is float:
             s = '%0.4f' % ui_input.value
         else:
@@ -334,6 +425,9 @@ def input_text(**kwargs):
     ui_input.add_eventListener('on_keypress', keypress)
     ui_input.add_eventListener('on_mousemove', mousemove)
     ui_input.add_eventListener('on_mousedown', mousedown)
+    ui_input.add_eventListener('on_mouseup', mouseup)
+
+    if scrub: setup_scrub(ui_container, value)
 
     ui_proxy = UI_Proxy('input_text', ui_container)
     ui_proxy.map(['value', 'innerText'], ui_input)

@@ -528,15 +528,15 @@ class UI_Event:
         self._key = key
         self._defaultPrevented = False
 
-    def stop_propagation():
+    def stop_propagation(self):
         self.stop_bubbling()
         self.stop_capturing()
-    def stop_bubbling():
+    def stop_bubbling(self):
         self._cancelBubble = True
-    def stop_capturing():
+    def stop_capturing(self):
         self._cancelCapture = True
 
-    def prevent_default():
+    def prevent_default(self):
         self._defaultPrevented = True
 
     @property
@@ -759,16 +759,16 @@ class UI_Element_Properties:
         if self._style_str == style: return
         self._style_str = style
         self._styling_custom = None
-        self.dirty('changing style for %s affects style' % str(self), 'style', parent=False, children=False)
-        # self.dirty('changing style for %s affects parent content' % str(self), 'content', parent=True, children=False)
+        self.dirty(f'changing style for {self} affects style', 'style', parent=False, children=False)
+        # self.dirty(f'changing style for {self} affects parent content', 'content', parent=True, children=False)
         self.add_dirty_callback_to_parent(['style', 'content'])
     def add_style(self, style):
-        style = '%s;%s' % (self._style_str, str(style or ''))
+        style = f'{self._style_str};{style or ""}'
         if self._style_str == style: return
         self._style_str = style
         self._styling_custom = None
-        self.dirty('adding style for %s affects style' % str(self), 'style', parent=False, children=False)
-        # self.dirty('adding style for %s affects parent content' % str(self), 'content', parent=True, children=False)
+        self.dirty(f'adding style for {self} affects style', 'style', parent=False, children=False)
+        # self.dirty(f'adding style for {self} affects parent content', 'content', parent=True, children=False)
         self.add_dirty_callback_to_parent(['style', 'content'])
 
     @property
@@ -779,9 +779,9 @@ class UI_Element_Properties:
         nid = '' if nid is None else nid.strip()
         if self._id == nid: return
         self._id = nid
-        self.dirty('changing id for %s affects styles' % str(self), 'style', parent=False, children=True)
-        # self.dirty('changing id for %s affects parent content' % str(self), 'content', parent=True, children=False)
-        self.add_dirty_callback_to_parent(['style', 'id'])
+        self.dirty(f'changing id for {self} affects selector', 'selector', parent=False, children=True)
+        # self.dirty(f'changing id for {self} affects parent content', 'content', parent=True, children=False)
+        self.add_dirty_callback_to_parent(['selector', 'id'])
 
     @property
     def forId(self):
@@ -813,21 +813,21 @@ class UI_Element_Properties:
         if self._classes_str == classes_str: return
         self._classes_str = classes_str
         self._classes = classes
-        self.dirty(f'changing classes to "{classes_str}" for {self} affects style', 'style', children=True)
+        self.dirty(f'changing classes to "{classes_str}" for {self} affects selector', 'selector', children=True)
         self.add_dirty_callback_to_parent('content')
     def add_class(self, cls):
-        assert ' ' not in cls, 'cannot add class "%s" to "%s" because it has a space in it' % (cls, self._tagName)
+        assert ' ' not in cls, f'cannot add class "{cls}" to "{self._tagName}" because it has a space in it'
         if cls in self._classes: return
         self._classes.append(cls)
         self._classes_str = ' '.join(self._classes)
-        self.dirty(f'adding class "{cls}" for {self} affects style', 'style', children=True)
+        self.dirty(f'adding class "{cls}" for {self} affects selector', 'selector', children=True)
         self.add_dirty_callback_to_parent('content')
     def del_class(self, cls):
-        assert ' ' not in cls, 'cannot del class "%s" from "%s" because it has a space in it' % (cls, self._tagName)
+        assert ' ' not in cls, f'cannot del class "{cls}" from "{self._tagName}" because it has a space in it'
         if cls not in self._classes: return
         self._classes.remove(cls)
         self._classes_str = ' '.join(self._classes)
-        self.dirty(f'deleting class "{cls}" for {self} affects style', 'style', children=True)
+        self.dirty(f'deleting class "{cls}" for {self} affects selector', 'selector', children=True)
         self.add_dirty_callback_to_parent('content')
 
 
@@ -853,7 +853,7 @@ class UI_Element_Properties:
     def clear_pseudoclass(self):
         if not self._pseudoclasses: return
         self._pseudoclasses.clear()
-        self.dirty(f'clearing psuedoclasses for {self} affects style', 'style', children=self._has_affected_descendant())
+        self.dirty(f'clearing psuedoclasses for {self} affects selector', 'selector', children=self._has_affected_descendant())
 
     def add_pseudoclass(self, pseudo):
         if pseudo in self._pseudoclasses: return
@@ -862,12 +862,12 @@ class UI_Element_Properties:
             self._pseudoclasses.discard('focus')
             # TODO: on_blur?
         self._pseudoclasses.add(pseudo)
-        self.dirty(f'adding psuedoclass {pseudo} for {self} affects style', 'style', children=self._has_affected_descendant())
+        self.dirty(f'adding psuedoclass {pseudo} for {self} affects selector', 'selector', children=self._has_affected_descendant())
 
     def del_pseudoclass(self, pseudo):
         if pseudo not in self._pseudoclasses: return
         self._pseudoclasses.discard(pseudo)
-        self.dirty(f'deleting psuedoclass {pseudo} for {self} affects style', 'style', children=self._has_affected_descendant())
+        self.dirty(f'deleting psuedoclass {pseudo} for {self} affects selector', 'selector', children=self._has_affected_descendant())
 
     def has_pseudoclass(self, pseudo):
         if pseudo == 'disabled' and self._disabled: return True
@@ -908,7 +908,7 @@ class UI_Element_Properties:
         v = v or ''
         if self._pseudoelement == v: return
         self._pseudoelement = v
-        self.dirty('changing psuedoelement affects style', 'style')
+        self.dirty('changing psuedoelement affects selector', 'selector')
 
     @property
     def src(self):
@@ -1079,6 +1079,10 @@ class UI_Element_Properties:
             elif r != 'auto':         l = rew - (w + r)
         return l
     @property
+    def left_scissor(self):
+        return self._l
+
+    @property
     def top_pixels(self):
         if self._relative_element is None:   reh = self._parent_size.height if self._parent_size else 0
         elif self._relative_element == self: reh = self._parent_size.height if self._parent_size else 0
@@ -1095,6 +1099,10 @@ class UI_Element_Properties:
             elif b != 'auto':         t = h + b
         return t
     @property
+    def top_scissor(self):
+        return self._t
+
+    @property
     def width_pixels(self):
         w = self.style_width
         if self._absolute_size and w == 'auto': w = self._absolute_size.width
@@ -1106,6 +1114,10 @@ class UI_Element_Properties:
             w = w.val(base=rew)
         return w
     @property
+    def width_scissor(self):
+        return self._w
+
+    @property
     def height_pixels(self):
         h = self.style_height
         if self._absolute_size and h == 'auto': h = self._absolute_size.height
@@ -1116,6 +1128,9 @@ class UI_Element_Properties:
             if reh == 'auto': reh = 0
             h = h.val(base=reh)
         return h
+    @property
+    def height_scissor(self):
+        return self._h
 
 
     @property
@@ -1218,7 +1233,7 @@ class UI_Element_Properties:
     @type.setter
     def type(self, v):
         self._type = v
-        self.dirty('Changing type can affect style', 'style', children=True)
+        self.dirty('Changing type can affect selector', 'selector', children=True)
 
     @property
     def value(self):
@@ -1235,8 +1250,8 @@ class UI_Element_Properties:
             self._value_change()
     def _value_change(self):
         if not self.is_visible: return
-        self._dispatch_event('on_input')
-        self.dirty('Changing value can affect style and content', 'style', children=True)
+        self.dispatch_event('on_input')
+        self.dirty('Changing value can affect selector and content', 'selector', children=True)
     def value_bind(self, boundvar):
         self._value = boundvar
         self._value.on_change(self._value_change)
@@ -1262,8 +1277,8 @@ class UI_Element_Properties:
             self._checked = v
             self._checked_change()
     def _checked_change(self):
-        self._dispatch_event('on_input')
-        self.dirty('Changing checked can affect style and content', 'style', children=True)
+        self.dispatch_event('on_input')
+        self.dirty('Changing checked can affect selector and content', 'selector', children=True)
     def checked_bind(self, boundvar):
         self._checked = boundvar
         self._checked.on_change(self._checked_change)
@@ -1381,7 +1396,7 @@ class UI_Element_Dirtiness:
 
         self.propagate_dirtiness()
         self.dirty_flow(children=False)
-        # print('%s had %s dirtied, because %s' % (str(self), str(properties), str(cause)))
+        # print(f'{self} had {properties} dirtied, because {cause}')
         tag_redraw_all("UI_Element dirty")
 
     def add_dirty_callback(self, child, properties):
@@ -1444,7 +1459,7 @@ class UI_Element_Dirtiness:
         if self._dirty_propagation['parent']:
             if self._parent and not self._do_not_dirty_parent:
                 cause = ' -> '.join('%s'%cause for cause in (self._dirty_causes+[
-                    '"propagating dirtiness (%s) from %s to parent %s"' % (str(self._dirty_propagation['parent']), str(self), str(self._parent))
+                    f"\"propagating dirtiness ({self._dirty_propagation['parent']} from {self} to parent {self._parent}\""
                 ]))
                 self._parent.dirty(
                     cause=cause,
@@ -1462,7 +1477,7 @@ class UI_Element_Dirtiness:
             # no need to dirty ::before, ::after, or text, because they will be reconstructed
             for child in self._children:
                 cause = ' -> '.join('%s'%cause for cause in (self._dirty_causes+[
-                    '"propagating dirtiness (%s) from %s to child %s"' % (str(self._dirty_propagation['children']), str(self), str(child)),
+                    f"\"propagating dirtiness ({self._dirty_propagation['children']} from {self} to child {child}\""
                 ]))
                 child.dirty(
                     cause=cause,
@@ -1507,6 +1522,7 @@ class UI_Element_Dirtiness:
         if self.record_multicall('_clean'): return
 
         # self.call_cleaning_callbacks()
+        self._compute_selector()
         self._compute_style()
         self._compute_content()
         self._compute_blocks()
@@ -1533,7 +1549,7 @@ class UI_Element_Dirtiness:
         while working:
             current = working.pop()
             curnode = g[current]
-            assert current not in done, 'cycle detected in cleaning callbacks (%s)' % current
+            assert current not in done, f'cycle detected in cleaning callbacks ({current})'
             if not all(p in done for p in curnode['parents']): continue
             do_cleaning = False
             do_cleaning |= current in self._dirty_properties
@@ -1561,19 +1577,19 @@ class UI_Element_Debug:
     def debug_print(self, d, already_printed):
         sp = '    '*d
         tag = self.as_html
-        tagc = '</%s>' % self.tagName
-        tagsc = '%s />' % tag[:-1]
+        tagc = f'</{self._tagName}>'
+        tagsc = f'{tag[:-1]} />'
         if self in already_printed:
-            print('%s%s...%s' % (sp, tag, tagc))
+            print(f'{sp}{tag}...{tagc}')
             return
         already_printed.add(self)
         if self._children:
-            print('%s%s' % (sp, tag))
+            print(f'{sp}{tag}')
             for c in self._children:
                 c.debug_print(d+1, already_printed)
-            print('%s%s' % (sp, tagc))
+            print(f'{sp}{tagc}')
         else:
-            print('%s%s' % (sp, tagsc))
+            print(f'{sp}{tagsc}')
 
     def structure(self, depth=0, all_children=False):
         l = self._children if not all_children else self._children_all
@@ -1808,11 +1824,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                     class_attr = getattr(type(self), k, None)
                     if type(class_attr) is property:
                         # k is a property
-                        assert class_attr.fset is not None, 'Attempting to set a read-only property %s to "%s"' % (k, str(v))
+                        assert class_attr.fset is not None, f'Attempting to set a read-only property {k} to "{v}"'
                         setattr(self, k, v)
                     else:
                         # k is an attribute
-                        print('Setting non-property attribute %s to "%s"' % (k, str(v)))
+                        print(f'Setting non-property attribute {k} to "{v}"')
                         setattr(self, k, v)
                 else:
                     unhandled_keys.add(k)
@@ -1859,7 +1875,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     def __str__(self):
         info = ['tagName', 'id', 'classes', 'type', 'innerText', 'innerTextAsIs', 'value', 'title']
         info = [(k, getattr(self, k)) for k in info if hasattr(self, k)]
-        info = ['%s="%s"' % (k, str(v)) for k,v in info if v]
+        info = [f'{k}="{v}"' for k,v in info if v]
         if self.is_dirty: info += ['dirty']
         if self._atomic: info += ['atomic']
         return '<%s>' % ' '.join(['UI_Element'] + info)
@@ -1868,7 +1884,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     def as_html(self):
         info = ['id', 'classes', 'type', 'innerText', 'innerTextAsIs', 'value', 'title']
         info = [(k, getattr(self, k)) for k in info if hasattr(self, k)]
-        info = ['%s="%s"' % (k, str(v)) for k,v in info if v]
+        info = [f'{k}="{v}"' for k,v in info if v]
         if self.is_dirty: info += ['dirty']
         if self._atomic: info += ['atomic']
         return '<%s>' % ' '.join([self.tagName] + info)
@@ -1905,13 +1921,43 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             selector_after  = sel_parent + [sel_tagName + sel_id + sel_cls + sel_pseudo + '::after']
 
         # if selector hasn't changed, don't recompute trimmed styling
-        if selector == self._selector and selector_before == self._selector_before and selector_after == self._selector_after: return
+        if selector == self._selector and selector_before == self._selector_before and selector_after == self._selector_after:
+            return False
         styling_trimmed = UI_Styling.trim_styling(selector, ui_defaultstylings, ui_draw.stylesheet)
+
         self._selector = selector
         self._selector_before = selector_before
         self._selector_after = selector_after
         self._styling_trimmed = styling_trimmed
         self._style_trbl_cache = {}
+        self.dirty(cause='changing selector dirties style', properties='style')
+        return True
+
+
+    @UI_Element_Utils.add_cleaning_callback('selector', {'style'})
+    @profiler.function
+    def _compute_selector(self):
+        if self._defer_clean: return
+        if 'selector' not in self._dirty_properties:
+            self._defer_clean = True
+            with profiler.code('selector.calling back callbacks'):
+                for e in self._dirty_callbacks.get('selector', []):
+                    # print(self,'->', e)
+                    e._compute_selector()
+                self._dirty_callbacks['selector'].clear()
+            self._defer_clean = False
+            return
+
+        self._rebuild_style_selector()
+        if self._children:
+            for child in self._children: child._compute_selector()
+        if self._children_text:
+            for child in self._children_text: child._compute_selector()
+        if self._child_before or self._child_after:
+            if self._child_before: self._child_before._compute_selector()
+            if self._child_after:  self._child_after._compute_selector()
+        self._dirty_properties.discard('selector')
+        self._dirty_callbacks['selector'].clear()
 
 
     @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content', 'renderbuf'})
@@ -1940,7 +1986,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
         # self.defer_dirty_propagation = True
 
-        self._rebuild_style_selector()
+        # self._rebuild_style_selector()
 
         with profiler.code('style.initialize styles in order: parent, default, custom'):
             #  default, focus, active, hover, hover+active
@@ -2032,8 +2078,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         if self._children_text:
             for child in self._children_text: child._compute_style()
         if self._child_before or self._child_after:
-            if self._child_before: self._child_before._compute_styles()
-            if self._child_after:  self._child_after._compute_styles()
+            if self._child_before: self._child_before._compute_style()
+            if self._child_after:  self._child_after._compute_style()
 
         with profiler.code('style.hashing for cache'):
             # style changes => content changes
@@ -3106,22 +3152,20 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     ################################################################################
     # event-related functionality
 
-    def _add_eventListener(self, event, callback, useCapture=False):
+    def add_eventListener(self, event, callback, useCapture=False):
         assert event in self._events, 'Attempting to add unhandled event handler type "%s"' % event
         sig = signature(callback)
         old_callback = callback
         if len(sig.parameters) == 0:
             callback = lambda e: old_callback()
         self._events[event] += [(useCapture, callback, old_callback)]
-    def add_eventListener(self, *args, **kwargs): self._add_eventListener(*args, **kwargs)
 
-    def _remove_eventListener(self, event, callback):
+    def remove_eventListener(self, event, callback):
         # returns True if callback was successfully removed
         assert event in self._events, 'Attempting to remove unhandled event handler type "%s"' % event
         l = len(self._events[event])
         self._events[event] = [(capture,cb,old_cb) for (capture,cb,old_cb) in self._events[event] if old_cb != callback]
         return l != len(self._events[event])
-    def remove_eventListener(self, *args, **kwargs): return self._remove_eventListener(*args, **kwargs)
 
     def _fire_event(self, event, details):
         ph = details.event_phase
@@ -3134,7 +3178,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 if not cap: cb(details)
 
     @profiler.function
-    def _dispatch_event(self, event, mouse=None, button=None, key=None, ui_event=None, stop_at=None):
+    def dispatch_event(self, event, mouse=None, button=None, key=None, ui_event=None, stop_at=None):
         if self._document:
             if mouse is None:
                 mouse = self._document.actions.mouse
@@ -3146,7 +3190,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 )
         # else:
         #     if mouse is None or button is None:
-        #         print(f'UI_Element._dispatch_event: {event} dispatched on {self}, but self.document = {self.document}  (root={self.get_root()}')
+        #         print(f'UI_Element.dispatch_event: {event} dispatched on {self}, but self.document = {self.document}  (root={self.get_root()}')
         if ui_event is None: ui_event = UI_Event(target=self, mouse=mouse, button=button, key=key)
         path = self.get_pathToRoot()[1:] # skipping first item, which is self
         if stop_at is not None and stop_at in path:
@@ -3163,7 +3207,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             cur._fire_event(event, ui_event)
             if not ui_event.bubbling: return ui_event.default_prevented
         return ui_event.default_prevented
-    def dispatch_event(self, *args, **kwargs): return self._dispatch_event(*args, **kwargs)
 
     ################################################################################
     # the following methods can be overridden to create different types of UI

@@ -85,6 +85,10 @@ class BoundVar:
     @property
     def value_as_str(self): return str(self)
 
+    @property
+    def is_bounded(self):
+        return False
+
     def on_change(self, fn):
         self._callbacks.append(fn)
 
@@ -102,11 +106,25 @@ class BoundBool(BoundVar):
 
 
 class BoundInt(BoundVar):
-    def __init__(self, value_str, *, min_value=None, max_value=None, **kwargs):
+    def __init__(self, value_str, *, min_value=None, max_value=None, step_size=None, **kwargs):
         super().__init__(value_str, frame_depth=2, **kwargs)
         self._min_value = min_value
         self._max_value = max_value
+        self._step_size = step_size or 0
         self.add_validator(self.int_validator)
+
+    @property
+    def min_value(self): return self._min_value
+
+    @property
+    def max_value(self): return self._max_value
+
+    @property
+    def step_size(self): return self._step_size
+
+    @property
+    def is_bounded(self):
+        return self._min_value is not None and self._max_value is not None
 
     def int_validator(self, value):
         try:
@@ -124,13 +142,30 @@ class BoundInt(BoundVar):
             # ignoring all exceptions?
             raise IgnoreChange()
 
+    def add_delta(self, scale):
+        self.value += self.step_size * scale
+
 
 class BoundFloat(BoundVar):
-    def __init__(self, value_str, *, min_value=None, max_value=None, **kwargs):
+    def __init__(self, value_str, *, min_value=None, max_value=None, step_size=None, **kwargs):
         super().__init__(value_str, frame_depth=2, **kwargs)
         self._min_value = min_value
         self._max_value = max_value
+        self._step_size = step_size or 0
         self.add_validator(self.float_validator)
+
+    @property
+    def min_value(self): return self._min_value
+
+    @property
+    def max_value(self): return self._max_value
+
+    @property
+    def step_size(self): return self._step_size
+
+    @property
+    def is_bounded(self):
+        return self._min_value is not None and self._max_value is not None
 
     def float_validator(self, value):
         try:
@@ -147,4 +182,7 @@ class BoundFloat(BoundVar):
         except Exception:
             # ignoring all exceptions?
             raise IgnoreChange()
+
+    def add_delta(self, scale):
+        self.value += self.step_size * scale
 

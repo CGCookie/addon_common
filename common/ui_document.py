@@ -156,6 +156,10 @@ class UI_Document(UI_Document_FSM):
     def body(self):
         return self._body
 
+    @property
+    def activeElement(self):
+        return self._focus
+
     def center_on_mouse(self, element):
         if element is None: return
         element._relative_pos = None
@@ -281,7 +285,6 @@ class UI_Document(UI_Document_FSM):
     def clear_last_under(self):
         self._last_under_mouse = None
 
-    @profiler.function
     def handle_hover(self, change_cursor=True):
         # handle :hover, on_mouseenter, on_mouseleave
         if self.ignore_hover_change: return
@@ -294,15 +297,48 @@ class UI_Document(UI_Document_FSM):
         if self._under_mouse and not self._under_mouse.can_hover: return
 
         self._addrem_pseudoclass('hover', remove_from=self._last_under_mouse, add_to=self._under_mouse)
-        if self._last_under_mouse: self._last_under_mouse._dispatch_event('on_mouseleave')
-        if self._under_mouse: self._under_mouse._dispatch_event('on_mouseenter')
+        if self._last_under_mouse: self._last_under_mouse.dispatch_event('on_mouseleave')
+        if self._under_mouse: self._under_mouse.dispatch_event('on_mouseenter')
 
-    @profiler.function
     def handle_mousemove(self, ui_element=None):
         ui_element = ui_element or self._under_mouse
         if ui_element is None: return
         if self._last_mouse == self.actions.mouse: return
-        ui_element._dispatch_event('on_mousemove')
+        ui_element.dispatch_event('on_mousemove')
+
+    def handle_keypress(self, ui_element=None):
+        ui_element = ui_element or self._focus
+
+        pressed = None
+        if self.actions.using('keypress', ignoreshift=True):
+            pressed = self.actions.as_char(self.actions.last_pressed)
+
+        # WHAT IS HAPPENING HERE?
+        for k,v in kmi_to_keycode.items():
+            if self.actions.using(k, ignoreshift=True): pressed = v
+
+        if pressed:
+            cur = time.time()
+            # print('focus_main', pressed, self.actions.last_pressed, self.actions.get_last_press_time(self.actions.last_pressed))
+            if self._last_pressed != pressed:
+                self._last_press_start = cur
+                self._last_press_time = 0
+                # self._last_press_time2 = self.actions.get_last_press_time(pressed)[1]
+                if ui_element:
+                    ui_element.dispatch_event('on_keypress', key=pressed)
+            # elif self.actions.get_last_press_time(self.actions.last_pressed)[1] != self._last_press_time2:
+            #     self._last_press_time2 = self.actions.get_last_press_time(self.actions.last_pressed)[1]
+            #     if ui_element:
+            #         ui_element.dispatch_event('on_keypress', key=pressed)
+            elif cur >= self._last_press_start + UI_Document.key_repeat_delay and cur >= self._last_press_time + UI_Document.key_repeat_pause:
+                self._last_press_time = cur
+                if ui_element:
+                    ui_element.dispatch_event('on_keypress', key=pressed)
+
+        else:
+            self._last_press_time2 = 0
+
+        self._last_pressed = pressed
 
 
     @UI_Document_FSM.FSM_State('main', 'enter')
@@ -317,6 +353,12 @@ class UI_Document(UI_Document_FSM):
             return 'scroll'
 
         if self.actions.pressed('LEFTMOUSE', unpress=False, ignoremods=True, ignoremulti=True):
+            if self._under_mouse == self._body:
+                # clicking body always blurs focus
+                self.blur()
+            elif UI_Document.allow_disabled_to_blur and self._under_mouse and self._under_mouse.is_disabled:
+                # user clicked on disabled element, so blur current focused element
+                self.blur()
             return 'mousedown'
 
         # if self.actions.pressed('RIGHTMOUSE') and self._under_mouse:
@@ -344,7 +386,7 @@ class UI_Document(UI_Document_FSM):
         if self._under_mouse and self.actions.just_pressed:
             pressed = self.actions.just_pressed
             # self.actions.unpress()
-            self._under_mouse._dispatch_event('on_keypress', key=pressed)
+            self._under_mouse.dispatch_event('on_keypress', key=pressed)
 
         self.handle_hover()
         self.handle_mousemove()
@@ -395,17 +437,17 @@ class UI_Document(UI_Document_FSM):
 
     @UI_Document_FSM.FSM_State('mousedown', 'can enter')
     def mousedown_canenter(self):
-        disabled_under = self._under_mouse and self._under_mouse.is_disabled
-        if UI_Document.allow_disabled_to_blur and disabled_under:
-            # user clicked on disabled element, so blur current focused element
-            self.blur()
-        if self._under_mouse == self._body:
-            # clicking body always blurs focus
-            self.blur()
-        return self._under_mouse is not None and self._under_mouse != self._body and not self._under_mouse.is_disabled
+        return self._under_mouse and self._under_mouse != self._body and not self._under_mouse.is_disabled
 
     @UI_Document_FSM.FSM_State('mousedown', 'enter')
     def mousedown_enter(self):
+        self._mousedown_time = time.time()
+        self._under_mousedown = self._under_mouse
+        self._addrem_pseudoclass('active', add_to=self._under_mousedown)
+        # self._under_mousedown.add_pseudoclass('active')
+        self._under_mousedown.dispatch_event('on_mousedown')
+        # print(self._under_mouse.get_pathToRoot())
+
         change_focus = self._focus != self._under_mouse
         if change_focus:
             if self._under_mouse.can_focus:
@@ -417,13 +459,6 @@ class UI_Document(UI_Document_FSM):
             else:
                 self.blur()
 
-        self._mousedown_time = time.time()
-        self._under_mousedown = self._under_mouse
-        self._addrem_pseudoclass('active', add_to=self._under_mousedown)
-        # self._under_mousedown.add_pseudoclass('active')
-        self._under_mousedown._dispatch_event('on_mousedown')
-        # print(self._under_mouse.get_pathToRoot())
-
     @UI_Document_FSM.FSM_State('mousedown')
     def mousedown_main(self):
         if not self._under_mousedown:
@@ -431,8 +466,13 @@ class UI_Document(UI_Document_FSM):
         if self.actions.released('LEFTMOUSE', ignoremods=True, ignoremulti=True):
             # done with mousedown
             return 'focus' if self._under_mousedown.can_focus else 'main'
+
+        if self.actions.pressed('RIGHTMOUSE', ignoremods=True, unpress=False):
+            self._under_mousedown.dispatch_event('on_mousedown')
+
         self.handle_hover(change_cursor=False)
         self.handle_mousemove(ui_element=self._under_mousedown)
+        self.handle_keypress(ui_element=self._under_mousedown)
 
     @UI_Document_FSM.FSM_State('mousedown', 'exit')
     def mousedown_exit(self):
@@ -443,7 +483,7 @@ class UI_Document(UI_Document_FSM):
             self._last_click_time = 0
             self.ignore_hover_change = False
             return
-        self._under_mousedown._dispatch_event('on_mouseup')
+        self._under_mousedown.dispatch_event('on_mouseup')
         click = False
         click |= time.time() - self._mousedown_time < self.allow_click_time
         click |= self._under_mousedown.get_mouse_distance(self.actions.mouse) <= self.max_click_dist * self._ui_scale
@@ -453,16 +493,16 @@ class UI_Document(UI_Document_FSM):
             dblclick = True
             dblclick &= self._under_mousedown == self._last_under_click
             dblclick &= time.time() < self._last_click_time + self.doubleclick_time
-            self._under_mousedown._dispatch_event('on_mouseclick')
+            self._under_mousedown.dispatch_event('on_mouseclick')
             self._last_under_click = self._under_mousedown
             if dblclick:
-                self._under_mousedown._dispatch_event('on_mousedblclick')
+                self._under_mousedown.dispatch_event('on_mousedblclick')
                 # self._last_under_click = None
             if self._under_mousedown and self._under_mousedown.forId:
                 # send mouseclick events to ui_element indicated by forId!
                 ui_for = self._under_mousedown.get_root().getElementById(self._under_mousedown.forId)
                 if ui_for is None: return
-                ui_for._dispatch_event('mouseclick', ui_event=e)
+                ui_for.dispatch_event('mouseclick', ui_event=e)
             self._last_click_time = time.time()
         else:
             self._last_under_click = None
@@ -482,8 +522,8 @@ class UI_Document(UI_Document_FSM):
     def blur(self, stop_at=None):
         if self._focus is None: return
         self._focus.del_pseudoclass('focus')
-        self._focus._dispatch_event('on_blur')
-        self._focus._dispatch_event('on_focusout', stop_at=stop_at)
+        self._focus.dispatch_event('on_blur')
+        self._focus.dispatch_event('on_focusout', stop_at=stop_at)
         self._addrem_pseudoclass('active', remove_from=self._focus)
         self._focus = None
 
@@ -508,8 +548,8 @@ class UI_Document(UI_Document_FSM):
             #print('focusin from', p_focus, stop_focus_at)
         self._focus = ui_element
         self._focus.add_pseudoclass('focus')
-        self._focus._dispatch_event('on_focus')
-        self._focus._dispatch_event('on_focusin', stop_at=stop_focus_at)
+        self._focus.dispatch_event('on_focus')
+        self._focus.dispatch_event('on_focusin', stop_at=stop_focus_at)
 
     @UI_Document_FSM.FSM_State('focus', 'enter')
     def focus_enter(self):
@@ -528,35 +568,10 @@ class UI_Document(UI_Document_FSM):
         # if self.actions.pressed('ESC'):
         #     self.blur()
         #     return 'main'
+
         self.handle_hover()
         self.handle_mousemove()
-
-        pressed = None
-        if self.actions.using('keypress', ignoreshift=True):
-            pressed = self.actions.as_char(self.actions.last_pressed)
-        # WHAT IS HAPPENING HERE?
-        for k,v in kmi_to_keycode.items():
-            if self.actions.using(k, ignoreshift=True): pressed = v
-        if pressed:
-            cur = time.time()
-            # print('focus_main', pressed, self.actions.last_pressed, self.actions.get_last_press_time(self.actions.last_pressed))
-            if self._last_pressed != pressed:
-                self._last_press_start = cur
-                self._last_press_time = 0
-                # self._last_press_time2 = self.actions.get_last_press_time(pressed)[1]
-                if self._focus:
-                    self._focus._dispatch_event('on_keypress', key=pressed)
-            # elif self.actions.get_last_press_time(self.actions.last_pressed)[1] != self._last_press_time2:
-            #     self._last_press_time2 = self.actions.get_last_press_time(self.actions.last_pressed)[1]
-            #     if self._focus:
-            #         self._focus._dispatch_event('on_keypress', key=pressed)
-            elif cur >= self._last_press_start + UI_Document.key_repeat_delay and cur >= self._last_press_time + UI_Document.key_repeat_pause:
-                self._last_press_time = cur
-                if self._focus:
-                    self._focus._dispatch_event('on_keypress', key=pressed)
-        else:
-            self._last_press_time2 = 0
-        self._last_pressed = pressed
+        self.handle_keypress()
 
         if not self._focus: return 'main'
 
