@@ -20,12 +20,13 @@ Created by Jonathan Denning, Jonathan Williamson
 '''
 
 import re
+import copy
 import inspect
 
 class IgnoreChange(Exception): pass
 
 class BoundVar:
-    def __init__(self, value_str, *, on_change=None, frame_depth=1, f_globals=None, f_locals=None):
+    def __init__(self, value_str, *, on_change=None, frame_depth=1, f_globals=None, f_locals=None, callbacks=None, validators=None, disabled=False):
         assert type(value_str) is str, 'BoundVar: constructor needs value as string!'
         if f_globals is None or f_locals is None:
             frame = inspect.currentframe()
@@ -42,13 +43,23 @@ class BoundVar:
             print('exception:', e)
             print('globals:', f_globals)
             print('locals:', f_locals)
-            assert False, 'BoundVar: value string ("%s") must be a valid variable!' % (value_str)
+            assert False, f'BoundVar: value string ("{value_str}") must be a valid variable!'
         self._f_locals.update({'boundvar_interface': self._boundvar_interface})
-        self._value_str = value_str
-        self._callbacks = []
-        self._validators = []
-        self._disabled = False
+        self._value_str  = value_str
+        self._callbacks  = callbacks or []
+        self._validators = validators or []
+        self._disabled   = disabled
         if on_change: self.on_change(on_change)
+
+    def clone_with_overrides(self, **overrides):
+        # perform SHALLOW copy (shared attribs, such as _callbacks!) and override attribs as given
+        other = copy.copy(self)
+        for k, v in overiddes.iteritems():
+            try:
+                setattr(other, k, v)
+            except AttributeError:
+                setattr(other, f'_{k}', v)
+        return other
 
     def _boundvar_interface(self, v): self._v = v
     def _call_callbacks(self):

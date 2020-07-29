@@ -390,3 +390,32 @@ class UniqueCounter():
     def next():
         UniqueCounter.__counter += 1
         return UniqueCounter.__counter
+
+
+class Dict():
+    '''
+    a fancy dictionary object
+    '''
+    def __init__(self, *args, **kwargs):
+        self.__dict__['__d'] = {}
+        self.set(*args, **kwargs)
+    def __getitem__(self, k):
+        return self.__dict__['__d'][k]
+    def __setitem__(self, k, v):
+        self.__dict__['__d'][k] = v
+        return v
+    def __delitem__(self, k):
+        del self.__dict__['__d'][k]
+    def __getattr__(self, k):
+        return self.__dict__['__d'][k]
+    def __setattr__(self, k, v):
+        self.__dict__['__d'][k] = v
+        return v
+    def __delattr__(self, k):
+        del self.__dict__['__d'][k]
+    def set(self, d=None, **kwargs):
+        if d:
+            for k,v in d.items():
+                self[k] = v
+        for k,v in kwargs.items():
+            self[k] = v

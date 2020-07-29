@@ -51,6 +51,7 @@ from .globals import Globals
 from .maths import Point2D, Vec2D, clamp, mid, Color, Box2D, Size2D, NumberUnit
 from .markdown import Markdown
 from .useractions import is_keycode
+from .utils import Dict, delay_exec
 
 from ..ext import png
 
@@ -206,6 +207,100 @@ def input_checkbox(**kwargs):
     ui_proxy.map_to_all({'title'})
     return ui_proxy
 
+def input_range(value=None, min=None, max=None, step=None, **kwargs):
+    t = type(value)
+    if t in {BoundFloat, BoundInt}:
+        # (possibly) override min/max/step of value
+        # if not None, choose max of min param and value's min
+        # if not None, choose min of max param and value's max
+        # if not None, choose step param
+        overrides = {}
+        if min  is not None: overrides['min_value'] = max(min, value.min_value)
+        if max  is not None: overrides['max_value'] = min(max, value.max_value)
+        if step is not None: overrides['step_size'] = step
+        if overrides: value = value.clone_with_overrides(**overrides)
+    elif t in {float, int}:
+        # assuming value is float!
+        assert max is not None and min is not None, f'UI input range with non-bound value ({value}, {t}) must have both min and max specified ({min}, {max})'
+        value = BoundFloat('value', min_value=min, max_value=max, step_size=step)
+    else:
+        assert False, f'Unhandled UI input range value type ({t})'
+
+    kw_container = kwargs_splitter({'parent'}, kwargs)
+
+    ui_container = UI_Element(tagName='div', classes='inputrange-container', **kw_container)
+    ui_input = UI_Element(tagName='input', classes='inputrange-input', type='range', parent=ui_container, value=value, **kwargs)
+    ui_left = UI_Element(tagName='span', classes='inputrange-left', parent=ui_input)
+    ui_right = UI_Element(tagName='span', classes='inputrange-right', parent=ui_input)
+    ui_handle = UI_Element(tagName='span', classes='inputrange-handle', parent=ui_input)
+
+    state = Dict()
+    state.reset = delay_exec('''state.set(grabbed=False, down=None, initval=None, cancelled=False)''')
+    state.reset()
+    state.cancel = delay_exec('''value.value = state.initval; state.cancelled = True''')
+
+    def postflow():
+        w, W = ui_handle.width_pixels, ui_input.width_pixels
+        if w == 'auto' or W == 'auto': return
+        m, M = value.min_value, value.max_value
+        mw = W - w
+        p = (value.value - m) / (M - m)
+        hl = p * mw
+        m = hl + (w / 2)
+        ui_left.style = f'left:0px; width:{math.floor(m)}px'
+        ui_right.style = f'left:{math.ceil(m)}px; width:{math.floor(W-m)}px'
+        ui_handle.style = f'left:{math.floor(hl)}px'
+        # ui_handle.style = f'left:{p*100}%'
+        ui_handle.reposition(
+        #     left=hl,
+        #     # top=0,
+        #     clamp_position=True,
+        )
+
+    def handle_mousedown(e):
+        if e.button[2] and state['grabbed']:
+            # right mouse button cancels
+            state.cancel()
+            e.stop_propagation()
+            return
+        if not e.button[0]: return
+        state.set(
+            grabbed=True,
+            down=e.mouse,
+            initval=value.value,
+            cancelled=False,
+        )
+        e.stop_propagation()
+    def handle_mouseup(e):
+        if e.button[0]: return
+        e.stop_propagation()
+        state.reset()
+    def handle_mousemove(e):
+        if not state.grabbed or state.cancelled: return
+        m, M = value.min_value, value.max_value
+        p = (e.mouse.x - state['down'].x) / ui_input.width_pixels
+        value.value = state.initval + p * (M - m)
+        e.stop_propagation()
+        postflow()
+    def handle_keypress(e):
+        if not state.grabbed or state.cancelled: return
+        if type(e.key) is int and is_keycode(e.key, 'ESC'):
+            state.cancel()
+            e.stop_propagation()
+    ui_handle.add_eventListener('on_mousemove', handle_mousemove, useCapture=True)
+    ui_handle.add_eventListener('on_mousedown', handle_mousedown, useCapture=True)
+    ui_handle.add_eventListener('on_mouseup',   handle_mouseup,   useCapture=True)
+    ui_handle.add_eventListener('on_keypress',  handle_keypress,  useCapture=True)
+
+    ui_handle.postflow = postflow
+    value.on_change(postflow)
+
+    ui_proxy = UI_Proxy('input_range', ui_container)
+    ui_proxy.map(['value'], ui_input)
+    ui_proxy.map_to_all({'title'})
+    return ui_proxy
+
+
 def setup_scrub(ui_element, value):
     if not type(value) in {BoundInt, BoundFloat}: return
     if not value.is_bounded and not value.step_size: return
@@ -218,7 +313,7 @@ def setup_scrub(ui_element, value):
             'pressed': False,
             'scrubbing': False,
             'down': None,
-            'inival': None,
+            'initval': None,
             'cancelled': False,
         }
     reset_state()

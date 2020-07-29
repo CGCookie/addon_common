@@ -711,6 +711,75 @@ div.collapsible > div.inside.collapsed {
 }
 
 
+/*************************/
+/* INPUT RANGE           */
+
+div.inputrange-container {
+    display: block;
+    width: 100%;
+    height: 22px;
+    border: 0px;
+    padding: 0px;
+    /*height: 50px;*/
+}
+
+input.inputrange-input {
+    position: relative;
+    display: block;
+    margin: 0px;
+    padding: 0px;
+    border: 0px;
+    width: 100%;
+    height: 22px;
+    background-color: transparent;
+}
+
+input.inputrange-input > * {
+    margin: 0px;
+    padding: 0px;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+}
+
+span.inputrange-left {
+    display: inline;
+    position: absolute;
+    left: 0px;
+    top: -4px;
+    height:8px;
+    border: 1px white;
+    background-color: rgba(0, 0, 255, 1);
+    width: 30%;
+}
+span.inputrange-right {
+    display: inline;
+    position: absolute;
+    left: 40px;
+    top: -4px;
+    height:8px;
+    border: 1px white;
+    background-color: rgba(255, 0, 255, 1);
+    width: 70%;
+}
+
+span.inputrange-handle {
+    display: inline;
+    position: absolute;
+    left: 40px;
+    top: 0px;
+    border: 1px black;
+    /*left: 20%;
+    top: -10px;*/
+    background-color: rgba(192, 192, 192, 1);
+}
+span.inputrange-handle:hover {
+    background-color: rgba(255, 255, 255, 1);
+}
+span.inputrange-handle:active {
+    background-color: rgba(255, 255, 255, 1);
+}
+
 
 dialog.tooltip {
     z-index: 100000;
