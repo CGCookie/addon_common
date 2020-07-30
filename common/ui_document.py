@@ -597,12 +597,12 @@ class UI_Document(UI_Document_FSM):
         # UI_Element_PreventMultiCalls.reset_multicalls()
         self._body.clean()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
-        self._body._set_view_size(sz)
+        self._body.set_view_size(sz)
         self._body._call_postflow()
 
         # UI_Element_PreventMultiCalls.reset_multicalls()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
-        self._body._set_view_size(sz)
+        self._body.set_view_size(sz)
         if self._reposition_tooltip_before_draw:
             self._reposition_tooltip_before_draw = False
             self._reposition_tooltip()

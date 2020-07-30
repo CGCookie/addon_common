@@ -137,6 +137,11 @@ class BoundInt(BoundVar):
     def is_bounded(self):
         return self._min_value is not None and self._max_value is not None
 
+    @property
+    def bounded_ratio(self):
+        assert self.is_bounded, f'Cannot compute bounded_ratio of unbounded BoundInt'
+        return (self.value - self.min_value) / (self.max_value - self.min_value)
+
     def int_validator(self, value):
         try:
             t = type(value)
@@ -177,6 +182,11 @@ class BoundFloat(BoundVar):
     @property
     def is_bounded(self):
         return self._min_value is not None and self._max_value is not None
+
+    @property
+    def bounded_ratio(self):
+        assert self.is_bounded, f'Cannot compute bounded_ratio of unbounded BoundFloat'
+        return (self.value - self.min_value) / (self.max_value - self.min_value)
 
     def float_validator(self, value):
         try:

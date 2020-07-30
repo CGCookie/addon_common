@@ -935,20 +935,17 @@ class UI_Element_Properties:
 
     def reposition(self, left=None, top=None, bottom=None, right=None, clamp_position=True):
         assert not bottom and not right, 'repositioning UI via bottom or right not implemented yet :('
-        changed = False
         if clamp_position and self._relative_element:
             w,h = Globals.drawing.scale(self.width_pixels),self.height_pixels #Globals.drawing.scale(self.height_pixels)
             rw,rh = self._relative_element.width_pixels,self._relative_element.height_pixels
             mbpw,mbph = self._relative_element._mbp_width,self._relative_element._mbp_height
             if left is not None: left = clamp(left, 0, (rw - mbpw) - w)
-            if top is not None: top = clamp(top, -(rh - mbph) + h, 0)
-        if left is not None and self._style_left != left:
+            if top  is not None: top  = clamp(top, -(rh - mbph) + h, 0)
+        if left is None: left = self._style_left
+        if top  is None: top  = self._style_top
+        if self._style_left != left or self._style_top != top:
             self._style_left = left
-            changed = True
-        if top  is not None and self._style_top != top:
             self._style_top  = top
-            changed = True
-        if changed:
             self._absolute_pos = None
             self.update_position()
             tag_redraw_all("UI_Element reposition")
@@ -1081,6 +1078,12 @@ class UI_Element_Properties:
     @property
     def left_scissor(self):
         return self._l
+    @property
+    def left_override(self):
+        return self._left_override
+    @left_override.setter
+    def left_override(self, v):
+        self._left_override = v
 
     @property
     def top_pixels(self):
@@ -1101,6 +1104,12 @@ class UI_Element_Properties:
     @property
     def top_scissor(self):
         return self._t
+    @property
+    def top_override(self):
+        return self._top_override
+    @top_override.setter
+    def top_override(self, v):
+        self._top_override = v
 
     @property
     def width_pixels(self):
@@ -1116,6 +1125,12 @@ class UI_Element_Properties:
     @property
     def width_scissor(self):
         return self._w
+    @property
+    def width_override(self):
+        return self._width_override
+    @width_override.setter
+    def width_override(self, v):
+        self._width_override = v
 
     @property
     def height_pixels(self):
@@ -1131,6 +1146,12 @@ class UI_Element_Properties:
     @property
     def height_scissor(self):
         return self._h
+    @property
+    def height_override(self):
+        return self._height_override
+    @height_override.setter
+    def height_override(self, v):
+        self._height_override = v
 
 
     @property
@@ -1695,6 +1716,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._tablecell_pos        = None       # overriding position if table-cell
         self._tablecell_size       = None       # overriding size if table-cell
         self._all_lines            = None       # all children elements broken up into lines (for horizontal alignment)
+
+        self._left_override = None
+        self._top_override = None
+        self._width_override = None
+        self._height_override = None
 
         self._viewing_box = Box2D(topleft=(0,0), size=(-1,-1))  # topleft+size: set by parent element
         self._inside_box  = Box2D(topleft=(0,0), size=(-1,-1))  # inside area of viewing box (less margins, paddings, borders)
@@ -2625,7 +2651,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             if sy == 'scroll': h = remaining.clamp_height(h)
                             w, h = math.ceil(w), math.ceil(h)
                             sz = Size2D(width=w, height=h)
-                            element._set_view_size(sz)
+                            element.set_view_size(sz)
                             if position != 'fixed':
                                 line_width += w
                                 line_height = max(line_height, h)
@@ -2769,11 +2795,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             self.dirty('position changed', 'renderbuf')
 
     @profiler.function
-    def _set_view_size(self, size:Size2D):
+    def set_view_size(self, size:Size2D):
         # parent is telling us how big we will be.  note: this does not trigger a reflow!
         # TODO: clamp scroll
         # TODO: handle vertical and horizontal element alignment
         # TODO: handle justified and right text alignment
+        if self.width_override is not None or self.height_override is not None:
+            size = size.clone()
+            if self.width_override  is not None: size.set_all_widths( self.width_override)
+            if self.height_override is not None: size.set_all_heights(self.height_override)
         self._absolute_size = size
         self.scrollLeft = self.scrollLeft
         self.scrollTop = self.scrollTop
@@ -2799,10 +2829,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 offset_between = Vec2D((offset_between, 0))
                 for i,el in enumerate(line):
                     el._alignment_offset = offset_x + offset_between * i
-                
+
         #if self._src_str:
         #    print(self._src_str, self._dynamic_full_size, self._dynamic_content_size, self._absolute_size)
-    def set_view_size(self, *args, **kwargs): return self._set_view_size(*args, **kwargs)
 
     @UI_Element_Utils.add_option_callback('layout:flexbox')
     def layout_flexbox(self):
