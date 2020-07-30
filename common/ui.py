@@ -207,7 +207,8 @@ def input_checkbox(**kwargs):
     ui_proxy.map_to_all({'title'})
     return ui_proxy
 
-def input_range(value=None, min=None, max=None, step=None, **kwargs):
+def input_range(value=None, min_value=None, max_value=None, step_size=None, **kwargs):
+    # right now, step_size is not used
     t = type(value)
     if t in {BoundFloat, BoundInt}:
         # (possibly) override min/max/step of value
@@ -215,14 +216,14 @@ def input_range(value=None, min=None, max=None, step=None, **kwargs):
         # if not None, choose min of max param and value's max
         # if not None, choose step param
         overrides = {}
-        if min  is not None: overrides['min_value'] = max(min, value.min_value)
-        if max  is not None: overrides['max_value'] = min(max, value.max_value)
-        if step is not None: overrides['step_size'] = step
+        if min_value is not None: overrides['min_value'] = max(min_value, value.min_value)
+        if max_value is not None: overrides['max_value'] = min(max_value, value.max_value)
+        if step_size is not None: overrides['step_size'] = step_size
         if overrides: value = value.clone_with_overrides(**overrides)
     elif t in {float, int}:
         # assuming value is float!
-        assert max is not None and min is not None, f'UI input range with non-bound value ({value}, {t}) must have both min and max specified ({min}, {max})'
-        value = BoundFloat('value', min_value=min, max_value=max, step_size=step)
+        assert max_value is not None and min_value is not None, f'UI input range with non-bound value ({value}, {t}) must have both min and max specified ({min_value}, {max_value})'
+        value = BoundFloat('value', min_value=min_value, max_value=max_value, step_size=step_size)
     else:
         assert False, f'Unhandled UI input range value type ({t})'
 
