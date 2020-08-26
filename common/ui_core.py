@@ -85,37 +85,54 @@ class UI_Element_Defaults:
     whitespace  = 'normal'
 
 
-
+@add_cache('_cache', {})
+@add_cache('_paths', [
+    os.path.abspath(os.path.curdir),
+    os.path.join(os.path.abspath(os.path.curdir), 'fonts'),
+    os.path.join(os.path.dirname(__file__), 'fonts'),
+])
 def get_font_path(fn, ext=None):
+    cache = get_font_path._cache
     if ext: fn = '%s.%s' % (fn,ext)
-    paths = [
-        os.path.abspath(os.path.curdir),
-        os.path.join(os.path.abspath(os.path.curdir), 'fonts'),
-        os.path.join(os.path.dirname(__file__), 'fonts'),
-    ]
-    for path in paths:
-        p = os.path.join(path, fn)
-        if os.path.exists(p): return p
-    return None
+    if fn not in cache:
+        cache[fn] = None
+        for path in get_font_path._paths:
+            p = os.path.join(path, fn)
+            if os.path.exists(p):
+                cache[fn] = p
+                break
+    return get_font_path._cache[fn]
 
 fontmap = {
     'serif': {
-        'normal normal': 'DroidSerif-Regular.ttf',
-        'italic normal': 'DroidSerif-Italic.ttf',
-        'normal bold':   'DroidSerif-Bold.ttf',
-        'italic bold':   'DroidSerif-BoldItalic.ttf',
+        'normal': {
+            'normal': 'DroidSerif-Regular.ttf',
+            'bold':   'DroidSerif-Bold.ttf',
+        },
+        'italic': {
+            'normal': 'DroidSerif-Italic.ttf',
+            'bold':   'DroidSerif-BoldItalic.ttf',
+        },
     },
     'sans-serif': {
-        'normal normal': 'DroidSans-Blender.ttf',
-        'italic normal': 'OpenSans-Italic.ttf',
-        'normal bold':   'OpenSans-Bold.ttf',
-        'italic bold':   'OpenSans-BoldItalic.ttf',
+        'normal': {
+            'normal': 'DroidSans-Blender.ttf',
+            'bold':   'OpenSans-Bold.ttf',
+        },
+        'italic': {
+            'normal': 'OpenSans-Italic.ttf',
+            'bold':   'OpenSans-BoldItalic.ttf',
+        },
     },
     'monospace': {
-        'normal normal': 'DejaVuSansMono.ttf',
-        'italic normal': 'DejaVuSansMono.ttf',
-        'normal bold':   'DejaVuSansMono.ttf',
-        'italic bold':   'DejaVuSansMono.ttf',
+        'normal': {
+            'normal': 'DejaVuSansMono.ttf',
+            'bold':   'DejaVuSansMono.ttf',
+        },
+        'italic': {
+            'normal': 'DejaVuSansMono.ttf',
+            'bold':   'DejaVuSansMono.ttf',
+        },
     },
 }
 def setup_font(fontid):
@@ -125,10 +142,10 @@ def setup_font(fontid):
 @profiler.function
 def get_font(fontfamily, fontstyle=None, fontweight=None):
     if fontfamily in fontmap:
-        styleweight = '%s %s' % (fontstyle or 'normal', fontweight or 'normal')
-        fontfamily = fontmap[fontfamily][styleweight]
+        # translate fontfamily, fontstyle, fontweight into a .ttf
+        fontfamily = fontmap[fontfamily][fontstyle or 'normal'][fontweight or 'normal']
     path = get_font_path(fontfamily)
-    assert path, 'could not find font "%s"' % fontfamily
+    assert path, f'could not find font "{fontfamily}"'
     fontid = FontManager.load(path, setup_font)
     return fontid
 
@@ -161,11 +178,13 @@ def get_image_path(fn, ext=None, subfolders=None):
     paths = [p for p in paths if os.path.exists(p)]
     return iter_head(paths, None)
 
-
+math_isinf = math.isinf
+math_floor = math.floor
+math_ceil = math.ceil
 def floor_if_finite(v):
-    return v if v is None or math.isinf(v) else math.floor(v)
+    return v if v is None or math_isinf(v) else math_floor(v)
 def ceil_if_finite(v):
-    return v if v is None or math.isinf(v) else math.ceil(v)
+    return v if v is None or math_isinf(v) else math_ceil(v)
 
 
 @contextlib.contextmanager
@@ -486,13 +505,10 @@ class UI_Element_Utils:
         if v == 'auto': v = def_v or 'auto'
         if v == 'auto': return 'auto'
         # v must be NumberUnit here!
-        try:
-            if v.unit == '%': scale = None
-            v = v.val(base=(float(def_v) if percent_of is None else percent_of))
-            v = float(v)
-            if scale is not None: v *= scale
-        except:
-            v = 0
+        if v.unit == '%': scale = None
+        v = v.val(base=(float(def_v) if percent_of is None else percent_of))
+        v = float(v)
+        if scale is not None: v *= scale
         return floor_if_finite(v)
 
     @profiler.function
