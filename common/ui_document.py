@@ -443,6 +443,11 @@ class UI_Document(UI_Document_FSM):
     def mousedown_enter(self):
         self._mousedown_time = time.time()
         self._under_mousedown = self._under_mouse
+        if not self._under_mousedown:
+            # likely, self._under_mouse or an ancestor was deleted?
+            # mousedown main event handler below will switch FSM back to main, effectively ignoring the mousedown event
+            # see RetopoFlow issue #857
+            return
         self._addrem_pseudoclass('active', add_to=self._under_mousedown)
         # self._under_mousedown.add_pseudoclass('active')
         self._under_mousedown.dispatch_event('on_mousedown')
