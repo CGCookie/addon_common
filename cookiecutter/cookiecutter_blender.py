@@ -177,6 +177,7 @@ class CookieCutter_Blender:
     def overlays_store(self):   self._overlays = self.overlays_get()
     def overlays_restore(self): self.overlays_set(self._overlays)
     def overlays_hide(self):    self.overlays_set(False)
+    def overlays_show(self):    self.overlays_set(True)
 
     def manipulator_store(self):   self._manipulator = self.manipulator_get()
     def manipulator_restore(self): self.manipulator_set(self._manipulator)

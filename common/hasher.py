@@ -49,25 +49,21 @@ class Hasher:
     def __hash__(self):
         return hash(self.get_hash())
 
+    list_like_types = {
+        list:   'list',
+        tuple:  'tuple',
+        set:    'set',
+        Vector: 'vector',
+        Matrix: 'matrix',
+    }
     def add(self, *args):
         self._digest = None
+        llt = Hasher.list_like_types
         for arg in args:
             t = type(arg)
-            if t is list:
-                self._hasher.update(bytes('list %d' % len(arg), 'utf8'))
-                for a in arg: self.add(a)
-            elif t is tuple:
-                self._hasher.update(bytes('tuple %d' % len(arg), 'utf8'))
-                for a in arg: self.add(a)
-            elif t is set:
-                self._hasher.update(bytes('set %d' % len(arg), 'utf8'))
-                for a in arg: self.add(a)
-            elif t is Matrix:
-                self._hasher.update(bytes('matrix', 'utf8'))
-                self.add([v for r in arg for v in r])
-            elif t is Vector:
-                self._hasher.update(bytes('vector %d' % len(arg), 'utf8'))
-                self.add([v for v in arg])
+            if t in llt:
+                self._hasher.update(bytes(f'{llt[t]} {len(arg)}', 'utf8'))
+                self.add(*arg)
             else:
                 self._hasher.update(bytes(str(arg), 'utf8'))
 
