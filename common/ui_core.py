@@ -2087,14 +2087,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 sc['width']  = 'auto'
                 sc['height'] = 'auto'
 
-            font_family      = self._computed_styles.get('font-family', UI_Element_Defaults.font_family)
-            font_style       = self._computed_styles.get('font-style',  UI_Element_Defaults.font_style)
-            font_weight      = self._computed_styles.get('font-weight', UI_Element_Defaults.font_weight)
+            self._fontid = get_font(
+                self._computed_styles.get('font-family', UI_Element_Defaults.font_family),
+                self._computed_styles.get('font-style',  UI_Element_Defaults.font_style),
+                self._computed_styles.get('font-weight', UI_Element_Defaults.font_weight),
+            )
             self._fontsize   = self._computed_styles.get('font-size',   UI_Element_Defaults.font_size).val()
             self._fontcolor  = self._computed_styles.get('color',       UI_Element_Defaults.font_color)
             self._whitespace = self._computed_styles.get('white-space', UI_Element_Defaults.whitespace)
-            ts               = self._computed_styles.get('text-shadow', 'none')
-            self._fontid     = get_font(font_family, font_style, font_weight)
+            ts = self._computed_styles.get('text-shadow', 'none')
             self._textshadow = None if ts == 'none' else (ts[0].val(), ts[1].val(), ts[-1])
 
         # tell children to recompute selector
@@ -2121,7 +2122,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self.dirty('style change might have changed content (::before / ::after)', 'content')
                 self.dirty('style change might have changed content (::before / ::after)', 'renderbuf')
                 self.dirty_flow()
-                self._innerTextWrapped = None
+                # self._innerTextWrapped = None
                 self._style_content_hash = style_content_hash
 
             # style changes => size changes
@@ -2139,7 +2140,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self.dirty('style change might have changed size', 'size')
                 self.dirty('style change might have changed size', 'renderbuf')
                 self.dirty_flow()
-                self._innerTextWrapped = None
+                # self._innerTextWrapped = None
                 self._style_size_hash = style_size_hash
 
             # style changes => render changes
@@ -2165,8 +2166,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             return
         if not self.is_visible:
             self._dirty_properties.discard('content')
-            self._innerTextWrapped = None
-            self._innerTextAsIs = None
+            # self._innerTextWrapped = None
+            # self._innerTextAsIs = None
             return
         if 'content' not in self._dirty_properties:
             for e in self._dirty_callbacks.get('content', []): e._compute_content()
@@ -2221,6 +2222,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             rewrap |= self._innerTextWrapped != innerTextWrapped
             rewrap |= any(textwrap_opts[k] != self._textwrap_opts.get(k,None) for k in textwrap_opts.keys())
             if rewrap:
+                # print(f'compute content: "{self._innerTextWrapped}" "{innerTextWrapped}"')
                 self._textwrap_opts = textwrap_opts
                 self._innerTextWrapped = innerTextWrapped
                 self._children_text = []
@@ -2603,7 +2605,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             accum_height = 0    # sum heights for all lines
             for block in self._blocks:
                 # each block might be wrapped onto multiple lines
-                new_line = True
                 cur_line = None
                 for element in block:
                     if not element.is_visible: continue
@@ -2613,12 +2614,11 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                     sy = element._computed_styles.get('overflow-y', 'visible')
                     processed = False
                     while not processed:
-                        if new_line:
+                        if cur_line is None:
                             cur_line = []
                             line_width = 0
                             line_height = 0
                             first_child = True
-                            new_line = False
                         else:
                             first_child = False
                         rw = (inside_size.width  if inside_size.width  is not None else (inside_size.max_width  if inside_size.max_width  is not None else float('inf'))) - line_width
@@ -2661,7 +2661,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             all_lines.append((cur_line, line_width))
                             accum_height += line_height
                             accum_width = max(accum_width, line_width)
-                            new_line = True
+                            cur_line = None
                             element.dirty_flow(parent=False, children=True)
                 if cur_line:
                     all_lines.append((cur_line, line_width))
@@ -3236,14 +3236,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             cur._fire_event(event, ui_event)
             if not ui_event.bubbling: return ui_event.default_prevented
         return ui_event.default_prevented
-
-    ################################################################################
-    # the following methods can be overridden to create different types of UI
-
-    ## Layout, Positioning, and Drawing
-    # `self.layout_children()` should set `self._content_width` and `self._content_height` based on children.
-    def compute_content(self): pass
-    def compute_preferred_size(self): pass
 
 
 
