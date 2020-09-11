@@ -608,7 +608,7 @@ class UI_Element_Properties:
         assert len(set(ntagName) - set('abcdefghijklmnopqrstuvwxyz0123456789')) == 0, errmsg
         if self._tagName == ntagName: return
         self._tagName = ntagName
-        self.dirty('changing tagName can affect children styles', parent=True, children=True)
+        self.dirty('changing tagName can affect children styles', children=True)
 
     @property
     def innerText(self):
@@ -722,8 +722,8 @@ class UI_Element_Properties:
         self._children.append(child)
         child._parent = self
         child.document = self.document
-        child.dirty('appending child to parent', parent=True, children=True)
-        self.dirty('copying dirtiness from child', properties=child._dirty_properties, parent=True, children=False)
+        child.dirty('appending child to parent', children=True)
+        self.dirty('copying dirtiness from child', properties=child._dirty_properties, children=False)
         self.dirty('appending new child changes content', 'content')
         self._new_content = True
         return child
@@ -786,7 +786,7 @@ class UI_Element_Properties:
         if self._style_str == style: return
         self._style_str = style
         self._styling_custom = None
-        self.dirty(f'changing style for {self} affects style', 'style', parent=False, children=False)
+        self.dirty(f'changing style for {self} affects style', 'style')
         # self.dirty(f'changing style for {self} affects parent content', 'content', parent=True, children=False)
         self.add_dirty_callback_to_parent(['style', 'content'])
     def add_style(self, style):
@@ -794,7 +794,7 @@ class UI_Element_Properties:
         if self._style_str == style: return
         self._style_str = style
         self._styling_custom = None
-        self.dirty(f'adding style for {self} affects style', 'style', parent=False, children=False)
+        self.dirty(f'adding style for {self} affects style', 'style')
         # self.dirty(f'adding style for {self} affects parent content', 'content', parent=True, children=False)
         self.add_dirty_callback_to_parent(['style', 'content'])
 
@@ -806,7 +806,7 @@ class UI_Element_Properties:
         nid = '' if nid is None else nid.strip()
         if self._id == nid: return
         self._id = nid
-        self.dirty(f'changing id for {self} affects selector', 'selector', parent=False, children=True)
+        self.dirty(f'changing id for {self} affects selector', 'selector', children=True)
         # self.dirty(f'changing id for {self} affects parent content', 'content', parent=True, children=False)
         self.add_dirty_callback_to_parent(['selector', 'id'])
 
@@ -1242,7 +1242,7 @@ class UI_Element_Properties:
         if self._is_visible == v: return
         self._is_visible = v
         # self.dirty('changing visibility can affect everything', parent=True, children=True)
-        self.dirty('changing visibility can affect everything', 'renderbuf', parent=False)
+        self.dirty('changing visibility can affect everything', 'renderbuf')
 
     # self.get_is_visible() is same as self.is_visible() except it doesn't check parent
     def get_is_visible(self):
@@ -1478,7 +1478,7 @@ class UI_Element_Dirtiness:
         self._style_content_hash = None
         self._style_size_hash = None
         for child in self._children_all: child.dirty_styling()
-        self.dirty('Dirtying style cache')
+        self.dirty('Dirtying style cache', 'style')
 
 
 

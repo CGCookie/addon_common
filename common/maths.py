@@ -471,7 +471,7 @@ class Normal(VecUtils, Entity3D):
 class Color(Vector):
     @staticmethod
     def HSL(hsl):
-        # https://www.rapidtables.com/convert/color/hsl-to-rgb.html
+        # https://en.wikipedia.org/wiki/HSL_and_HSV
         # 0 <= H < 1 (circular), 0 <= S <= 1, 0 <= L <= 1
         if len(hsl) == 3: h,s,l,a = *hsl, 1.0
         else:             h,s,l,a = hsl
