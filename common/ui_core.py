@@ -722,9 +722,7 @@ class UI_Element_Properties:
         self._children.append(child)
         child._parent = self
         child.document = self.document
-        child.dirty('appending child to parent', children=True)
-        self.dirty('copying dirtiness from child', properties=child._dirty_properties, children=False)
-        self.dirty('appending new child changes content', 'content')
+        self.dirty('appending children', children=True)
         self._new_content = True
         return child
     def append_child(self, child): return self._append_child(child)
@@ -976,7 +974,7 @@ class UI_Element_Properties:
             self._absolute_pos = None
             self.update_position()
             tag_redraw_all("UI_Element reposition")
-            self.dirty('repositioning', 'renderbuf')
+            self.dirty('repositioning', 'renderbuf', parent=True)
             self.dirty_flow()
 
     @property

@@ -241,10 +241,12 @@ class UI_Document(UI_Document_FSM):
             self._tooltip_wait = time.time() + self.tooltip_delay
             self._tooltip.is_visible = False
         if self._tooltip_message and time.time() > self._tooltip_wait:
-            # TODO: markdown support??
-            self._tooltip.innerText = self._tooltip_message
-            self._tooltip.is_visible = True and self.show_tooltips
-            self._reposition_tooltip_before_draw = True
+            if self._tooltip_mouse != self.actions.mouse or self._tooltip.innerText != self._tooltip_message or not self._tooltip.is_visible:
+                # TODO: markdown support??
+                self._tooltip.innerText = self._tooltip_message
+                self._tooltip.is_visible = True and self.show_tooltips
+                self._reposition_tooltip_before_draw = True
+                tag_redraw_all("reposition tooltip")
 
         self.fsm.update()
 
