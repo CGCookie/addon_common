@@ -241,6 +241,7 @@ def input_range(value=None, min_value=None, max_value=None, step_size=None, **kw
     state.cancel = delay_exec('''value.value = state.initval; state.cancelled = True''')
 
     def postflow():
+        if not ui_input.is_visible: return
         # since ui_left, ui_right, and ui_handle are all absolutely positioned UI elements,
         # we can safely move them around without dirtying (the UI system does not need to
         # clean anything or reflow the elements)

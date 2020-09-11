@@ -73,7 +73,9 @@ TODO:
 '''
 
 
-DEBUG_COLOR_CLEAN = False
+DEBUG_COLOR_CLEAN = True
+DEBUG_PROPERTY = 'selector'     # selector, style, content, size, layout, blocks
+CACHE_METHOD = 0                # 0:none, 1:only root, 2:hierarchical, 3:text leaves
 
 
 class UI_Element_Defaults:
@@ -627,8 +629,7 @@ class UI_Element_Properties:
         v = str(v) if v is not None else None
         if self._innerTextAsIs == v: return
         self._innerTextAsIs = v
-        self.dirty('changing innerTextAsIs changes content', 'content')
-        self.dirty('changing innerTextAsIs changes size', 'size')
+        self.dirty('changing innerTextAsIs makes dirty', {'content', 'size'})
 
     @property
     def parent(self):
@@ -688,9 +689,17 @@ class UI_Element_Properties:
     @document.setter
     def document(self, value):
         if self._document == value: return
+        if not value:
+            self._document.update_callbacks(self, force_remove=True)
         self._document = value
+        if value:
+            self.update_document()
         for c in self._children:
             c.document = value
+
+    def update_document(self):
+        if not self._document: return
+        self._document.update_callbacks(self)
 
 
     ######################################3
@@ -869,7 +878,7 @@ class UI_Element_Properties:
     def clear_pseudoclass(self):
         if not self._pseudoclasses: return
         self._pseudoclasses.clear()
-        self.dirty(f'clearing psuedoclasses for {self} affects selector', 'selector', children=self._has_affected_descendant())
+        self.dirty(f'clearing psuedoclasses for {self} affects selector', 'selector', children=True) #self._has_affected_descendant())
 
     def add_pseudoclass(self, pseudo):
         if pseudo in self._pseudoclasses: return
@@ -878,12 +887,12 @@ class UI_Element_Properties:
             self._pseudoclasses.discard('focus')
             # TODO: on_blur?
         self._pseudoclasses.add(pseudo)
-        self.dirty(f'adding psuedoclass {pseudo} for {self} affects selector', 'selector', children=self._has_affected_descendant())
+        self.dirty(f'adding psuedoclass {pseudo} for {self} affects selector', 'selector', children=True) #self._has_affected_descendant())
 
     def del_pseudoclass(self, pseudo):
         if pseudo not in self._pseudoclasses: return
         self._pseudoclasses.discard(pseudo)
-        self.dirty(f'deleting psuedoclass {pseudo} for {self} affects selector', 'selector', children=self._has_affected_descendant())
+        self.dirty(f'deleting psuedoclass {pseudo} for {self} affects selector', 'selector', children=True) #self._has_affected_descendant())
 
     def has_pseudoclass(self, pseudo):
         if pseudo == 'disabled' and self._disabled: return True
@@ -1339,6 +1348,7 @@ class UI_Element_Properties:
     @preclean.setter
     def preclean(self, fn):
         self._preclean = fn
+        self.update_document()
 
     @property
     def postclean(self):
@@ -1346,6 +1356,7 @@ class UI_Element_Properties:
     @postclean.setter
     def postclean(self, fn):
         self._postclean = fn
+        self.update_document()
 
     @property
     def postflow(self):
@@ -1353,6 +1364,7 @@ class UI_Element_Properties:
     @postflow.setter
     def postflow(self, fn):
         self._postflow = fn
+        self.update_document()
 
     @property
     def can_focus(self): return self._can_focus
@@ -1510,21 +1522,36 @@ class UI_Element_Dirtiness:
             self.add_dirty_callback_to_parent(self._dirty_propagation['parent callback'])
         self._dirty_propagation['parent callback'].clear()
 
-        if self._dirty_propagation['children']:
-            # no need to dirty ::before, ::after, or text, because they will be reconstructed
-            for child in self._children:
-                cause = ' -> '.join('%s'%cause for cause in (self._dirty_causes+[
-                    f"\"propagating dirtiness ({self._dirty_propagation['children']} from {self} to child {child}\""
-                ]))
-                child.dirty(
-                    cause=cause,
-                    properties=self._dirty_propagation['children'],
-                    parent=False,
-                    children=True,
-                )
-            self._dirty_propagation['children'].clear()
+        # if self._dirty_propagation['children']:
+        #     # no need to dirty ::before, ::after, or text, because they will be reconstructed
+        #     for child in self._children:
+        #         cause = ' -> '.join('%s'%cause for cause in (self._dirty_causes+[
+        #             f"\"propagating dirtiness ({self._dirty_propagation['children']} from {self} to child {child}\""
+        #         ]))
+        #         child.dirty(
+        #             cause=cause,
+        #             properties=self._dirty_propagation['children'],
+        #             parent=False,
+        #             children=True,
+        #         )
+        #     self._dirty_propagation['children'].clear()
 
         self._dirty_causes = []
+
+    def propagate_dirtiness_down(self):
+        if not self._dirty_propagation['children']: return
+
+        # no need to dirty ::before, ::after, or text, because they will be reconstructed
+        for child in self._children:
+            child.dirty(
+                cause='',
+                properties=self._dirty_propagation['children'],
+                parent=False,
+                children=True,
+            )
+        self._dirty_propagation['children'].clear()
+
+
 
     @property
     def defer_dirty_propagation(self):
@@ -1535,14 +1562,28 @@ class UI_Element_Dirtiness:
         self.propagate_dirtiness()
 
     def _call_preclean(self):
-        if self.is_dirty and self._preclean: self._preclean()
-        for child in self._children_all: child._call_preclean()
+        if not self.is_dirty:  return
+        if not self._preclean: return
+        self._preclean()
     def _call_postclean(self):
-        if self._was_dirty and self._postclean: self._postclean()
-        for child in self._children_all: child._call_postclean()
+        if not self._was_dirty: return
+        if not self._postclean: return
+        self._postclean()
     def _call_postflow(self):
-        if self._postflow: self._postflow()
-        for child in self._children_all: child._call_postflow()
+        if not self._postflow: return
+        if not self.is_visible: return
+        self._postflow()
+
+    @property
+    def defer_clean(self):
+        if not self._document: return True
+        if self._document.defer_cleaning: return True
+        if self._defer_clean: return True
+        # if not self.is_dirty: return True
+        return False
+    @defer_clean.setter
+    def defer_clean(self, value):
+        self._defer_clean = value
 
     @profiler.function
     def clean(self, depth=0):
@@ -1552,11 +1593,11 @@ class UI_Element_Dirtiness:
         - possibly more dirtiness to propagate,
         - if deferring cleaning.
         '''
-        self._was_dirty = self.is_dirty
-        self._call_preclean()
 
-        if not self.is_dirty or self._defer_clean: return
-        if self.record_multicall('_clean'): return
+        if not self.is_dirty or self.defer_clean: return
+        self._was_dirty = self.is_dirty     # used to know if postclean should get called
+
+        self.propagate_dirtiness_down()
 
         # self.call_cleaning_callbacks()
         self._compute_selector()
@@ -1567,15 +1608,9 @@ class UI_Element_Dirtiness:
         self._renderbuf()
 
         for child in self._children_all:
-            child.clean(depth=depth+1)
+           child.clean(depth=depth+1)
 
-        self._call_postclean()
 
-        if self.is_dirty:
-            # print('WARNING: UI element is still dirty after cleaning!')
-            # print('  UI:', self)
-            # print('  Properties:', self._dirty_properties)
-            pass
 
     @profiler.function
     def call_cleaning_callbacks(self):
@@ -1979,17 +2014,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     @UI_Element_Utils.add_cleaning_callback('selector', {'style'})
     @profiler.function
     def _compute_selector(self):
-        if self._defer_clean: return
+        if self.defer_clean: return
         if 'selector' not in self._dirty_properties:
-            self._defer_clean = True
+            self.defer_clean = True
             with profiler.code('selector.calling back callbacks'):
                 for e in self._dirty_callbacks.get('selector', []):
                     # print(self,'->', e)
                     e._compute_selector()
                 self._dirty_callbacks['selector'].clear()
-            self._defer_clean = False
+            self.defer_clean = False
             return
 
+        self._clean_debugging['selector'] = time.time()
         self._rebuild_style_selector()
         if self._children:
             for child in self._children: child._compute_selector()
@@ -2012,15 +2048,15 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                    DO NOT PREVENT THIS, otherwise infinite loop bugs will occur!
         '''
 
-        if self._defer_clean: return
+        if self.defer_clean: return
         if 'style' not in self._dirty_properties:
-            self._defer_clean = True
+            self.defer_clean = True
             with profiler.code('style.calling back callbacks'):
                 for e in self._dirty_callbacks.get('style', []):
                     # print(self,'->', e)
                     e._compute_style()
                 self._dirty_callbacks['style'].clear()
-            self._defer_clean = False
+            self.defer_clean = False
             return
 
         self._draw_dirty_style += 1
@@ -2177,7 +2213,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     @UI_Element_Utils.add_cleaning_callback('content', {'blocks', 'renderbuf'})
     @profiler.function
     def _compute_content(self):
-        if self._defer_clean:
+        if self.defer_clean:
             # print('_compute_content: cleaning deferred!')
             return
         if not self.is_visible:
@@ -2346,7 +2382,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                    DO NOT PREVENT THIS, otherwise infinite loop bugs will occur!
         '''
 
-        if self._defer_clean:
+        if self.defer_clean:
             return
         if not self.is_visible:
             self._dirty_properties.discard('blocks')
@@ -2397,7 +2433,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
     @UI_Element_Utils.add_cleaning_callback('size', {'renderbuf'})
     @profiler.function
     def _compute_static_content_size(self):
-        if self._defer_clean:
+        if self.defer_clean:
             return
         if not self.is_visible:
             self._dirty_properties.discard('size')
@@ -2407,7 +2443,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             self._dirty_callbacks['size'].clear()
             return
 
-        if self.record_multicall('_compute_static_content_size'): return
+        # if self.record_multicall('_compute_static_content_size'): return
 
         self._clean_debugging['size'] = time.time()
 
@@ -2962,9 +2998,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         ox,oy = offset
 
         if DEBUG_COLOR_CLEAN:
-            # style, content, size, layout, blocks
             t_max = 2
-            t = max(0, t_max - (time.time() - self._clean_debugging.get('style', 0))) / t_max
+            t = max(0, t_max - (time.time() - self._clean_debugging.get(DEBUG_PROPERTY, 0))) / t_max
             background_override = Color((t, t/2, 0, 0.5))
         else:
             background_override = None
@@ -3108,7 +3143,6 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         with self._cacheRenderBuf.bind_unbind():
             self._draw_real((0,0))
 
-    _cache_method = 2
     @profiler.function
     def _cache(self, depth=0):
         if not self.is_visible: return
@@ -3117,10 +3151,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         if not self._dirty_renderbuf: return   # no need to cache
         # print('caching %s' % str(self))
 
-        if   self._cache_method == 0: pass # do not cache
-        elif self._cache_method == 1: self._cache_onlyroot(depth)
-        elif self._cache_method == 2: self._cache_hierarchical(depth)
-        elif self._cache_method == 3: self._cache_textleaves(depth)
+        if   CACHE_METHOD == 0: pass # do not cache
+        elif CACHE_METHOD == 1: self._cache_onlyroot(depth)
+        elif CACHE_METHOD == 2: self._cache_hierarchical(depth)
+        elif CACHE_METHOD == 3: self._cache_textleaves(depth)
 
         self._dirty_renderbuf = False
 

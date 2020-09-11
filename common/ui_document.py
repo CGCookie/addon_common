@@ -120,6 +120,13 @@ class UI_Document(UI_Document_FSM):
 
     @profiler.function
     def init(self, context, **kwargs):
+        self._callbacks = {
+            'preclean':  set(),
+            'postclean': set(),
+            'postflow':  set(),
+        }
+        self.defer_cleaning = False
+
         self._context = context
         self._area = context.area
         self.actions = ActionHandler(bpy.context, UI_Document.default_keymap)
@@ -151,6 +158,13 @@ class UI_Document(UI_Document_FSM):
         self._last_sz = None
         self._last_w = -1
         self._last_h = -1
+
+    def update_callbacks(self, ui_element, force_remove=False):
+        for cb,fn in [('preclean', ui_element.preclean), ('postclean', ui_element.postclean), ('postflow', ui_element.postflow)]:
+            if force_remove or not fn:
+                self._callbacks[cb].discard(ui_element)
+            else:
+                self._callbacks[cb].add(ui_element)
 
     @property
     def body(self):
@@ -255,8 +269,10 @@ class UI_Document(UI_Document_FSM):
         while rem and add and rem[0] == add[0]:
             rem = rem[1:]
             add = add[1:]
+        self.defer_cleaning = True
         for e in rem: e.del_pseudoclass(pseudoclass)
         for e in add: e.add_pseudoclass(pseudoclass)
+        self.defer_cleaning = False
 
     def debug_print(self):
         print('')
@@ -600,10 +616,12 @@ class UI_Document(UI_Document_FSM):
             # self._body.dirty('region size changed', 'style', children=True)
 
         # UI_Element_PreventMultiCalls.reset_multicalls()
+        for o in self._callbacks['preclean']: o._call_preclean()
         self._body.clean()
+        for o in self._callbacks['postclean']: o._call_postclean()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
         self._body.set_view_size(sz)
-        self._body._call_postflow()
+        for o in self._callbacks['postflow']: o._call_postflow()
 
         # UI_Element_PreventMultiCalls.reset_multicalls()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
