@@ -73,9 +73,11 @@ TODO:
 '''
 
 
-DEBUG_COLOR_CLEAN = True
-DEBUG_PROPERTY = 'selector'     # selector, style, content, size, layout, blocks
-CACHE_METHOD = 0                # 0:none, 1:only root, 2:hierarchical, 3:text leaves
+DEBUG_COLOR_CLEAN = False
+DEBUG_PROPERTY = 'style'     # selector, style, content, size, layout, blocks
+DEBUG_COLOR    = 1              # 0:time since change, 1:time of change
+
+CACHE_METHOD = 2                # 0:none, 1:only root, 2:hierarchical, 3:text leaves
 
 
 class UI_Element_Defaults:
@@ -1239,7 +1241,8 @@ class UI_Element_Properties:
     def is_visible(self, v):
         if self._is_visible == v: return
         self._is_visible = v
-        self.dirty('changing visibility can affect everything', parent=True, children=True)
+        # self.dirty('changing visibility can affect everything', parent=True, children=True)
+        self.dirty('changing visibility can affect everything', 'renderbuf', parent=False)
 
     # self.get_is_visible() is same as self.is_visible() except it doesn't check parent
     def get_is_visible(self):
@@ -2998,9 +3001,17 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         ox,oy = offset
 
         if DEBUG_COLOR_CLEAN:
-            t_max = 2
-            t = max(0, t_max - (time.time() - self._clean_debugging.get(DEBUG_PROPERTY, 0))) / t_max
-            background_override = Color((t, t/2, 0, 0.5))
+            if DEBUG_COLOR == 0:
+                t_max = 2
+                t = max(0, t_max - (time.time() - self._clean_debugging.get(DEBUG_PROPERTY, 0))) / t_max
+                background_override = Color( ( t, t/2, 0, 0.75 ) )
+            elif DEBUG_COLOR == 1:
+                t = self._clean_debugging.get(DEBUG_PROPERTY, 0)
+                d = time.time() - t
+                h = (t / 2) % 1
+                s = 1.0
+                l = max(0, 0.5 - d / 10)
+                background_override = Color.HSL((h, s, l, 0.75))
         else:
             background_override = None
 

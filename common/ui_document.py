@@ -269,6 +269,7 @@ class UI_Document(UI_Document_FSM):
         while rem and add and rem[0] == add[0]:
             rem = rem[1:]
             add = add[1:]
+        # print(f'addrem_pseudoclass: {pseudoclass} {rem} {add}')
         self.defer_cleaning = True
         for e in rem: e.del_pseudoclass(pseudoclass)
         for e in add: e.add_pseudoclass(pseudoclass)
@@ -465,7 +466,6 @@ class UI_Document(UI_Document_FSM):
             # see RetopoFlow issue #857
             return
         self._addrem_pseudoclass('active', add_to=self._under_mousedown)
-        # self._under_mousedown.add_pseudoclass('active')
         self._under_mousedown.dispatch_event('on_mousedown')
         # print(self._under_mouse.get_pathToRoot())
 
@@ -639,7 +639,7 @@ class UI_Document(UI_Document_FSM):
 
         self.force_clean(context)
 
-        Globals.drawing.glCheckError('UI_Document.draw: options')
+        Globals.drawing.glCheckError('UI_Document.draw: setting options')
         ScissorStack.start(context)
         bgl.glClearColor(0, 0, 0, 0)
         bgl.glBlendColor(0, 0, 0, 0)
@@ -647,7 +647,8 @@ class UI_Document(UI_Document_FSM):
         bgl.glEnable(bgl.GL_BLEND)
         bgl.glEnable(bgl.GL_SCISSOR_TEST)
         bgl.glDisable(bgl.GL_DEPTH_TEST)
-        Globals.drawing.glCheckError('UI_Document.draw: draw')
+
+        Globals.drawing.glCheckError('UI_Document.draw: drawing')
         self._body.draw()
         ScissorStack.end()
 
@@ -658,6 +659,7 @@ class UI_Document(UI_Document_FSM):
             # print('~%f fps  (%f / %d = %f)' % (self._draw_fps, self._draw_time, self._draw_count, self._draw_time / self._draw_count))
             self._draw_count = 0
             self._draw_time = 0
+
         Globals.drawing.glCheckError('UI_Document.draw: done')
 
 ui_document = Globals.set(UI_Document())

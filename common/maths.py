@@ -469,10 +469,54 @@ class Normal(VecUtils, Entity3D):
 
 
 class Color(Vector):
-    @stats_wrapper
-    def __init__(self, rgba=None):
-        if rgba is not None:
-            self.from_vector(rgba)
+    @staticmethod
+    def HSL(hsl):
+        # https://www.rapidtables.com/convert/color/hsl-to-rgb.html
+        # 0 <= H < 1 (circular), 0 <= S <= 1, 0 <= L <= 1
+        if len(hsl) == 3: h,s,l,a = *hsl, 1.0
+        else:             h,s,l,a = hsl
+
+        h = (h % 1) * 6
+        s = clamp(s, 0, 1)
+        l = clamp(l, 0, 1)
+        a = clamp(a, 0, 1)
+
+        c = (1 - abs(2 * l - 1)) * s
+        x = c * (1 - abs(h % 2 - 1))
+        m = l - c / 2
+
+        if   h < 1: r,g,b = c,x,0
+        elif h < 2: r,g,b = x,c,0
+        elif h < 3: r,g,b = 0,c,x
+        elif h < 4: r,g,b = 0,x,c
+        elif h < 5: r,g,b = x,0,c
+        else:       r,g,b = c,0,x
+
+        r += m
+        g += m
+        b += m
+
+        return Color((r, g, b, a))
+
+    @property
+    def r(self): return self.x
+    @r.setter
+    def r(self, v): self.x = v
+
+    @property
+    def g(self): return self.y
+    @g.setter
+    def g(self, v): self.y = v
+
+    @property
+    def b(self): return self.z
+    @b.setter
+    def b(self, v): self.z = v
+
+    @property
+    def a(self): return self.w
+    @a.setter
+    def a(self, v): self.w = v
 
     def __str__(self):
         # return '<Color (%0.4f, %0.4f, %0.4f, %0.4f)>' % (self.r, self.g, self.b, self.a)
