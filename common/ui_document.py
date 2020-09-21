@@ -233,8 +233,10 @@ class UI_Document(UI_Document_FSM):
                         self._under_mouse = self._sticky_element
 
         next_message = None
-        if self._under_mouse and self._under_mouse.title:
+        if self._under_mouse and self._under_mouse.title: # and not self._under_mouse.disabled:
             next_message = self._under_mouse.title
+            if self._under_mouse.disabled:
+                next_message = f'(Disabled) {next_message}'
         if self._tooltip_message != next_message:
             self._tooltip_message = next_message
             self._tooltip_mouse = None

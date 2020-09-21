@@ -2575,8 +2575,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         min_height    = self._get_style_num('min-height', def_v='auto', percent_of=parent_height, scale=dpi_mult)
         max_width     = self._get_style_num('max-width',  def_v='auto', percent_of=parent_width,  scale=dpi_mult)
         max_height    = self._get_style_num('max-height', def_v='auto', percent_of=parent_height, scale=dpi_mult)
-        overflow_x   = styles.get('overflow-x', 'visible')
-        overflow_y   = styles.get('overflow-y', 'visible')
+        overflow_x    = styles.get('overflow-x', 'visible')
+        overflow_y    = styles.get('overflow-y', 'visible')
 
         # border_width  = self._get_style_num('border-width', 0, scale=dpi_mult)
         # margin_top,  margin_right,  margin_bottom,  margin_left  = self._get_style_trbl('margin',  scale=dpi_mult)
