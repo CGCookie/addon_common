@@ -212,7 +212,7 @@ class UI_Document(UI_Document_FSM):
         if self._last_w != w or self._last_h != h:
             # print('Document:', (self._last_w, self._last_h), (w,h))
             self._last_w,self._last_h = w,h
-            self._body.dirty('changed document size', children=True)
+            self._body.dirty(cause='changed document size', children=True)
             self._body.dirty_flow()
             tag_redraw_all("UI_Element update: w,h change")
 
@@ -270,13 +270,18 @@ class UI_Document(UI_Document_FSM):
         add = add_to.get_pathToRoot() if add_to else []
         rem.reverse()
         add.reverse()
+        roots = []
+        if rem: roots.append(rem[0])
+        if add: roots.append(add[0])
         while rem and add and rem[0] == add[0]:
             rem = rem[1:]
             add = add[1:]
         # print(f'addrem_pseudoclass: {pseudoclass} {rem} {add}')
         self.defer_cleaning = True
+        for root in roots: root.defer_dirty_propagation = True
         for e in rem: e.del_pseudoclass(pseudoclass)
         for e in add: e.add_pseudoclass(pseudoclass)
+        for root in roots: root.defer_dirty_propagation = False
         self.defer_cleaning = False
 
     def debug_print(self):

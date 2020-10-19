@@ -258,8 +258,8 @@ def input_range(value=None, min_value=None, max_value=None, step_size=None, **kw
         ui_right.width_override = math.floor(W-m)
         ui_right._alignment_offset = Vec2D((math.ceil(m), 0))
         ui_handle._alignment_offset = Vec2D((math.floor(hl), 0))
-        ui_left.dirty('input range value changed', 'renderbuf')
-        ui_right.dirty('input range value changed', 'renderbuf')
+        ui_left.dirty(cause='input range value changed', properties='renderbuf')
+        ui_right.dirty(cause='input range value changed', properties='renderbuf')
 
     def handle_mousedown(e):
         if e.button[2] and state['grabbed']:
@@ -677,6 +677,7 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_gl
                         assert False, 'Unhandled inline markdown type "%s" ("%s") with "%s"' % (str(t), str(m), line)
                     para = para[m.end():]
 
+    if ui_mdown._document: ui_mdown._document.defer_cleaning = True
     with ui_mdown.defer_dirty('creating new children'):
         ui_mdown.clear_children()
         ui_mdown.scrollToTop(force=True)
@@ -687,36 +688,38 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_gl
             t,m = Markdown.match_line(para)
 
             if t is None:
-                p_element = ui_mdown.append_child(p())
+                p_element = p()
                 process_para(p_element, para)
+                ui_mdown.append_child(p_element)
 
             elif t in ['h1','h2','h3']:
                 hn = {'h1':h1, 'h2':h2, 'h3':h3}[t]
                 #hn(innerText=m.group('text'), parent=ui_mdown)
-                ui_hn = hn(parent=ui_mdown)
+                ui_hn = hn()
                 process_para(ui_hn, m.group('text'))
+                ui_mdown.append_child(ui_hn)
 
             elif t == 'ul':
-                ui_ul = UI_Element(tagName='ul', parent=ui_mdown)
-                ui_ul.defer_dirty_propagation = True
-                para = para[2:]
-                for litext in re.split(r'\n- ', para):
-                    ui_li = UI_Element(tagName='li', parent=ui_ul)
-                    UI_Element(tagName='img', classes='dot', src='radio.png', parent=ui_li)
-                    span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
-                    process_para(span_element, litext)
-                ui_ul.defer_dirty_propagation = False
+                ui_ul = UI_Element(tagName='ul')
+                with ui_ul.defer_dirty('creating ul children'):
+                    para = para[2:]
+                    for litext in re.split(r'\n- ', para):
+                        ui_li = UI_Element(tagName='li', parent=ui_ul)
+                        UI_Element(tagName='img', classes='dot', src='radio.png', parent=ui_li)
+                        span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
+                        process_para(span_element, litext)
+                ui_mdown.append_child(ui_ul)
 
             elif t == 'ol':
                 ui_ol = UI_Element(tagName='ol', parent=ui_mdown)
-                ui_ol.defer_dirty_propagation = True
-                para = para[2:]
-                for ili,litext in enumerate(re.split(r'\n\d+\. ', para)):
-                    ui_li = UI_Element(tagName='li', parent=ui_ol)
-                    UI_Element(tagName='span', classes='number', innerText='%d.'%(ili+1), parent=ui_li)
-                    span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
-                    process_para(span_element, litext)
-                ui_ol.defer_dirty_propagation = False
+                with ui_ol.defer_dirty('creating ol children'):
+                    para = para[2:]
+                    for ili,litext in enumerate(re.split(r'\n\d+\. ', para)):
+                        ui_li = UI_Element(tagName='li', parent=ui_ol)
+                        UI_Element(tagName='span', classes='number', innerText='%d.'%(ili+1), parent=ui_li)
+                        span_element = UI_Element(tagName='span', classes='text', parent=ui_li)
+                        process_para(span_element, litext)
+                ui_mdown.append_child(ui_ol)
 
             elif t == 'img':
                 style = m.group('style').strip() or None
@@ -734,20 +737,22 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_gl
                 align = data[1]
                 data = [split_row(row) for row in data[2:]]
                 rows,cols = len(data),len(data[0])
-                table_element = table(parent=ui_mdown)
-                if add_header:
-                    tr_element = tr(parent=table_element)
-                    for c in range(cols):
-                        th(innerText=header[c], parent=tr_element)
-                for r in range(rows):
-                    tr_element = tr(parent=table_element)
-                    for c in range(cols):
-                        td_element = td(parent=tr_element)
-                        process_para(td_element, data[r][c])
-                pass
+                table_element = table()
+                with table_element.defer_dirty('creating table children'):
+                    if add_header:
+                        tr_element = tr(parent=table_element)
+                        for c in range(cols):
+                            th(innerText=header[c], parent=tr_element)
+                    for r in range(rows):
+                        tr_element = tr(parent=table_element)
+                        for c in range(cols):
+                            td_element = td(parent=tr_element)
+                            process_para(td_element, data[r][c])
+                ui_mdown.append_child(table_element)
 
             else:
                 assert False, 'Unhandled markdown line type "%s" ("%s") with "%s"' % (str(t), str(m), para)
+    if ui_mdown._document: ui_mdown._document.defer_cleaning = False
 
 
 def markdown(mdown=None, mdown_path=None, preprocess_fn=None, f_globals=None, f_locals=None, **kwargs):
@@ -821,6 +826,7 @@ def framed_dialog(label=None, resizable=None, resizable_x=True, resizable_y=Fals
         original_size = None
         def resizing(e):
             nonlocal ui_dialog
+            if not e.mouse: return False
             dpi_mult = Globals.drawing.get_dpi_mult()
             l,t,w,h = ui_dialog.left_pixels, ui_dialog.top_pixels, ui_dialog.width_pixels, ui_dialog.height_pixels
             mt,mr,mb,ml = ui_dialog._get_style_trbl('margin', scale=dpi_mult)

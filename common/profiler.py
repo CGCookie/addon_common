@@ -201,6 +201,14 @@ class Profiler:
             Globals.debugger.print_exception()
             raise e
 
+    # def function_params(self, *args):
+    #     if not Profiler._enabled:
+    #         def nowrapper(fn):
+    #             return fn
+    #         return nowrapper
+        
+
+
     def function(self, fn):
         if not Profiler._enabled:
             return fn

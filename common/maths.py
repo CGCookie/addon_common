@@ -1564,37 +1564,37 @@ class Accel2D:
             self.max = Point2D((1, 1))
         self.size = self.max - self.min
 
-        with profiler.code('inserting verts'):
-            for (v, v2d) in zip(verts, self.v2Ds):
-                i, j = self.compute_ij(v2d)
-                self._put(i, j, v)
+        # inserting verts
+        for (v, v2d) in zip(verts, self.v2Ds):
+            i, j = self.compute_ij(v2d)
+            self._put(i, j, v)
 
-        with profiler.code('inserting edges'):
-            for e in edges:
-                v0, v1 = self.map_v_v2D[e.verts[0]], self.map_v_v2D[e.verts[1]]
-                ij0, ij1 = self.compute_ij(v0), self.compute_ij(v1)
-                mini, minj = min(ij0[0], ij1[0]), min(ij0[1], ij1[1])
-                maxi, maxj = max(ij0[0], ij1[0]), max(ij0[1], ij1[1])
-                for i in range(mini, maxi + 1):
-                    for j in range(minj, maxj + 1):
-                        self._put(i, j, e)
-                # v0,v1 = e.verts
-                # self._put_edge(e, self.map_v_v2D[v0], self.map_v_v2D[v1])
+        # inserting edges
+        for e in edges:
+            v0, v1 = self.map_v_v2D[e.verts[0]], self.map_v_v2D[e.verts[1]]
+            ij0, ij1 = self.compute_ij(v0), self.compute_ij(v1)
+            mini, minj = min(ij0[0], ij1[0]), min(ij0[1], ij1[1])
+            maxi, maxj = max(ij0[0], ij1[0]), max(ij0[1], ij1[1])
+            for i in range(mini, maxi + 1):
+                for j in range(minj, maxj + 1):
+                    self._put(i, j, e)
+            # v0,v1 = e.verts
+            # self._put_edge(e, self.map_v_v2D[v0], self.map_v_v2D[v1])
 
-        with profiler.code('inserting faces'):
-            for f in faces:
-                v2ds = [self.map_v_v2D[v] for v in f.verts]
-                if not v2ds:
-                    continue
-                ijs = list(map(self.compute_ij, v2ds))
-                mini, minj = min(i for (i, j) in ijs), min(j for (i, j) in ijs)
-                maxi, maxj = max(i for (i, j) in ijs), max(j for (i, j) in ijs)
-                for i in range(mini, maxi + 1):
-                    for j in range(minj, maxj + 1):
-                        self._put(i, j, f)
-                # v0 = v2ds[0]
-                # for v1,v2 in zip(v2ds[1:-1],v2ds[2:]):
-                #    self._put_face(f, v0, v1, v2)
+        # inserting faces
+        for f in faces:
+            v2ds = [self.map_v_v2D[v] for v in f.verts]
+            if not v2ds:
+                continue
+            ijs = list(map(self.compute_ij, v2ds))
+            mini, minj = min(i for (i, j) in ijs), min(j for (i, j) in ijs)
+            maxi, maxj = max(i for (i, j) in ijs), max(j for (i, j) in ijs)
+            for i in range(mini, maxi + 1):
+                for j in range(minj, maxj + 1):
+                    self._put(i, j, f)
+            # v0 = v2ds[0]
+            # for v1,v2 in zip(v2ds[1:-1],v2ds[2:]):
+            #    self._put_face(f, v0, v1, v2)
 
     @profiler.function
     def compute_ij(self, v2d):

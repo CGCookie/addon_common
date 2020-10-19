@@ -46,7 +46,6 @@ class FontManager:
         return int(dpi * ui_scale * pixel_size)
 
     @staticmethod
-    @profiler.function
     def load(val, load_callback=None):
         if val is None:
             fontid = FontManager._last_fontid

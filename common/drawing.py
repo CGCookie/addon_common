@@ -390,7 +390,6 @@ class Drawing:
 
         if fontsize: self.set_font_size(size_prev, fontid=fontid)
 
-    @profiler.function
     def text_draw2D_simple(self, text, pos:Point2D):
         l,t = round(pos[0]),round(pos[1])
         lb = self.line_base
@@ -1419,7 +1418,6 @@ class ScissorStack:
         return vw > 0 and vh > 0
 
     @staticmethod
-    @profiler.function
     def is_box_visible(l, t, w, h):
         if w <= 0 or h <= 0: return False
         vl, vt, vw, vh = ScissorStack.get_current_view()
