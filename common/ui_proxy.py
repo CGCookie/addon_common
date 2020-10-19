@@ -149,7 +149,7 @@ class UI_Proxy:
             print('%s<proxy>...</proxy>' % (sp))
             return
         already_printed.add(self)
-        print('%s<proxy>' % sp0)
+        print('%s<proxy label="%s">' % (sp0, self._proxy_label))
         print('%s<default>' % sp1)
         self._proxy_default_element.debug_print(d+2, already_printed)
         print('%s</default>' % sp1)

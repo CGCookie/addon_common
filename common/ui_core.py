@@ -1680,6 +1680,8 @@ class UI_Element_Debug:
             for c in self._children:
                 c.debug_print(d+1, already_printed)
             print(f'{sp}{tagc}')
+        elif self._innerText:
+            print(f'{sp}{tag}{self._innerText}{tagc}')
         else:
             print(f'{sp}{tagsc}')
 
@@ -1979,7 +1981,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
     @property
     def as_html(self):
-        info = ['id', 'classes', 'type', 'innerText', 'innerTextAsIs', 'value', 'title']
+        info = [
+            'id', 'classes', 'type',
+            # 'innerText', 'innerTextAsIs',
+            'href',
+            'value', 'title',
+        ]
         info = [(k, getattr(self, k)) for k in info if hasattr(self, k)]
         info = [f'{k}="{v}"' for k,v in info if v]
         if self.is_dirty: info += ['dirty']
