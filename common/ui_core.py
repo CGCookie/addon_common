@@ -78,6 +78,8 @@ DEBUG_COLOR_CLEAN = False
 DEBUG_PROPERTY = 'style'     # selector, style, content, size, layout, blocks
 DEBUG_COLOR    = 1              # 0:time since change, 1:time of change
 
+DEBUG_LIST      = False
+
 CACHE_METHOD = 2                # 0:none, 1:only root, 2:hierarchical, 3:text leaves
 
 
@@ -723,7 +725,8 @@ class UI_Element_Properties:
         self._children.append(child)
         child._parent = self
         child.document = self.document
-        self.dirty(cause='appending children', children=True)
+        child.dirty(cause='appending children', parent=False)
+        self.dirty_content(cause='appending children', children=False, parent=False)
         self._new_content = True
         return child
     def append_child(self, child): return self._append_child(child)
@@ -807,7 +810,7 @@ class UI_Element_Properties:
         self._id = nid
         self.dirty_selector(cause=f'changing id for {self} affects selector', children=True)
         # self.dirty(f'changing id for {self} affects parent content', 'content', parent=True, children=False)
-        self.add_dirty_callback_to_parent(['selector', 'id'])
+        self.add_dirty_callback_to_parent('selector')
 
     @property
     def forId(self):
@@ -977,6 +980,7 @@ class UI_Element_Properties:
             tag_redraw_all("UI_Element reposition")
             self.dirty_renderbuf(cause='repositioning', parent=True)
             self.dirty_flow()
+            if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} repositioned')
 
     @property
     def left(self):
@@ -1241,6 +1245,8 @@ class UI_Element_Properties:
         if self._is_visible == v: return
         self._is_visible = v
         # self.dirty('changing visibility can affect everything', parent=True, children=True)
+        self.dirty(cause='visibility changed')
+        self.dirty_flow()
         self.dirty_renderbuf(cause='changing visibility can affect everything')
 
     # self.get_is_visible() is same as self.is_visible() except it doesn't check parent
@@ -1435,6 +1441,9 @@ class UI_Element_Dirtiness:
     def dirty_selector(self, **kwargs):
         self._dirty(properties={'selector'}, **kwargs)
     @profiler.function
+    def dirty_style_parent(self, **kwargs):
+        self._dirty(properties={'style parent'}, **kwargs)
+    @profiler.function
     def dirty_style(self, **kwargs):
         self._dirty(properties={'style'}, **kwargs)
     @profiler.function
@@ -1451,6 +1460,7 @@ class UI_Element_Dirtiness:
         self._dirty(properties={'renderbuf'}, **kwargs)
 
     def _dirty(self, *, cause=None, properties=None, parent=False, children=False, propagate_up=True):
+        # assert cause
         if cause is None: cause = 'Unspecified cause'
         if properties is None: properties = set(UI_Element_Utils._cleaning_graph_nodes)
         elif type(properties) is str:  properties = {properties}
@@ -1507,15 +1517,12 @@ class UI_Element_Dirtiness:
 
     @profiler.function
     def dirty_flow(self, parent=True, children=True):
-        if self._dirtying_flow: return
-        parent &= self._parent is not None and not self._do_not_dirty_parent
-        children |= self._computed_styles.get('display', 'block') == 'table'
-        self._dirtying_flow = True
-        if parent and self._parent:
-            self._parent.dirty_flow(parent=True, children=False)
-        if children:
-            for child in self._children_all:
-                child.dirty_flow(parent=False, children=True)
+        if self._dirtying_flow and self._dirtying_children_flow: return
+        if not self._dirtying_flow:
+            if parent and self._parent and not self._do_not_dirty_parent:
+                self._parent.dirty_flow(children=False)
+            self._dirtying_flow = True
+        self._dirtying_children_flow |= self._computed_styles.get('display', 'block') == 'table'
         tag_redraw_all("UI_Element dirty_flow")
 
     @property
@@ -1533,7 +1540,7 @@ class UI_Element_Dirtiness:
 
         if self._dirty_propagation['parent']:
             if self._parent and not self._do_not_dirty_parent:
-                cause = ' -> '.join('%s'%cause for cause in (self._dirty_causes+[
+                cause = ' -> '.join(f'{cause}' for cause in (self._dirty_causes+[
                     f"\"propagating dirtiness ({self._dirty_propagation['parent']} from {self} to parent {self._parent}\""
                 ]))
                 self._parent.dirty(
@@ -1557,7 +1564,7 @@ class UI_Element_Dirtiness:
         # no need to dirty ::before, ::after, or text, because they will be reconstructed
         for child in self._children:
             child.dirty(
-                cause='',
+                cause=f'propagating {self._dirty_propagation["children"]}',
                 properties=self._dirty_propagation['children'],
                 parent=False,
                 children=True,
@@ -1612,6 +1619,7 @@ class UI_Element_Dirtiness:
         self._was_dirty = True   # used to know if postclean should get called
 
         profiler.add_note(f'pre: {self._dirty_properties}, {self._dirty_causes} {self._dirty_propagation}')
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} clean')
 
         # propagate dirtiness one level down
         self.propagate_dirtiness_down()
@@ -1630,6 +1638,8 @@ class UI_Element_Dirtiness:
            child.clean(depth=depth+1)
 
         profiler.add_note(f'post: {self._dirty_properties}, {self._dirty_causes} {self._dirty_propagation}')
+
+        # self._debug_list.clear()
 
 
     @profiler.function
@@ -1732,6 +1742,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._uid           = UI_Element.get_uid()
         self._document      = None
 
+        # DEBUG
+        self._debug_list       = []
+
         # attribs
         self._type            = None
         self._value           = None
@@ -1789,6 +1802,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._tablecell_pos        = None       # overriding position if table-cell
         self._tablecell_size       = None       # overriding size if table-cell
         self._all_lines            = None       # all children elements broken up into lines (for horizontal alignment)
+        self._blocks               = None
+        self._children_text_min_size = None
 
         self._left_override = None
         self._top_override = None
@@ -1843,6 +1858,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self._children_all_sorted = []  # all children sorted by z-index
         self._innerTextWrapped = None   # <--- no longer needed?
         self._selector         = None   # full selector of self, built in compute_style()
+        self._selector_last    = None   # last full selector of self, updated in compute_style()
         self._selector_before  = None   # full selector of ::before pseudoelement for self
         self._selector_after   = None   # full selector of ::after pseudoelement for self
         self._styling_trimmed  = None
@@ -1867,6 +1883,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         # used to inform parent and children to recompute
         self._dirty_properties = {              # set of dirty properties, add through self.dirty to force propagation of dirtiness
             'style',                            # force recalculations of style
+            'style parent',                     # force recalculations of style if parent selector changes
             'content',                          # content of self has changed
             'blocks',                           # children are grouped into blocks
             'size',                             # force recalculations of size
@@ -1874,6 +1891,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         }
         self._new_content = True
         self._dirtying_flow = True
+        self._dirtying_children_flow = True
         self._dirty_causes = []
         self._dirty_callbacks = { k:set() for k in UI_Element_Utils._cleaning_graph_nodes }
         self._dirty_propagation = {             # contains deferred dirty propagation for parent and children; parent will be dirtied later
@@ -2034,12 +2052,18 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             return False
         styling_trimmed = UI_Styling.trim_styling(selector, ui_defaultstylings, ui_draw.stylesheet)
 
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} selector: {" ".join(selector)}')
+
+        self._last_selector = selector
         self._selector = selector
         self._selector_before = selector_before
         self._selector_after = selector_after
         self._styling_trimmed = styling_trimmed
         self._style_trbl_cache = {}
-        self.dirty_style(cause='changing selector dirties style')
+        if self._last_selector and self._last_selector[-1] == self._selector[-1]:
+            self.dirty_style_parent(cause='changing parent selector (possibly) dirties style')
+        else:
+            self.dirty_style(cause='changing selector dirties style')
         return True
 
 
@@ -2071,6 +2095,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
 
     @UI_Element_Utils.add_cleaning_callback('style', {'size', 'content', 'renderbuf'})
+    @UI_Element_Utils.add_cleaning_callback('style parent', {'size', 'content', 'renderbuf'})
     @profiler.function
     def _compute_style(self):
         '''
@@ -2081,15 +2106,22 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         '''
 
         if self.defer_clean: return
-        if 'style' not in self._dirty_properties:
+
+        if not any(p in self._dirty_properties for p in ['style', 'style parent']):
             self.defer_clean = True
             with profiler.code('style.calling back callbacks'):
                 for e in self._dirty_callbacks.get('style', []):
                     # print(self,'->', e)
                     e._compute_style()
+                for e in self._dirty_callbacks.get('style parent', []):
+                    # print(self,'->', e)
+                    e._compute_style()
                 self._dirty_callbacks['style'].clear()
+                self._dirty_callbacks['style parent'].clear()
             self.defer_clean = False
             return
+
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} style')
 
         self._draw_dirty_style += 1
         self._clean_debugging['style'] = time.time()
@@ -2203,9 +2235,12 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self._computed_styles_after.get('content',  None) if self._computed_styles_after  else None,
             )
             if style_content_hash != getattr(self, '_style_content_hash', None):
-                self.dirty(cause='style change might have changed content (::before / ::after)', properties='content')
-                self.dirty(cause='style change might have changed content (::before / ::after)', properties='renderbuf')
+                self.dirty_content(cause='style change might have changed content (::before / ::after)')
+                self.dirty_renderbuf(cause='style change might have changed content (::before / ::after)')
+                # self.dirty(cause='style change might have changed content (::before / ::after)', properties='content')
+                # self.dirty(cause='style change might have changed content (::before / ::after)', properties='renderbuf')
                 self.dirty_flow()
+                if DEBUG_LIST: self._debug_list.append(f'    possible content change')
                 # self._innerTextWrapped = None
                 self._style_content_hash = style_content_hash
 
@@ -2224,6 +2259,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self.dirty_size(cause='style change might have changed size')
                 self.dirty_renderbuf(cause='style change might have changed size')
                 self.dirty_flow()
+                if DEBUG_LIST: self._debug_list.append(f'    possible size change')
                 # self._innerTextWrapped = None
                 self._style_size_hash = style_size_hash
 
@@ -2238,7 +2274,9 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self._style_render_hash = style_render_hash
 
         self._dirty_properties.discard('style')
+        self._dirty_properties.discard('style parent')
         self._dirty_callbacks['style'].clear()
+        self._dirty_callbacks['style parent'].clear()
 
         # self.defer_dirty_propagation = False
 
@@ -2259,6 +2297,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             return
 
         self._clean_debugging['content'] = time.time()
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} content')
 
         # self.defer_dirty_propagation = True
 
@@ -2398,6 +2437,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             self.dirty_blocks(cause='content changes might have affected blocks')
             self.dirty_renderbuf(cause='content changes might have affected blocks')
             self.dirty_flow()
+            if DEBUG_LIST: self._debug_list.append(f'    possible new content')
             self._new_content = False
         self._dirty_properties.discard('content')
         self._dirty_callbacks['content'].clear()
@@ -2425,35 +2465,51 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             return
 
         self._clean_debugging['blocks'] = time.time()
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} blocks')
 
         # self.defer_dirty_propagation = True
 
+        for child in self._children_all:
+            child._compute_blocks()
+
+        blocks = self._blocks
         if self._computed_styles.get('display', 'inline') == 'flexbox':
             # all children are treated as flex blocks, regardless of their display
             pass
         else:
             # collect children into blocks
-            self._blocks = []
+            blocks = []
             blocked_inlines = False
             for child in self._children_all:
                 d = child._computed_styles.get('display', 'inline')
                 if d in {'inline', 'table-cell'}:
                     if not blocked_inlines:
                         blocked_inlines = True
-                        self._blocks.append([child])
+                        blocks.append([child])
                     else:
-                        self._blocks[-1].append(child)
+                        blocks[-1].append(child)
                 else:
                     blocked_inlines = False
-                    self._blocks.append([child])
+                    blocks.append([child])
 
-        for child in self._children_all:
-            child._compute_blocks()
+        def same(ll0, ll1):
+            if ll0 == None or ll1 == None: return ll0 == ll1
+            if len(ll0) != len(ll1): return False
+            for i in range(len(ll0)):
+                l0, l1 = ll0[i], ll1[i]
+                if len(l0) != len(l1): return False
+                for j in range(len(l0)):
+                    if l0[j] != l1[j]: return False
+            return True
 
-        # content changes might have changed size
-        self.dirty_size(cause='block changes might have changed size')
-        self.dirty_renderbuf(cause='block changes might have changed size')
-        self.dirty_flow()
+        if not same(blocks, self._blocks):
+            # content changes might have changed size
+            self._blocks = blocks
+            self.dirty_size(cause='block changes might have changed size')
+            self.dirty_renderbuf(cause='block changes might have changed size')
+            self.dirty_flow()
+            if DEBUG_LIST: self._debug_list.append(f'    reflowing')
+
         self._dirty_properties.discard('blocks')
         self._dirty_callbacks['blocks'].clear()
 
@@ -2478,6 +2534,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         # if self.record_multicall('_compute_static_content_size'): return
 
         self._clean_debugging['size'] = time.time()
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} static content size')
 
         # self.defer_dirty_propagation = True
 
@@ -2485,7 +2542,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             for child in self._children_all:
                 child._compute_static_content_size()
 
-        self._static_content_size = None
+        static_content_size = self._static_content_size
 
         # set size based on content (computed size)
         if self._innerTextAsIs is not None:
@@ -2500,28 +2557,31 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 # subtract 1/4 width of space to make text look a little nicer
                 subw = (Globals.drawing.get_text_width(' ') * 0.25) if self._innerTextAsIs and self._innerTextAsIs[-1] == ' ' else 0
 
-                self._static_content_size = Size2D()
-                self._static_content_size.set_all_widths(ceil(Globals.drawing.get_text_width(self._innerTextAsIs) - subw) + abs(tsx))
-                self._static_content_size.set_all_heights(ceil(Globals.drawing.get_line_height(self._innerTextAsIs)) + abs(tsy))
+                static_content_size = Size2D()
+                static_content_size.set_all_widths(ceil(Globals.drawing.get_text_width(self._innerTextAsIs) - subw) + abs(tsx))
+                static_content_size.set_all_heights(ceil(Globals.drawing.get_line_height(self._innerTextAsIs)) + abs(tsy))
                 Globals.drawing.set_font_size(size_prev, fontid=self._parent._fontid) #, force=True)
-                #print(f'"{self._innerTextAsIs}": {self._static_content_size.width} x {self._static_content_size.height}')
+                #print(f'"{self._innerTextAsIs}": {static_content_size.width} x {static_content_size.height}')
 
         elif self._src == 'image':
             with profiler.code('computing image sizes'):
                 # TODO: set to image size?
                 dpi_mult = Globals.drawing.get_dpi_mult()
-                self._static_content_size = Size2D()
-                self._static_content_size.set_all_widths(self._image_data['width'] * dpi_mult)
-                self._static_content_size.set_all_heights(self._image_data['height'] * dpi_mult)
+                static_content_size = Size2D()
+                static_content_size.set_all_widths(self._image_data['width'] * dpi_mult)
+                static_content_size.set_all_heights(self._image_data['height'] * dpi_mult)
 
         else:
-            pass
+            static_content_size = None
 
-        self.dirty_renderbuf(cause='static content changes might change render')
-        self._dirty_properties.discard('size')
-        self.dirty_flow()
-        self._dirty_callbacks['size'].clear()
+        if static_content_size != self._static_content_size:
+            self._static_content_size = static_content_size
+            self.dirty_renderbuf(cause='static content changes might change render')
+            self.dirty_flow()
+            if DEBUG_LIST: self._debug_list.append(f'    reflowing')
         # self.defer_dirty_propagation = False
+        self._dirty_properties.discard('size')
+        self._dirty_callbacks['size'].clear()
 
     @UI_Element_Utils.add_cleaning_callback('renderbuf')
     def _renderbuf(self):
@@ -2570,6 +2630,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         nonstatic_elem = kwargs['nonstatic_elem']   # last non-static element
         document_elem  = kwargs['document_elem']    # whole document element (root)
         table_data     = kwargs['table_data']       # data structure for current table (could be empty)
+        first_run      = kwargs['first_run']
 
         table_elem     = table_data.get('element', None)    # parent table element
         table_index2D  = table_data.get('index2D', None)    # current position in table (i=row,j=col)
@@ -2590,8 +2651,16 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
         self.update_position()
 
-        if not self._dirtying_flow:
+        if not self._dirtying_flow and not self._dirtying_children_flow and not table_data:
             return
+
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} layout self={self._dirtying_flow} children={self._dirtying_children_flow} first_run={first_run}')
+
+        if self._dirtying_children_flow:
+            for child in self._children_all:
+                child.dirty_flow(parent=False)
+            if DEBUG_LIST: self._debug_list.append(f'    reflowing children')
+            self._dirtying_children_flow = False
 
         self._all_lines = None
 
@@ -2676,7 +2745,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 if inside_size.height     is not None:                                 scale_dw_dh(inside_size.height,     dh)
                 if inside_size.min_height is not None and dw < inside_size.min_height: scale_dw_dh(inside_size.min_height, dh)
 
-        else:
+        elif self._blocks:
             # self has no static content, so flow and size is determined from children
             # note: will keep track of accumulated size and possibly update inside size as needed
             # note: style size overrides passed fitting size
@@ -2725,6 +2794,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             nonstatic_elem=next_nonstatic_elem,
                             document_elem=document_elem,
                             table_data=table_data,
+                            first_run=first_run,
                         )
                         w = math.ceil(element._dynamic_full_size.width)
                         h = math.ceil(element._dynamic_full_size.height)
@@ -2751,7 +2821,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             accum_height += line_height
                             accum_width = max(accum_width, line_width)
                             cur_line = None
-                            element.dirty_flow(parent=False, children=True)
+                            element.dirty_flow(parent=False, children=False)
                 if cur_line:
                     all_lines.append((cur_line, line_width))
                     accum_height += line_height
@@ -2759,6 +2829,10 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             self._all_lines = all_lines
             dw = accum_width
             dh = accum_height
+
+        else:
+            dw = 0
+            dh = 0
 
         # possibly override with text size
         if self._children_text_min_size:
@@ -2818,6 +2892,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self.update_position()
 
         self._dirtying_flow = False
+        self._dirtying_children_flow = False
 
     @profiler.function
     def update_position(self):

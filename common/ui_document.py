@@ -409,6 +409,12 @@ class UI_Document(UI_Document_FSM):
                 self._scroll_element.scrollTop = self._scroll_last.y + move
                 self._scroll_element._setup_ltwh(recurse_children=False)
 
+        if self.actions.pressed('F9') and self._under_mouse:
+            print(self._under_mouse)
+            print(self._under_mouse._dirty_causes)
+            for s in self._under_mouse._debug_list:
+                print(f'    {s}')
+
         if self._under_mouse and self.actions.just_pressed:
             pressed = self.actions.just_pressed
             # self.actions.unpress()
@@ -628,12 +634,12 @@ class UI_Document(UI_Document_FSM):
         for o in self._callbacks['preclean']: o._call_preclean()
         self._body.clean()
         for o in self._callbacks['postclean']: o._call_postclean()
-        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
+        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={}, first_run=True)
         self._body.set_view_size(sz)
         for o in self._callbacks['postflow']: o._call_postflow()
 
         # UI_Element_PreventMultiCalls.reset_multicalls()
-        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={})
+        self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={}, first_run=False)
         self._body.set_view_size(sz)
         if self._reposition_tooltip_before_draw:
             self._reposition_tooltip_before_draw = False

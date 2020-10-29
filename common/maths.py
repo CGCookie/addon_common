@@ -1207,6 +1207,16 @@ class Size2D:
     def __repr__(self):
         return self.__str__()
 
+    def __eq__(self, other):
+        if type(other) is not Size2D: return False
+        if self._width != other._width: return False
+        if self._min_width != other._min_width: return False
+        if self._max_width != other._max_width: return False
+        if self._height != other._height: return False
+        if self._min_height != other._min_height: return False
+        if self._max_height != other._max_height: return False
+        return True
+
     def clone(self):
         return Size2D(
             width=self._width,   min_width=self._min_width,   max_width=self._max_width,
