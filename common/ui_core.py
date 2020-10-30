@@ -620,7 +620,9 @@ class UI_Element_Properties:
     def innerText(self, nText):
         if self._innerText == nText: return
         self._innerText = nText
-        self.dirty(cause='changing innerText makes dirty', children=True)
+        # self.dirty(cause='changing innerText makes dirty', children=True)
+        self.dirty_content(cause='changing innerText')
+        self.dirty_size(cause='changing innerText')
         #self.dirty('changing innerText changes content', 'content', children=True)
         #self.dirty('changing innerText changes size', 'size', children=True)
         self._new_content = True
@@ -634,7 +636,10 @@ class UI_Element_Properties:
         v = str(v) if v is not None else None
         if self._innerTextAsIs == v: return
         self._innerTextAsIs = v
-        self.dirty(cause='changing innerTextAsIs makes dirty', properties={'content', 'size'})
+        # self.dirty(cause='changing innerTextAsIs makes dirty', properties={'content', 'size'})
+        self.dirty_content(cause='changing innerText')
+        self.dirty_size(cause='changing innerText')
+        self.dirty_flow()
 
     @property
     def parent(self):
