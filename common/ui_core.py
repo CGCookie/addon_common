@@ -732,6 +732,7 @@ class UI_Element_Properties:
         child.document = self.document
         child.dirty(cause='appending children', parent=False)
         self.dirty_content(cause='appending children', children=False, parent=False)
+        self.dirty_flow()
         self._new_content = True
         return child
     def append_child(self, child): return self._append_child(child)
@@ -982,7 +983,7 @@ class UI_Element_Properties:
             self._style_top  = top
             self._absolute_pos = None
             self.update_position()
-            tag_redraw_all("UI_Element reposition")
+            # tag_redraw_all("UI_Element reposition")
             self.dirty_renderbuf(cause='repositioning', parent=True)
             self.dirty_flow()
             if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} repositioned')
@@ -1624,7 +1625,7 @@ class UI_Element_Dirtiness:
         self._was_dirty = True   # used to know if postclean should get called
 
         profiler.add_note(f'pre: {self._dirty_properties}, {self._dirty_causes} {self._dirty_propagation}')
-        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} clean')
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} clean started defer={self.defer_clean}')
 
         # propagate dirtiness one level down
         self.propagate_dirtiness_down()
@@ -1643,6 +1644,7 @@ class UI_Element_Dirtiness:
            child.clean(depth=depth+1)
 
         profiler.add_note(f'post: {self._dirty_properties}, {self._dirty_causes} {self._dirty_propagation}')
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} clean done')
 
         # self._debug_list.clear()
 
@@ -2112,7 +2114,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
 
         if self.defer_clean: return
 
-        if not any(p in self._dirty_properties for p in ['style', 'style parent']):
+        if all(p not in self._dirty_properties for p in ['style', 'style parent']):
             self.defer_clean = True
             with profiler.code('style.calling back callbacks'):
                 for e in self._dirty_callbacks.get('style', []):
@@ -2335,6 +2337,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         if self._innerText is not None:
             # TODO: cache this!!
             textwrap_opts = {
+                'dpi':               Globals.drawing.get_dpi_mult(),
                 'text':              self._innerText,
                 'fontid':            self._fontid,
                 'fontsize':          self._fontsize,
@@ -2659,7 +2662,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         if not self._dirtying_flow and not self._dirtying_children_flow and not table_data:
             return
 
-        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} layout self={self._dirtying_flow} children={self._dirtying_children_flow} first_run={first_run}')
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} layout self={self._dirtying_flow} children={self._dirtying_children_flow} first_run={first_run} fitting_size={fitting_size}')
 
         if self._dirtying_children_flow:
             for child in self._children_all:
@@ -2763,36 +2766,28 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 table_cells = {}
                 table_data = { 'elem': table_elem, 'index2D': table_index2D, 'cells': table_cells }
 
-            all_lines = []
-            accum_width  = 0    # max width for all lines
-            accum_height = 0    # sum heights for all lines
+            working_width = (inside_size.width  if inside_size.width  is not None else (inside_size.max_width  if inside_size.max_width  is not None else float('inf')))
+            working_height = (inside_size.height if inside_size.height is not None else (inside_size.max_height if inside_size.max_height is not None else float('inf')))
+            if overflow_y in {'scroll', 'auto'}: working_height = float('inf')
+
+            accum_lines, accum_width, accum_height = [], 0, 0
+            # accum_width: max width for all lines;  accum_height: sum heights for all lines
+            cur_line, cur_width, cur_height = [], 0, 0
             for block in self._blocks:
                 # each block might be wrapped onto multiple lines
-                cur_line = None
+                cur_line, cur_width, cur_height = [], 0, 0
                 for element in block:
                     if not element.is_visible: continue
                     position = element._computed_styles.get('position', 'static')
                     c = position not in {'absolute', 'fixed'}
                     sx = element._computed_styles.get('overflow-x', 'visible')
                     sy = element._computed_styles.get('overflow-y', 'visible')
-                    processed = False
-                    while not processed:
-                        if cur_line is None:
-                            cur_line = []
-                            line_width = 0
-                            line_height = 0
-                            first_child = True
-                        else:
-                            first_child = False
-                        rw = (inside_size.width  if inside_size.width  is not None else (inside_size.max_width  if inside_size.max_width  is not None else float('inf'))) - line_width
-                        rh = (inside_size.height if inside_size.height is not None else (inside_size.max_height if inside_size.max_height is not None else float('inf'))) - accum_height
-                        # rw = float('inf') if inside_size.max_width  is None else (inside_size.max_width  - line_width)
-                        # rh = float('inf') if inside_size.max_height is None else (inside_size.max_height - accum_height)
-                        if overflow_y in {'scroll','auto'}: rh = float('inf')
+                    while True:
+                        rw, rh = working_width - cur_width, working_height - accum_height
                         remaining = Size2D(max_width=rw, max_height=rh)
-                        pos = Point2D((mbp_left + line_width, -(mbp_top + accum_height)))
+                        pos = Point2D((mbp_left + cur_width, -(mbp_top + accum_height)))
                         element._layout(
-                            first_on_line=first_child,
+                            first_on_line=(not cur_line),
                             fitting_size=remaining,
                             fitting_pos=pos,
                             parent_size=inside_size,
@@ -2801,14 +2796,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             table_data=table_data,
                             first_run=first_run,
                         )
-                        w = math.ceil(element._dynamic_full_size.width)
-                        h = math.ceil(element._dynamic_full_size.height)
-                        is_good = False
-                        is_good |= first_child                  # always add child to an empty line
-                        is_good |= c and w<=rw and h<=rh        # child fits on current line
-                        is_good |= not c                        # child does not contribute to our size
-                        is_good |= self._innerText is not None and self._whitespace in {'nowrap', 'pre'}
-                        if is_good:
+                        w, h = math.ceil(element._dynamic_full_size.width), math.ceil(element._dynamic_full_size.height)
+                        element_fits = False
+                        element_fits |= not cur_line                 # always add child to an empty line
+                        element_fits |= c and w<=rw and h<=rh        # child fits on current line
+                        element_fits |= not c                        # child does not contribute to our size
+                        element_fits |= self._innerText is not None and self._whitespace in {'nowrap', 'pre'}
+                        if element_fits:
                             if c: cur_line.append(element)
                             # clamp width and height only if scrolling (respectively)
                             if sx == 'scroll': w = remaining.clamp_width(w)
@@ -2817,21 +2811,21 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                             sz = Size2D(width=w, height=h)
                             element.set_view_size(sz)
                             if position != 'fixed':
-                                line_width += w
-                                line_height = max(line_height, h)
-                            processed = True
+                                cur_width += w
+                                cur_height = max(cur_height, h)
+                            break # done processing current element
                         else:
                             # element does not fit!  finish of current line, then reprocess current element
-                            all_lines.append((cur_line, line_width))
-                            accum_height += line_height
-                            accum_width = max(accum_width, line_width)
-                            cur_line = None
-                            element.dirty_flow(parent=False, children=False)
+                            accum_lines.append((cur_line, cur_width, cur_height))
+                            accum_height += cur_height
+                            accum_width = max(accum_width, cur_width)
+                            cur_line, cur_width, cur_height = [], 0, 0
+                            element.dirty_flow(parent=False, children=True)
                 if cur_line:
-                    all_lines.append((cur_line, line_width))
-                    accum_height += line_height
-                    accum_width = max(accum_width, line_width)
-            self._all_lines = all_lines
+                    accum_lines.append((cur_line, cur_width, cur_height))
+                    accum_height += cur_height
+                    accum_width = max(accum_width, cur_width)
+            self._all_lines = accum_lines
             dw = accum_width
             dh = accum_height
 
@@ -2977,11 +2971,13 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
         self.scrollLeft = self.scrollLeft
         self.scrollTop = self.scrollTop
 
+        if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} set_view_size({size})')
+
         if self._all_lines:
             w = size.width - self._mbp_width
             nlines = len(self._all_lines)
             align = self._computed_styles.get("text-align", "left")
-            for i_line, (line, line_width) in enumerate(self._all_lines):
+            for i_line, (line, line_width, line_height) in enumerate(self._all_lines):
                 if i_line == nlines - 1:
                     # override justify text alignment, unless CSS explicitly specifies
                     align = self._computed_styles.get("text-align-last", 'left' if align == 'justify' else align)

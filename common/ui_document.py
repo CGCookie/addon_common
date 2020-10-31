@@ -124,6 +124,7 @@ class UI_Document(UI_Document_FSM):
             'preclean':  set(),
             'postclean': set(),
             'postflow':  set(),
+            'postflow once': set(),
         }
         self.defer_cleaning = False
 
@@ -175,12 +176,17 @@ class UI_Document(UI_Document_FSM):
         return self._focus
 
     def center_on_mouse(self, element):
+        # centers element under mouse, must be done between first and second layout calls
         if element is None: return
-        element._relative_pos = None
-        mx,my = self.actions.mouse
-        w = element.width_pixels
-        h = element.height_pixels
-        element.reposition(left=mx-w/2, top=-self._body.height_pixels + my + h/2)
+        def center():
+            element._relative_pos = None
+            mx,my = self.actions.mouse
+            # w,h = element.width_pixels,element.height_pixels
+            w,h = element.width_pixels,element._dynamic_full_size.height
+            l = mx-w/2
+            t = -self._body.height_pixels + my + h/2
+            element.reposition(left=l, top=t)
+        self._callbacks['postflow once'].add(center)
 
     def _reposition_tooltip(self, force=False):
         if self._tooltip_mouse == self.actions.mouse and not force: return
@@ -204,7 +210,7 @@ class UI_Document(UI_Document_FSM):
     @profiler.function
     def update(self, context, event):
         if context.area != self._area: return
-        self._ui_scale = Globals.drawing.get_dpi_mult()
+        # self._ui_scale = Globals.drawing.get_dpi_mult()
 
         UI_Element_PreventMultiCalls.reset_multicalls()
 
@@ -402,7 +408,7 @@ class UI_Document(UI_Document_FSM):
             if self.actions.event_type == 'TRACKPADPAN':
                 move = self.actions.mouse.y - self.actions.mouse_prev.y
             else:
-                d = self.wheel_scroll_lines * 8
+                d = self.wheel_scroll_lines * 8 * Globals.drawing.get_dpi_mult()
                 move = Globals.drawing.scale(d) * (-1 if self.actions.pressed({'scroll up'}) else 1)
             self.actions.unpress()
             if self._get_scrollable():
@@ -410,10 +416,12 @@ class UI_Document(UI_Document_FSM):
                 self._scroll_element._setup_ltwh(recurse_children=False)
 
         if self.actions.pressed('F9') and self._under_mouse:
-            print(self._under_mouse)
-            print(self._under_mouse._dirty_causes)
-            for s in self._under_mouse._debug_list:
-                print(f'    {s}')
+            print('\n\n')
+            for e in self._under_mouse.get_pathFromRoot():
+                print(e)
+                print(e._dirty_causes)
+                for s in e._debug_list:
+                    print(f'    {s}')
 
         if self._under_mouse and self.actions.just_pressed:
             pressed = self.actions.just_pressed
@@ -621,10 +629,11 @@ class UI_Document(UI_Document_FSM):
 
         Globals.ui_draw.update()
         if Globals.drawing.get_dpi_mult() != self._ui_scale:
+            print(f'DPI CHANGED: {self._ui_scale} -> {Globals.drawing.get_dpi_mult()}')
             self._ui_scale = Globals.drawing.get_dpi_mult()
-            self._body.dirty('DPI changed', children=True)
+            self._body.dirty(cause='DPI changed', children=True)
             self._body.dirty_styling()
-            self._body.dirty_flow()
+            self._body.dirty_flow(children=True)
         if (w,h) != self._last_sz:
             self._last_sz = (w,h)
             self._body.dirty_flow()
@@ -637,6 +646,8 @@ class UI_Document(UI_Document_FSM):
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={}, first_run=True)
         self._body.set_view_size(sz)
         for o in self._callbacks['postflow']: o._call_postflow()
+        for fn in self._callbacks['postflow once']: fn()
+        self._callbacks['postflow once'].clear()
 
         # UI_Element_PreventMultiCalls.reset_multicalls()
         self._body._layout(first_on_line=True, fitting_size=sz, fitting_pos=Point2D((0,h-1)), parent_size=sz, nonstatic_elem=None, document_elem=self._body, table_data={}, first_run=False)
