@@ -2081,6 +2081,18 @@ def mid(v0, v1, v2):
     return v1
 
 
+def intersection2d_line_line(p0, p1, p2, p3):
+    x0,y0 = p0
+    x1,y1 = p1
+    x2,y2 = p2
+    x3,y3 = p3
+    tn = (x0 - x2) * (y2 - y3) - (y0 - y2) * (x2 - x3)
+    td = (x0 - x1) * (y2 - y3) - (y0 - y1) * (x2 - x3)
+    if td == 0: return None
+    t = tn / td
+    return (x0 + t * (x1 - x0), y0 + t * (y1 - y0))
+
+
 if __name__ == '__main__':
     # run tests
     p0 = Point((1, 2, 3))
