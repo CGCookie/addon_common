@@ -415,13 +415,13 @@ class UI_Document(UI_Document_FSM):
                 self._scroll_element.scrollTop = self._scroll_last.y + move
                 self._scroll_element._setup_ltwh(recurse_children=False)
 
-        if self.actions.pressed('F9') and self._under_mouse:
-            print('\n\n')
-            for e in self._under_mouse.get_pathFromRoot():
-                print(e)
-                print(e._dirty_causes)
-                for s in e._debug_list:
-                    print(f'    {s}')
+        # if self.actions.pressed('F8') and self._under_mouse:
+        #     print('\n\n')
+        #     for e in self._under_mouse.get_pathFromRoot():
+        #         print(e)
+        #         print(e._dirty_causes)
+        #         for s in e._debug_list:
+        #             print(f'    {s}')
 
         if self._under_mouse and self.actions.just_pressed:
             pressed = self.actions.just_pressed

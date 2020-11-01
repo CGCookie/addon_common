@@ -277,8 +277,8 @@ class RelPoint2D(Vector, Entity2D):
             y += p.y
             c += 1
         if c == 0:
-            return Point2D((0, 0))
-        return Point2D((x / c, y / c))
+            return RelPoint2D((0, 0))
+        return RelPoint2D((x / c, y / c))
 
     @staticmethod
     def weighted_average(weight_points):
@@ -288,8 +288,8 @@ class RelPoint2D(Vector, Entity2D):
             y += p.y * w
             c += w
         if c == 0:
-            return Point2D((0, 0))
-        return Point2D((x / c, y / c))
+            return RelPoint2D((0, 0))
+        return RelPoint2D((x / c, y / c))
 RelPoint2D.ZERO = RelPoint2D((0,0))
 
 
@@ -2082,6 +2082,7 @@ def mid(v0, v1, v2):
 
 
 def intersection2d_line_line(p0, p1, p2, p3):
+    # https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
     x0,y0 = p0
     x1,y1 = p1
     x2,y2 = p2
