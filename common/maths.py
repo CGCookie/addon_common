@@ -20,6 +20,7 @@ Created by Jonathan Denning, Jonathan Williamson
 '''
 
 from math import sqrt, acos, cos, sin
+import re
 from typing import List
 
 import bgl
@@ -1807,6 +1808,20 @@ class NumberUnit:
 
 NumberUnit.zero = NumberUnit(0, 'px')
 
+
+
+multipliers = {
+    'k': 1_000,
+    'm': 1_000_000,
+    'b': 1_000_000_000,
+}
+def convert_numstr_num(numstr):
+    if type(numstr) is not str: return numstr
+    m = re.match(r'(?P<num>\d+(?P<dec>[.]\d+)?)(?P<mult>[kmb])?', numstr)
+    num = int(m.group('num')) if not m.group('dec') else float(m.group('num'))
+    if m.group('mult'):
+        num *= multipliers[m.group('mult')]
+    return num
 
 
 def invert_matrix(mat):

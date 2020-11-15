@@ -50,8 +50,10 @@ from .fontmanager import FontManager
 from .globals import Globals
 from .maths import Point2D, Vec2D, clamp, mid, Color, Box2D, Size2D, NumberUnit
 from .markdown import Markdown
+from .profiler import profiler, time_it
 from .useractions import is_keycode
 from .utils import Dict, delay_exec
+
 
 from ..ext import png
 
@@ -603,15 +605,17 @@ def load_text_file(path):
         print('Exception:', e)
         assert False
 
-
-def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_globals=None, f_locals=None):
+@profiler.function
+def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fns=None, f_globals=None, f_locals=None):
     if f_globals is None or f_locals is None:
         frame = inspect.currentframe().f_back               # get frame   of calling function
         if f_globals is None: f_globals = frame.f_globals   # get globals of calling function
         if f_locals  is None: f_locals  = frame.f_locals    # get locals  of calling function
 
     if mdown_path: mdown = load_text_file(get_mdown_path(mdown_path))
-    if preprocess_fn: mdown = preprocess_fn(mdown)
+    if preprocess_fns:
+        for preprocess_fn in preprocess_fns:
+            mdown = preprocess_fn(mdown)
     mdown = Markdown.preprocess(mdown or '')                # preprocess mdown
     if getattr(ui_mdown, '__mdown', None) == mdown: return  # ignore updating if it's exactly the same as previous
     ui_mdown.__mdown = mdown                                # record the mdown to prevent reprocessing same
@@ -651,7 +655,7 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_gl
                             if Markdown.is_url(link):
                                 bpy.ops.wm.url_open(url=link)
                             else:
-                                set_markdown(ui_mdown, mdown_path=link, preprocess_fn=preprocess_fn, f_globals=f_globals, f_locals=f_locals)
+                                set_markdown(ui_mdown, mdown_path=link, preprocess_fns=preprocess_fns, f_globals=f_globals, f_locals=f_locals)
                         process_words(text, lambda word: a(innerText=word, href=link, title=title, on_mouseclick=mouseclick, parent=container))
                     elif t == 'bold':
                         process_words(m.group('text'), lambda word: b(innerText=word, parent=container))
@@ -755,14 +759,14 @@ def set_markdown(ui_mdown, mdown=None, mdown_path=None, preprocess_fn=None, f_gl
     if ui_mdown._document: ui_mdown._document.defer_cleaning = False
 
 
-def markdown(mdown=None, mdown_path=None, preprocess_fn=None, f_globals=None, f_locals=None, **kwargs):
+def markdown(mdown=None, mdown_path=None, preprocess_fns=None, f_globals=None, f_locals=None, **kwargs):
     if f_globals is None or f_locals is None:
         frame = inspect.currentframe().f_back               # get frame   of calling function
         if f_globals is None: f_globals = frame.f_globals   # get globals of calling function
         if f_locals  is None: f_locals  = frame.f_locals    # get locals  of calling function
 
     ui_container = UI_Element(tagName='div', classes='mdown', **kwargs)
-    set_markdown(ui_container, mdown=mdown, mdown_path=mdown_path, preprocess_fn=preprocess_fn, f_globals=f_globals, f_locals=f_locals)
+    set_markdown(ui_container, mdown=mdown, mdown_path=mdown_path, preprocess_fns=preprocess_fns, f_globals=f_globals, f_locals=f_locals)
     return ui_container
 
 

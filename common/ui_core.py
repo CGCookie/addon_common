@@ -1471,7 +1471,9 @@ class UI_Element_Dirtiness:
         if properties is None: properties = set(UI_Element_Utils._cleaning_graph_nodes)
         elif type(properties) is str:  properties = {properties}
         elif type(properties) is list: properties = set(properties)
-        if not (properties - self._dirty_properties): return    # no new dirtiness
+        properties -= self._dirty_properties    # ignore dirtying properties that are already dirty
+        if not properties: return               # no new dirtiness
+        # if getattr(self, '_cleaning', False): print(f'{self} was dirtied ({properties}) while cleaning')
         self._dirty_properties |= properties
         self._dirty_causes.append(cause)
         if parent:   self._dirty_propagation['parent']          |= properties   # dirty parent also (ex: size of self changes, so parent needs to layout)
@@ -1624,6 +1626,8 @@ class UI_Element_Dirtiness:
         if not self.is_dirty or self.defer_clean: return
         self._was_dirty = True   # used to know if postclean should get called
 
+        self._cleaning = True
+
         profiler.add_note(f'pre: {self._dirty_properties}, {self._dirty_causes} {self._dirty_propagation}')
         if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} clean started defer={self.defer_clean}')
 
@@ -1647,6 +1651,8 @@ class UI_Element_Dirtiness:
         if DEBUG_LIST: self._debug_list.append(f'{time.ctime()} clean done')
 
         # self._debug_list.clear()
+
+        self._cleaning = False
 
 
     @profiler.function
@@ -2246,7 +2252,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self.dirty_renderbuf(cause='style change might have changed content (::before / ::after)')
                 # self.dirty(cause='style change might have changed content (::before / ::after)', properties='content')
                 # self.dirty(cause='style change might have changed content (::before / ::after)', properties='renderbuf')
-                self.dirty_flow()
+                self.dirty_flow(children=False)
                 if DEBUG_LIST: self._debug_list.append(f'    possible content change')
                 # self._innerTextWrapped = None
                 self._style_content_hash = style_content_hash
@@ -2265,7 +2271,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             if style_size_hash != getattr(self, '_style_size_hash', None):
                 self.dirty_size(cause='style change might have changed size')
                 self.dirty_renderbuf(cause='style change might have changed size')
-                self.dirty_flow()
+                self.dirty_flow(children=False)
                 if DEBUG_LIST: self._debug_list.append(f'    possible size change')
                 # self._innerTextWrapped = None
                 self._style_size_hash = style_size_hash
@@ -2411,7 +2417,8 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
                 self._new_content = True
 
         elif self.src: # and not self._src:
-            self._image_data = load_texture(self.src)
+            with profiler.code('loading image as texture'):
+                self._image_data = load_texture(self.src)
             self._src = 'image'
 
             self._children_text = []
@@ -3147,7 +3154,7 @@ class UI_Element(UI_Element_Utils, UI_Element_Properties, UI_Element_Dirtiness, 
             iw = round(self._w - ((ml + bw + pl) + (pr + bw + mr)))
             ih = round(self._h - ((mt + bw + pt) + (pb + bw + mb)))
 
-            with ScissorStack.wrap(il, it, iw, ih, msg=('%s mbp' % str(self))):
+            with ScissorStack.wrap(il, it, iw, ih, msg=f'{self} mbp'):
                 if self._innerText is not None:
                     size_prev = Globals.drawing.set_font_size(self._fontsize, fontid=self._fontid)
                     if self._textshadow is not None:

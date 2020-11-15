@@ -393,6 +393,14 @@ class UI_Document(UI_Document_FSM):
                 self.blur()
             return 'mousedown'
 
+        if self.actions.pressed('SHIFT+F10'):
+            profiler.clear()
+            return
+        if self.actions.pressed('SHIFT+F11'):
+            profiler.printout()
+            self.debug_print()
+            return
+
         # if self.actions.pressed('RIGHTMOUSE') and self._under_mouse:
         #     self._debug_print(self._under_mouse)
         #     #print('focus:', self._focus)
