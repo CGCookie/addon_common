@@ -104,6 +104,10 @@ Things to think about:
 
 '''
 
+def convert_token_to_var(m):
+    #print(f'token->var: {m.group("var")} {m.group("default")}')
+    return (m.group('var'), m.group('default'))
+
 token_attribute = r'\[(?P<key>[-a-zA-Z_]+)((?P<op>=)"(?P<val>[^"]*)")?\]'
 
 token_rules = [
@@ -215,6 +219,7 @@ token_rules = [
         r'disabled',    # applies if element is disabled
         # r'link',    # unvisited link
         # r'visited', # visited link
+        r'root',    # applies to document
     ]),
     ('pseudoelement', convert_token_to_string, [
         r'before',  # inserts content before element
@@ -228,6 +233,12 @@ token_rules = [
     ]),
     ('id', convert_token_to_string, [
         r'[a-zA-Z_][a-zA-Z_\-0-9]*',
+    ]),
+    ('variable', convert_token_to_string, [
+        r'--[a-zA-Z-]+',
+    ]),
+    ('var', convert_token_to_var, [
+        r'var\( *(?P<var>--[a-zA-Z-]+) *(,(?P<default>[^\)\]};!]))?\)',
     ]),
 ]
 
@@ -255,6 +266,10 @@ default_styling = {
 selector_splitter = re.compile(r"(?:(?P<type>[.#:[]+)?(?P<name>[^\n .#:\[=\]]+)(?:=\"(?P<val>[^\"]+)\")?\]?)")
 
 
+# XXX: this is a hack!
+css_variables = {}
+
+
 class UI_Style_Declaration:
     '''
     CSS Declarations are of the form:
@@ -267,27 +282,11 @@ class UI_Style_Declaration:
         ex: border: 1 yellow;
 
     '''
-
-    def from_lexer(lexer):
-        prop = lexer.match_t_v('key')
-        lexer.match_v_v(':')
-        v = lexer.next_v();
-        if lexer.peek_v() == ';':
-            val = v
-        else:
-            # tuple!
-            l = [v]
-            while lexer.peek_v() not in {';', '}'}:
-                l.append(lexer.next_v())
-            val = tuple(l)
-        lexer.match_v_v(';')
-        return UI_Style_Declaration(prop, val)
-
     def __init__(self, prop="", val=""):
         self.property = prop
         self.value = val
     def __str__(self):
-        return '<UI_Style_Declaration "%s=%s">' % (self.property, str(self.value))
+        return f'<UI_Style_Declaration "{self.property}={self.value}">'
     def __repr__(self): return self.__str__()
 
 
@@ -305,6 +304,34 @@ class UI_Style_RuleSet:
     '''
 
     uid_generator = UniqueCounter()
+
+    @staticmethod
+    def process_decl_var(lexer):
+        prop, varname = None, None
+        if 'variable' in lexer.peek_t():
+            varname = lexer.match_t_v('variable')
+        else:
+            prop = lexer.match_t_v('key')
+        lexer.match_v_v(':')
+        l = []
+        while lexer.peek_v() not in {';', '}'}:
+            if 'var' in lexer.peek_t():
+                # do lookup!
+                var,default = lexer.next_v()
+                if not (default or var in css_variables): continue
+                v = css_variables.get(var, default)
+            else:
+                v = lexer.next_v();
+            l.append(v)
+        if lexer.peek_v() == ';': lexer.match_v_v(';')
+        if len(l) == 0: return None
+        val = l[0] if len(l) == 1 else tuple(l)
+        if varname:
+            #print(f'variable: {prop} {val}')
+            css_variables[varname] = val
+            return None
+        #print(f'decl: {prop} {val}')
+        return UI_Style_Declaration(prop, val)
 
     @staticmethod
     def from_lexer(lexer, inline=False, defaults=False):
@@ -355,7 +382,8 @@ class UI_Style_RuleSet:
         while lexer.peek_v() != '}':
             while lexer.peek_v() == ';': lexer.match_v_v(';')
             if lexer.peek_v() == '}': break
-            rs.decllist.append(UI_Style_Declaration.from_lexer(lexer))
+            decl_var = UI_Style_RuleSet.process_decl_var(lexer)
+            if decl_var: rs.decllist.append(decl_var)
         lexer.match_v_v('}')
 
         return rs
