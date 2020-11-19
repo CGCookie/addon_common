@@ -306,6 +306,25 @@ class UI_Style_RuleSet:
     uid_generator = UniqueCounter()
 
     @staticmethod
+    def process_rules(lexer):
+        l = []
+        while lexer.peek_v() not in {';', '}', 'eof'}:
+            if 'var' in lexer.peek_t():
+                var, default = lexer.next_v()
+                if not (default or var in css_variables): continue
+                if var in css_variables:
+                    l.append(css_variables[var])
+                else:
+                    # evaluating default requires recursive call, because
+                    # the default is still a string (has not been processed, yet)
+                    defcharstream = Parse_CharStream(default)
+                    deflexer = Parse_Lexer(defcharstream, token_rules)
+                    l.extend(UI_Style_RuleSet.process_rules(deflexer))
+            else:
+                l.append(lexer.next_v())
+        return l
+
+    @staticmethod
     def process_decl_var(lexer):
         prop, varname = None, None
         if 'variable' in lexer.peek_t():
@@ -313,16 +332,7 @@ class UI_Style_RuleSet:
         else:
             prop = lexer.match_t_v('key')
         lexer.match_v_v(':')
-        l = []
-        while lexer.peek_v() not in {';', '}'}:
-            if 'var' in lexer.peek_t():
-                # do lookup!
-                var,default = lexer.next_v()
-                if not (default or var in css_variables): continue
-                v = css_variables.get(var, default)
-            else:
-                v = lexer.next_v();
-            l.append(v)
+        l = UI_Style_RuleSet.process_rules(lexer)
         if lexer.peek_v() == ';': lexer.match_v_v(';')
         if len(l) == 0: return None
         val = l[0] if len(l) == 1 else tuple(l)

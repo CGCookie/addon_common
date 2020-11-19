@@ -67,8 +67,21 @@ from ..ext.apng import APNG
 
 
 '''
-TODO:
+# NOTES
 
+dirty_styling
+
+- clears all style caching
+- always calls dirty_styling on children <== TODO!
+
+
+dirty_flow
+
+- ignored if _dirtying_flow is True already
+- sets _dirtying_flow to True
+- possibly calls parent's dirty_flow
+- possibly calls children's dirty_flow
+- _layout() returns early if _dirtying_flow is False
 
 
 '''
