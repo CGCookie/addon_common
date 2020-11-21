@@ -111,8 +111,8 @@ class Singleton_updater(object):
         # get from module data
         self._addon = __package__.split('.')[0].lower()
         self._addon_package = __package__.split('.')[0]  # must be set to addon's package!
-        self._updater_path = os.path.join(os.path.dirname(__file__), 'updater_tmp')
-        self._addon_root = os.path.join('..', '..', os.path.dirname(__file__))
+        self._updater_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'updater_tmp'))
+        self._addon_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
         self._json = {}
         self._error = None
         self._error_msg = None
