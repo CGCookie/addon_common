@@ -37,6 +37,9 @@ RF_classes = []
 from .examples.basic import CookieCutter_Basic
 RF_classes += [CookieCutter_Basic]
 
+from .examples.basic_ui import CookieCutter_BasicUI
+RF_classes += [CookieCutter_BasicUI]
+
 
 def register():
     for cls in RF_classes: bpy.utils.register_class(cls)
